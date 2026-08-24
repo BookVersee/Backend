@@ -1,6 +1,8 @@
 using BookManagement.Api.Extensions;
+using BookManagement.Api.Hubs;
 using BookManagement.Api.Middlewares;
-using BookManagement.Repository.Data;
+using BookManagement.Service.Extensions;
+using BookStore.BE2.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -11,6 +13,7 @@ builder.Services.AddControllers().AddJsonOptions(options =>
     options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
 });
 
+builder.Services.AddSignalR();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddEndpointsApiExplorer();
 
@@ -18,9 +21,10 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// 3. Add Custom Extensions (JWT & Swagger)
+// 3. Add Custom Extensions (JWT & Swagger & Application Services)
 builder.Services.AddJwtServices(builder.Configuration);
 builder.Services.AddSwaggerServices();
+builder.Services.AddApplicationServices();
 
 // 4. Register Middlewares
 builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
@@ -54,5 +58,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<ChatHub>("/hubs/chat");
 
 app.Run();

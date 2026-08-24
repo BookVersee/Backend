@@ -1,15 +1,31 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
-using BookManagement.Repository.Abstractions;
-using BookManagement.Repository.Entities;
-using BookManagement.Repository.Entities.Enums;
+using BookStore.BE2.Domain.Entities;
+using BookStore.BE2.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
-namespace BookManagement.Repository.Data
+namespace BookStore.BE2.Infrastructure.Persistence;
+
+public class AppDbContext : DbContext
 {
-    public class AppDbContext : DbContext
+    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+
+    public DbSet<User> Users => Set<User>();
+    public DbSet<Category> Categories => Set<Category>();
+    public DbSet<Shop> Shops => Set<Shop>();
+    public DbSet<Book> Books => Set<Book>();
+    public DbSet<Order> Orders => Set<Order>();
+    public DbSet<OrderDetail> OrderDetails => Set<OrderDetail>();
+    public DbSet<Delivery> Deliveries => Set<Delivery>();
+    public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<ReturnRequest> ReturnRequests => Set<ReturnRequest>();
+    public DbSet<TransactionHistory> TransactionHistories => Set<TransactionHistory>();
+    public DbSet<Feedback> Feedbacks => Set<Feedback>();
+    public DbSet<Response> Responses => Set<Response>();
+    public DbSet<Chat> Chats => Set<Chat>();
+    public DbSet<Message> Messages => Set<Message>();
+
+    protected override void OnModelCreating(ModelBuilder mb)
     {
+
         public AppDbContext(DbContextOptions<AppDbContext> options) : base(options)
         {
         }

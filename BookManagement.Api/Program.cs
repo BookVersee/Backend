@@ -1,5 +1,7 @@
 using BookManagement.Api.Extensions;
+using BookManagement.Api.Hubs;
 using BookManagement.Api.Middlewares;
+
 using BookManagement.Repository.Data;
 using BookManagement.Repository.Abstractions;
 using BookManagement.Repository.Repositories;
@@ -20,6 +22,10 @@ using BookManagement.Service.ReturnRequest;
 using BookManagement.Service.Shop;
 using BookManagement.Service.Transaction;
 using BookManagement.Service.User;
+
+using BookManagement.Service.Extensions;
+using BookStore.BE2.Infrastructure.Persistence;
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -32,6 +38,7 @@ builder.Services.AddControllers().AddJsonOptions(options =>
     options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
 });
 
+builder.Services.AddSignalR();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddEndpointsApiExplorer();
 
@@ -40,9 +47,10 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(connectionString, sqlServerOptions => sqlServerOptions.EnableRetryOnFailure()));
 
-// 3. Add Custom Extensions (JWT & Swagger)
+// 3. Add Custom Extensions (JWT & Swagger & Application Services)
 builder.Services.AddJwtServices(builder.Configuration);
 builder.Services.AddSwaggerServices();
+builder.Services.AddApplicationServices();
 
 // 4. Register Repositories and Business Services
 
@@ -181,5 +189,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<ChatHub>("/hubs/chat");
 
 app.Run();

@@ -14,8 +14,10 @@ public static class JwtExtensions
 
     public static void AddJwtServices(this IServiceCollection services, IConfiguration configuration)
     {
+        services.Configure<JwtOptions>(configuration.GetSection("JwtOptions"));
+
         var jwtOptions = new JwtOptions();
-        configuration.GetSection(nameof(JwtOptions)).Bind(jwtOptions);
+        configuration.GetSection("JwtOptions").Bind(jwtOptions);
         var key = Encoding.UTF8.GetBytes(jwtOptions.SecretKey);
 
         services.AddAuthentication(options =>
@@ -41,9 +43,9 @@ public static class JwtExtensions
 
         services.AddAuthorization(options =>
         {
-            options.AddPolicy(AdminPolicy, policy => policy.RequireRole("Admin"));
-            options.AddPolicy(CustomerPolicy, policy => policy.RequireRole("Customer"));
-            options.AddPolicy(StaffPolicy, policy => policy.RequireRole("Staff"));
+            options.AddPolicy(AdminPolicy, policy => policy.RequireRole("ADMIN", "Admin"));
+            options.AddPolicy(CustomerPolicy, policy => policy.RequireRole("CUSTOMER", "Customer"));
+            options.AddPolicy(StaffPolicy, policy => policy.RequireRole("STAFF", "Staff"));
         });
     }
 }

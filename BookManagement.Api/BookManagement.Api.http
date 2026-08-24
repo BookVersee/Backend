@@ -1,6 +1,106 @@
-@BookManagement.Api_HostAddress = http://localhost:5226
+@HostAddress = http://localhost:5226
 
-GET {{BookManagement.Api_HostAddress}}/weatherforecast/
+### 1. Register New User
+POST {{HostAddress}}/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "customer1",
+  "email": "customer1@gmail.com",
+  "password": "Password123@",
+  "fullName": "Nguyen Van A",
+  "phone": "0987654321",
+  "address": "123 Le Loi, Quan 1, TP.HCM",
+  "role": "CUSTOMER"
+}
+
+### 2. Login
+# @name login
+POST {{HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "usernameOrEmail": "customer1",
+  "password": "Password123@"
+}
+
+### Variable assignment after login:
+@accessToken = {{login.response.body.data.accessToken}}
+@refreshToken = {{login.response.body.data.refreshToken}}
+
+### 3. Get Active User Sessions (Requires Auth)
+GET {{HostAddress}}/api/auth/sessions
+Authorization: Bearer {{accessToken}}
+
+### 4. Refresh Token
+POST {{HostAddress}}/api/auth/refresh-token
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshToken}}"
+}
+
+### 5. Logout Single Session
+POST {{HostAddress}}/api/auth/logout
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshToken}}"
+}
+
+### 6. Revoke All User Sessions (Requires Auth)
+POST {{HostAddress}}/api/auth/revoke-all
+Authorization: Bearer {{accessToken}}
+
+### 7. Search & Filter Books (LINQ)
+GET {{HostAddress}}/api/book?Keyword=programming&MinPrice=10000&MaxPrice=500000&SortBy=price_asc&Page=1&PageSize=10
 Accept: application/json
 
-###
+### 8. Get Public Active Categories
+GET {{HostAddress}}/api/category
+Accept: application/json
+
+### 9. Get Category Detail
+GET {{HostAddress}}/api/category/00000000-0000-0000-0000-000000000000
+Accept: application/json
+
+### 10. Get User Notifications (Requires Auth)
+GET {{HostAddress}}/api/notification
+Authorization: Bearer {{accessToken}}
+Accept: application/json
+
+### 11. Get User Unread Notifications (Requires Auth)
+GET {{HostAddress}}/api/notification/unread
+Authorization: Bearer {{accessToken}}
+Accept: application/json
+
+### 12. Admin: Get All Categories
+GET {{HostAddress}}/api/admin/categories
+Authorization: Bearer {{accessToken}}
+Accept: application/json
+
+### 13. Admin: Create Category
+POST {{HostAddress}}/api/admin/categories
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Công Nghệ Thông Tin",
+  "description": "Sách về lập trình, phần mềm và trí tuệ nhân tạo"
+}
+
+### 14. Admin: Update Category
+PUT {{HostAddress}}/api/admin/categories/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Công Nghệ Thông Tin & Phần Mềm",
+  "description": "Cập nhật mô tả danh mục",
+  "status": true
+}
+
+### 15. Admin: Delete Category
+DELETE {{HostAddress}}/api/admin/categories/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{accessToken}}
+

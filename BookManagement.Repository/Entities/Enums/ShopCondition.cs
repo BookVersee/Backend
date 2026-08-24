@@ -3,6 +3,9 @@ namespace BookManagement.Repository.Entities.Enums
     public enum ShopCondition
     {
         OPEN,
-        CLOSED
+        CLOSED,
+        PENDING,
+        ACTIVE,
+        LOCKED
     }
 }

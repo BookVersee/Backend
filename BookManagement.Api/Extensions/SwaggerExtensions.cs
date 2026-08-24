@@ -18,7 +18,7 @@ public static class SwaggerExtensions
                 Scheme = "bearer",
                 BearerFormat = "JWT",
                 In = ParameterLocation.Header,
-                Description = "Enter 'Bearer' [space] and then your token in the text input below.\nExample: 'Bearer eyJhbGciOiJIUzI1NiIsInR...'"
+                Description = "Chỉ cần dán trực tiếp chuỗi Token (không gõ thêm chữ 'Bearer '). Swagger sẽ tự động thêm chữ Bearer."
             });
 
             options.AddSecurityRequirement(new OpenApiSecurityRequirement

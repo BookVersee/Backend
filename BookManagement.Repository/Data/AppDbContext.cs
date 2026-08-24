@@ -71,13 +71,11 @@ namespace BookManagement.Repository.Data
 
                 builder.Property(u => u.Role)
                     .HasConversion<string>()
-                    .HasMaxLength(30)
-                    .HasDefaultValue(UserRole.CUSTOMER);
+                    .HasMaxLength(30);
 
                 builder.Property(u => u.Status)
                     .HasConversion<string>()
-                    .HasMaxLength(30)
-                    .HasDefaultValue(UserStatus.ACTIVE);
+                    .HasMaxLength(30);
             });
 
             // ==========================================
@@ -90,8 +88,7 @@ namespace BookManagement.Repository.Data
 
                 builder.Property(s => s.Condition)
                     .HasConversion<string>()
-                    .HasMaxLength(30)
-                    .HasDefaultValue(ShopCondition.OPEN);
+                    .HasMaxLength(30);
 
                 builder.HasIndex(s => s.UserId).IsUnique();
 
@@ -127,8 +124,7 @@ namespace BookManagement.Repository.Data
 
                 builder.Property(b => b.Status)
                     .HasConversion<string>()
-                    .HasMaxLength(30)
-                    .HasDefaultValue(BookStatus.ACTIVE);
+                    .HasMaxLength(30);
 
                 builder.HasOne(b => b.Shop)
                     .WithMany(s => s.Books)
@@ -187,8 +183,7 @@ namespace BookManagement.Repository.Data
 
                 builder.Property(o => o.OrderStatus)
                     .HasConversion<string>()
-                    .HasMaxLength(30)
-                    .HasDefaultValue(OrderStatus.PENDING);
+                    .HasMaxLength(30);
 
                 builder.HasOne(o => o.User)
                     .WithMany(u => u.Orders)
@@ -206,8 +201,7 @@ namespace BookManagement.Repository.Data
 
                 builder.Property(od => od.ReturnStatus)
                     .HasConversion<string>()
-                    .HasMaxLength(30)
-                    .HasDefaultValue(ReturnStatus.NONE);
+                    .HasMaxLength(30);
 
                 builder.HasOne(od => od.Order)
                     .WithMany(o => o.OrderDetails)
@@ -232,8 +226,7 @@ namespace BookManagement.Repository.Data
 
                 builder.Property(d => d.Status)
                     .HasConversion<string>()
-                    .HasMaxLength(30)
-                    .HasDefaultValue(DeliveryStatus.PENDING);
+                    .HasMaxLength(30);
 
                 builder.HasOne(d => d.Order)
                     .WithMany(o => o.Deliveries)
@@ -256,8 +249,7 @@ namespace BookManagement.Repository.Data
 
                 builder.Property(rr => rr.Status)
                     .HasConversion<string>()
-                    .HasMaxLength(30)
-                    .HasDefaultValue(ReturnRequestStatus.PENDING);
+                    .HasMaxLength(30);
 
                 builder.HasIndex(rr => rr.OrderDetailId).IsUnique();
 
@@ -277,8 +269,7 @@ namespace BookManagement.Repository.Data
 
                 builder.Property(p => p.PaymentType)
                     .HasConversion<string>()
-                    .HasMaxLength(30)
-                    .HasDefaultValue(PaymentType.PAYMENT);
+                    .HasMaxLength(30);
 
                 builder.Property(p => p.Method)
                     .HasConversion<string>()
@@ -286,8 +277,7 @@ namespace BookManagement.Repository.Data
 
                 builder.Property(p => p.Status)
                     .HasConversion<string>()
-                    .HasMaxLength(30)
-                    .HasDefaultValue(PaymentStatus.PENDING);
+                    .HasMaxLength(30);
 
                 builder.HasOne(p => p.Order)
                     .WithMany(o => o.Payments)
@@ -334,8 +324,7 @@ namespace BookManagement.Repository.Data
 
                 builder.Property(f => f.Type)
                     .HasConversion<string>()
-                    .HasMaxLength(30)
-                    .HasDefaultValue(FeedbackType.BOOK);
+                    .HasMaxLength(30);
 
                 builder.HasIndex(f => f.OrderDetailId).IsUnique();
 
@@ -421,8 +410,7 @@ namespace BookManagement.Repository.Data
 
                 builder.Property(n => n.Type)
                     .HasConversion<string>()
-                    .HasMaxLength(30)
-                    .HasDefaultValue(NotificationType.SYSTEM);
+                    .HasMaxLength(30);
 
                 builder.HasOne(n => n.User)
                     .WithMany(u => u.Notifications)

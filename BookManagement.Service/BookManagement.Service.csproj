@@ -19,4 +19,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Remove="Admin\**;Auth\**;Book\**;Cart\**;Category\**;Chat\**;Delivery\**;Feedback\**;Interfaces\**;JwtService\**;Notification\**;Order\**;Payment\**;Response\**;ReturnRequest\**;Shop\**;Transaction\**;User\**;Dtos\Book\**;Dtos\Shop\**;Dtos\Order\**;Dtos\Payment\**;Dtos\Delivery\**" />
+    <EmbeddedResource Remove="Admin\**;Auth\**;Book\**;Cart\**;Category\**;Chat\**;Delivery\**;Feedback\**;Interfaces\**;JwtService\**;Notification\**;Order\**;Payment\**;Response\**;ReturnRequest\**;Shop\**;Transaction\**;User\**;Dtos\Book\**;Dtos\Shop\**;Dtos\Order\**;Dtos\Payment\**;Dtos\Delivery\**" />
+    <None Remove="Admin\**;Auth\**;Book\**;Cart\**;Category\**;Chat\**;Delivery\**;Feedback\**;Interfaces\**;JwtService\**;Notification\**;Order\**;Payment\**;Response\**;ReturnRequest\**;Shop\**;Transaction\**;User\**;Dtos\Book\**;Dtos\Shop\**;Dtos\Order\**;Dtos\Payment\**;Dtos\Delivery\**" />
+  </ItemGroup>
 </Project>

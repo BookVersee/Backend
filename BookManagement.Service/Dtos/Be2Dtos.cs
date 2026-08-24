@@ -138,6 +138,125 @@ public class PagedResultDto<T>
     public IEnumerable<T> Items { get; set; } = new List<T>();
 }
 
+// Flat book DTO - no circular references
+public class BookResponseDto
+{
+    [JsonPropertyName("book_id")]
+    public int BookId { get; set; }
+
+    [JsonPropertyName("shop_id")]
+    public int ShopId { get; set; }
+
+    [JsonPropertyName("category_id")]
+    public int CategoryId { get; set; }
+
+    [JsonPropertyName("category_name")]
+    public string? CategoryName { get; set; }
+
+    [JsonPropertyName("title")]
+    public string Title { get; set; } = string.Empty;
+
+    [JsonPropertyName("isbn")]
+    public string Isbn { get; set; } = string.Empty;
+
+    [JsonPropertyName("author")]
+    public string Author { get; set; } = string.Empty;
+
+    [JsonPropertyName("publisher")]
+    public string Publisher { get; set; } = string.Empty;
+
+    [JsonPropertyName("price")]
+    public decimal Price { get; set; }
+
+    [JsonPropertyName("stock_quantity")]
+    public int StockQuantity { get; set; }
+
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+
+    [JsonPropertyName("image_url")]
+    public string? ImageUrl { get; set; }
+
+    [JsonPropertyName("published_year")]
+    public int PublishedYear { get; set; }
+
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = string.Empty;
+
+    [JsonPropertyName("rating")]
+    public float Rating { get; set; }
+}
+
+// Flat feedback DTO - no circular references
+public class FeedbackResponseDataDto
+{
+    [JsonPropertyName("response_id")]
+    public int ResponseId { get; set; }
+
+    [JsonPropertyName("content")]
+    public string Content { get; set; } = string.Empty;
+
+    [JsonPropertyName("image_url")]
+    public string? ImageUrl { get; set; }
+
+    [JsonPropertyName("created_at")]
+    public DateTime CreatedAt { get; set; }
+}
+
+public class FeedbackDto
+{
+    [JsonPropertyName("feedback_id")]
+    public int FeedbackId { get; set; }
+
+    [JsonPropertyName("order_detail_id")]
+    public int OrderDetailId { get; set; }
+
+    [JsonPropertyName("shop_id")]
+    public int ShopId { get; set; }
+
+    [JsonPropertyName("rating")]
+    public int Rating { get; set; }
+
+    [JsonPropertyName("content")]
+    public string Content { get; set; } = string.Empty;
+
+    [JsonPropertyName("type")]
+    public string Type { get; set; } = string.Empty;
+
+    [JsonPropertyName("image_url")]
+    public string? ImageUrl { get; set; }
+
+    [JsonPropertyName("created_at")]
+    public DateTime CreatedAt { get; set; }
+
+    [JsonPropertyName("book_title")]
+    public string? BookTitle { get; set; }
+
+    [JsonPropertyName("response")]
+    public FeedbackResponseDataDto? Response { get; set; }
+}
+
+public class ResponseCreatedDto
+{
+    [JsonPropertyName("response_id")]
+    public int ResponseId { get; set; }
+
+    [JsonPropertyName("feedback_id")]
+    public int FeedbackId { get; set; }
+
+    [JsonPropertyName("shop_id")]
+    public int ShopId { get; set; }
+
+    [JsonPropertyName("content")]
+    public string Content { get; set; } = string.Empty;
+
+    [JsonPropertyName("image_url")]
+    public string? ImageUrl { get; set; }
+
+    [JsonPropertyName("created_at")]
+    public DateTime CreatedAt { get; set; }
+}
+
 // 2. Shop Orders, Revenue & Feedback DTOs
 public class ShopOrderItemDto
 {

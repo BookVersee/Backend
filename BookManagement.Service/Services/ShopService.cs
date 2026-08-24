@@ -79,7 +79,7 @@ public class ShopService
         };
     }
 
-    public async Task<Book> CreateBookAsync(int shopId, CreateBookRequestDto dto)
+    public async Task<BookResponseDto> CreateBookAsync(int shopId, CreateBookRequestDto dto)
     {
         var existingIsbn = await _db.Books.AnyAsync(b => b.Isbn == dto.Isbn);
         if (existingIsbn)
@@ -109,14 +109,37 @@ public class ShopService
         _db.Books.Add(book);
         await _db.SaveChangesAsync();
 
-        return book;
+        var categoryName = await _db.Categories
+            .Where(c => c.CategoryId == book.CategoryId)
+            .Select(c => c.CategoryName)
+            .FirstOrDefaultAsync();
+
+        return MapToBookDto(book, categoryName);
     }
 
-    public async Task<Book> GetBookByIdAsync(int shopId, int bookId)
+    public async Task<BookResponseDto> GetBookByIdAsync(int shopId, int bookId)
     {
         var book = await _db.Books
-            .Include(b => b.Category)
-            .FirstOrDefaultAsync(b => b.BookId == bookId && b.ShopId == shopId);
+            .Where(b => b.BookId == bookId && b.ShopId == shopId)
+            .Select(b => new BookResponseDto
+            {
+                BookId = b.BookId,
+                ShopId = b.ShopId,
+                CategoryId = b.CategoryId,
+                CategoryName = b.Category != null ? b.Category.CategoryName : null,
+                Title = b.Title,
+                Isbn = b.Isbn,
+                Author = b.Author,
+                Publisher = b.Publisher,
+                Price = b.Price,
+                StockQuantity = b.StockQuantity,
+                Description = b.Description,
+                ImageUrl = b.ImageUrl,
+                PublishedYear = b.PublishedYear,
+                Status = b.Status.ToString(),
+                Rating = b.Rating
+            })
+            .FirstOrDefaultAsync();
 
         if (book == null)
         {
@@ -126,9 +149,9 @@ public class ShopService
         return book;
     }
 
-    public async Task<PagedResultDto<Book>> GetShopBooksAsync(int shopId, BookQueryDto query)
+    public async Task<PagedResultDto<BookResponseDto>> GetShopBooksAsync(int shopId, BookQueryDto query)
     {
-        var q = _db.Books.Include(b => b.Category).Where(b => b.ShopId == shopId);
+        var q = _db.Books.Where(b => b.ShopId == shopId);
 
         if (!string.IsNullOrWhiteSpace(query.Keyword))
         {
@@ -151,9 +174,27 @@ public class ShopService
             .OrderByDescending(b => b.BookId)
             .Skip((query.PageIndex - 1) * query.PageSize)
             .Take(query.PageSize)
+            .Select(b => new BookResponseDto
+            {
+                BookId = b.BookId,
+                ShopId = b.ShopId,
+                CategoryId = b.CategoryId,
+                CategoryName = b.Category != null ? b.Category.CategoryName : null,
+                Title = b.Title,
+                Isbn = b.Isbn,
+                Author = b.Author,
+                Publisher = b.Publisher,
+                Price = b.Price,
+                StockQuantity = b.StockQuantity,
+                Description = b.Description,
+                ImageUrl = b.ImageUrl,
+                PublishedYear = b.PublishedYear,
+                Status = b.Status.ToString(),
+                Rating = b.Rating
+            })
             .ToListAsync();
 
-        return new PagedResultDto<Book>
+        return new PagedResultDto<BookResponseDto>
         {
             TotalItems = totalItems,
             PageIndex = query.PageIndex,
@@ -162,7 +203,7 @@ public class ShopService
         };
     }
 
-    public async Task<Book> UpdateBookAsync(int shopId, int bookId, UpdateBookRequestDto dto)
+    public async Task<BookResponseDto> UpdateBookAsync(int shopId, int bookId, UpdateBookRequestDto dto)
     {
         var book = await _db.Books.FirstOrDefaultAsync(b => b.BookId == bookId && b.ShopId == shopId);
         if (book == null)
@@ -188,8 +229,33 @@ public class ShopService
         }
 
         await _db.SaveChangesAsync();
-        return book;
+
+        var categoryName = await _db.Categories
+            .Where(c => c.CategoryId == book.CategoryId)
+            .Select(c => c.CategoryName)
+            .FirstOrDefaultAsync();
+
+        return MapToBookDto(book, categoryName);
     }
+
+    private static BookResponseDto MapToBookDto(Book book, string? categoryName) => new BookResponseDto
+    {
+        BookId = book.BookId,
+        ShopId = book.ShopId,
+        CategoryId = book.CategoryId,
+        CategoryName = categoryName,
+        Title = book.Title,
+        Isbn = book.Isbn,
+        Author = book.Author,
+        Publisher = book.Publisher,
+        Price = book.Price,
+        StockQuantity = book.StockQuantity,
+        Description = book.Description,
+        ImageUrl = book.ImageUrl,
+        PublishedYear = book.PublishedYear,
+        Status = book.Status.ToString(),
+        Rating = book.Rating
+    };
 
     public async Task DeleteBookAsync(int shopId, int bookId)
     {
@@ -329,13 +395,9 @@ public class ShopService
         };
     }
 
-    public async Task<PagedResultDto<Feedback>> GetShopFeedbacksAsync(int shopId, int? rating, bool? hasResponse, int pageIndex, int pageSize)
+    public async Task<PagedResultDto<FeedbackDto>> GetShopFeedbacksAsync(int shopId, int? rating, bool? hasResponse, int pageIndex, int pageSize)
     {
-        var q = _db.Feedbacks
-            .Include(f => f.OrderDetail)
-                .ThenInclude(od => od.Book)
-            .Include(f => f.Response)
-            .Where(f => f.ShopId == shopId);
+        var q = _db.Feedbacks.Where(f => f.ShopId == shopId);
 
         if (rating.HasValue)
         {
@@ -352,9 +414,28 @@ public class ShopService
             .OrderByDescending(f => f.CreatedAt)
             .Skip((pageIndex - 1) * pageSize)
             .Take(pageSize)
+            .Select(f => new FeedbackDto
+            {
+                FeedbackId = f.FeedbackId,
+                OrderDetailId = f.OrderDetailId,
+                ShopId = f.ShopId,
+                Rating = f.Rating,
+                Content = f.Content,
+                Type = f.Type.ToString(),
+                ImageUrl = f.ImageUrl,
+                CreatedAt = f.CreatedAt,
+                BookTitle = f.OrderDetail != null && f.OrderDetail.Book != null ? f.OrderDetail.Book.Title : null,
+                Response = f.Response != null ? new FeedbackResponseDataDto
+                {
+                    ResponseId = f.Response.ResponseId,
+                    Content = f.Response.Content,
+                    ImageUrl = f.Response.ImageUrl,
+                    CreatedAt = f.Response.CreatedAt
+                } : null
+            })
             .ToListAsync();
 
-        return new PagedResultDto<Feedback>
+        return new PagedResultDto<FeedbackDto>
         {
             TotalItems = totalItems,
             PageIndex = pageIndex,
@@ -363,7 +444,7 @@ public class ShopService
         };
     }
 
-    public async Task<Response> CreateFeedbackResponseAsync(int shopId, int feedbackId, FeedbackResponseRequestDto dto)
+    public async Task<ResponseCreatedDto> CreateFeedbackResponseAsync(int shopId, int feedbackId, FeedbackResponseRequestDto dto)
     {
         var feedback = await _db.Feedbacks
             .Include(f => f.Response)
@@ -391,7 +472,15 @@ public class ShopService
         _db.Responses.Add(response);
         await _db.SaveChangesAsync();
 
-        return response;
+        return new ResponseCreatedDto
+        {
+            ResponseId = response.ResponseId,
+            FeedbackId = response.FeedbackId,
+            ShopId = response.ShopId,
+            Content = response.Content,
+            ImageUrl = response.ImageUrl,
+            CreatedAt = response.CreatedAt
+        };
     }
 
     public async Task ProcessReturnRequestAsync(int shopId, int returnRequestId, ProcessReturnRequestDto dto)

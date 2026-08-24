@@ -149,7 +149,7 @@ public class AppDbContext : DbContext
 
         mb.Entity<Chat>()
             .HasOne(c => c.Shop)
-            .WithMany()
+            .WithMany(s => s.Chats)
             .HasForeignKey(c => c.ShopId)
             .OnDelete(DeleteBehavior.Restrict);
 
@@ -168,14 +168,14 @@ public class AppDbContext : DbContext
         // TransactionHistory - no cascade
         mb.Entity<TransactionHistory>()
             .HasOne(t => t.User)
-            .WithMany()
+            .WithMany(u => u.Transactions)
             .HasForeignKey(t => t.UserId)
             .OnDelete(DeleteBehavior.Restrict);
 
         // Feedback - Shop FK restrict
         mb.Entity<Feedback>()
             .HasOne(f => f.Shop)
-            .WithMany()
+            .WithMany(s => s.Feedbacks)
             .HasForeignKey(f => f.ShopId)
             .OnDelete(DeleteBehavior.Restrict);
 

@@ -1,5 +1,5 @@
 using System.ComponentModel.DataAnnotations;
-using BookManagement.Repository.Entities.Enums;
+using BookStore.BE2.Domain.Enums;
 
 namespace BookManagement.Service.Dtos.Shop
 {

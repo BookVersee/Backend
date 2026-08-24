@@ -20,4 +20,9 @@
     <ProjectReference Include="..\BookManagement.Service\BookManagement.Service.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="Controllers\AdminController.cs;Controllers\AuthController.cs;Controllers\BookController.cs;Controllers\CartController.cs;Controllers\CategoryController.cs;Controllers\FeedbackController.cs;Controllers\NotificationController.cs;Controllers\OrderController.cs;Controllers\UserController.cs" />
+    <EmbeddedResource Remove="Controllers\AdminController.cs;Controllers\AuthController.cs;Controllers\BookController.cs;Controllers\CartController.cs;Controllers\CategoryController.cs;Controllers\FeedbackController.cs;Controllers\NotificationController.cs;Controllers\OrderController.cs;Controllers\UserController.cs" />
+    <None Remove="Controllers\AdminController.cs;Controllers\AuthController.cs;Controllers\BookController.cs;Controllers\CartController.cs;Controllers\CategoryController.cs;Controllers\FeedbackController.cs;Controllers\NotificationController.cs;Controllers\OrderController.cs;Controllers\UserController.cs" />
+  </ItemGroup>
 </Project>

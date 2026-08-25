@@ -11,30 +11,21 @@ public class AdminService : IAdminService
     private readonly AppDbContext _context;
     private readonly IUserRepository _userRepository;
     private readonly IOrderRepository _orderRepository;
-    private readonly ITransactionRepository _transactionRepository;
     private readonly IUserSessionRepository _sessionRepository;
     private readonly IBookRepository _bookRepository;
-    private readonly IShopRepository _shopRepository;
-    private readonly IDeliveryRepository _deliveryRepository;
 
     public AdminService(
         AppDbContext context,
         IUserRepository userRepository,
         IOrderRepository orderRepository,
-        ITransactionRepository transactionRepository,
         IUserSessionRepository sessionRepository,
-        IBookRepository bookRepository,
-        IShopRepository shopRepository,
-        IDeliveryRepository deliveryRepository)
+        IBookRepository bookRepository)
     {
         _context = context;
         _userRepository = userRepository;
         _orderRepository = orderRepository;
-        _transactionRepository = transactionRepository;
         _sessionRepository = sessionRepository;
         _bookRepository = bookRepository;
-        _shopRepository = shopRepository;
-        _deliveryRepository = deliveryRepository;
     }
 
     // ===== USER MANAGEMENT =====
@@ -81,7 +72,7 @@ public class AdminService : IAdminService
             throw new Exception("User not found");
 
         var orders = await _orderRepository.GetOrdersByUserIdAsync(userId);
-        var transactions = await _transactionRepository.GetTransactionsByUserIdAsync(userId);
+        var transactions = await _context.TransactionHistories.AsNoTracking().Where(t => t.UserId == userId).ToListAsync();
 
         return new UserDetailResponse
         {
@@ -313,22 +304,22 @@ public class AdminService : IAdminService
 
     public async Task ApproveShopAsync(Guid shopId)
     {
-        var shop = await _shopRepository.GetShopByIdAsync(shopId);
+        var shop = await _context.Shops.FindAsync(shopId);
         if (shop == null)
             throw new Exception("Shop not found");
 
         shop.Condition = ShopCondition.ACTIVE;
-        await _shopRepository.UpdateAsync(shop);
+        await _context.SaveChangesAsync();
     }
 
     public async Task LockShopAsync(Guid shopId, LockShopRequest request)
     {
-        var shop = await _shopRepository.GetShopByIdAsync(shopId);
+        var shop = await _context.Shops.FindAsync(shopId);
         if (shop == null)
             throw new Exception("Shop not found");
 
         shop.Condition = ShopCondition.LOCKED;
-        await _shopRepository.UpdateAsync(shop);
+        await _context.SaveChangesAsync();
     }
 
     // ===== DASHBOARD & STATISTICS =====
@@ -421,7 +412,7 @@ public class AdminService : IAdminService
 
     public async Task<DeliveryResponse> GetDeliveryDetailAsync(Guid deliveryId)
     {
-        var delivery = await _deliveryRepository.GetByIdAsync(deliveryId);
+        var delivery = await _context.Deliveries.AsNoTracking().FirstOrDefaultAsync(d => d.Id == deliveryId);
         if (delivery == null)
             throw new Exception("Delivery not found");
 

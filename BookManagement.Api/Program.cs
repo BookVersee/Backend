@@ -8,17 +8,10 @@ using BookManagement.Service.Auth;
 using BookManagement.Service.Book;
 using BookManagement.Service.Cart;
 using BookManagement.Service.Category;
-using BookManagement.Service.Chat;
-using BookManagement.Service.Delivery;
 using BookManagement.Service.Feedback;
 using BookManagement.Service.JwtService;
 using BookManagement.Service.Notification;
 using BookManagement.Service.Order;
-using BookManagement.Service.Payment;
-using BookManagement.Service.Response;
-using BookManagement.Service.ReturnRequest;
-using BookManagement.Service.Shop;
-using BookManagement.Service.Transaction;
 using BookManagement.Service.User;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -59,10 +52,6 @@ builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 builder.Services.AddScoped<IBookService, BookService>();
 builder.Services.AddScoped<ICategoryService, CategoryService>();
 
-// Shop
-builder.Services.AddScoped<IShopRepository, ShopRepository>();
-builder.Services.AddScoped<IShopService, ShopService>();
-
 // Cart
 builder.Services.AddScoped<ICartRepository, CartRepository>();
 builder.Services.AddScoped<ICartService, CartService>();
@@ -71,36 +60,13 @@ builder.Services.AddScoped<ICartService, CartService>();
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 
-// Feedback & Response
+// Feedback
 builder.Services.AddScoped<IFeedbackRepository, FeedbackRepository>();
-builder.Services.AddScoped<IResponseRepository, ResponseRepository>();
 builder.Services.AddScoped<IFeedbackService, FeedbackService>();
-builder.Services.AddScoped<IResponseService, ResponseService>();
 
 // Notification
 builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
-
-// Delivery
-builder.Services.AddScoped<IDeliveryRepository, DeliveryRepository>();
-builder.Services.AddScoped<IDeliveryService, DeliveryService>();
-
-// Payment
-builder.Services.AddScoped<IPaymentRepository, PaymentRepository>();
-builder.Services.AddScoped<IPaymentService, PaymentService>();
-
-// Return Request
-builder.Services.AddScoped<IReturnRequestRepository, ReturnRequestRepository>();
-builder.Services.AddScoped<IReturnRequestService, ReturnRequestService>();
-
-// Chat
-builder.Services.AddScoped<IChatRepository, ChatRepository>();
-builder.Services.AddScoped<IMessageRepository, MessageRepository>();
-builder.Services.AddScoped<IChatService, ChatService>();
-
-// Transaction
-builder.Services.AddScoped<ITransactionRepository, TransactionRepository>();
-builder.Services.AddScoped<ITransactionService, TransactionService>();
 
 // Admin
 builder.Services.AddScoped<IAdminService, AdminService>();

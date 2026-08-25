@@ -4,22 +4,24 @@ using System.Linq;
 using System.Threading.Tasks;
 using BCrypt.Net;
 using BookManagement.Repository.Abstractions;
+using BookManagement.Repository.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace BookManagement.Service.User
 {
     public class UserService : IUserService
     {
+        private readonly AppDbContext _context;
         private readonly IUserRepository _userRepository;
-        private readonly ITransactionRepository _transactionRepository;
         private readonly INotificationRepository _notificationRepository;
 
         public UserService(
+            AppDbContext context,
             IUserRepository userRepository,
-            ITransactionRepository transactionRepository,
             INotificationRepository notificationRepository)
         {
+            _context = context;
             _userRepository = userRepository;
-            _transactionRepository = transactionRepository;
             _notificationRepository = notificationRepository;
         }
 
@@ -73,7 +75,12 @@ namespace BookManagement.Service.User
 
         public async Task<IEnumerable<TransactionResponse>> GetUserTransactionsAsync(Guid userId)
         {
-            var transactions = await _transactionRepository.GetTransactionsByUserIdAsync(userId);
+            var transactions = await _context.TransactionHistories
+                .AsNoTracking()
+                .Where(th => th.UserId == userId)
+                .OrderByDescending(th => th.CreatedAt)
+                .ToListAsync();
+
             return transactions.Select(th => new TransactionResponse
             {
                 Id = th.Id,

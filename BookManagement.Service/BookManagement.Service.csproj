@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
     <ProjectReference Include="..\BookManagement.Repository\BookManagement.Repository.csproj" />
@@ -20,8 +20,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Remove="Admin\**;Auth\**;Book\**;Cart\**;Category\**;Chat\**;Delivery\**;Feedback\**;Interfaces\**;JwtService\**;Notification\**;Order\**;Payment\**;Response\**;ReturnRequest\**;Shop\**;Transaction\**;User\**;Dtos\Book\**;Dtos\Shop\**;Dtos\Order\**;Dtos\Payment\**;Dtos\Delivery\**" />
-    <EmbeddedResource Remove="Admin\**;Auth\**;Book\**;Cart\**;Category\**;Chat\**;Delivery\**;Feedback\**;Interfaces\**;JwtService\**;Notification\**;Order\**;Payment\**;Response\**;ReturnRequest\**;Shop\**;Transaction\**;User\**;Dtos\Book\**;Dtos\Shop\**;Dtos\Order\**;Dtos\Payment\**;Dtos\Delivery\**" />
-    <None Remove="Admin\**;Auth\**;Book\**;Cart\**;Category\**;Chat\**;Delivery\**;Feedback\**;Interfaces\**;JwtService\**;Notification\**;Order\**;Payment\**;Response\**;ReturnRequest\**;Shop\**;Transaction\**;User\**;Dtos\Book\**;Dtos\Shop\**;Dtos\Order\**;Dtos\Payment\**;Dtos\Delivery\**" />
+    <Compile Remove="Admin\**;Auth\**;Cart\**;Category\**;Interfaces\**;JwtService\**;Notification\**;Response\**;ReturnRequest\**;Transaction\**;User\**;Dtos\Book\**;Dtos\Shop\**;Dtos\Order\**;Dtos\Payment\**;Dtos\Delivery\**" />
+    <EmbeddedResource Remove="Admin\**;Auth\**;Cart\**;Category\**;Interfaces\**;JwtService\**;Notification\**;Order\**;Response\**;ReturnRequest\**;Transaction\**;User\**;Dtos\Book\**;Dtos\Shop\**;Dtos\Order\**;Dtos\Payment\**;Dtos\Delivery\**" />
+    <None Remove="Admin\**;Auth\**;Cart\**;Category\**;Interfaces\**;JwtService\**;Notification\**;Order\**;Response\**;ReturnRequest\**;Transaction\**;User\**;Dtos\Book\**;Dtos\Shop\**;Dtos\Order\**;Dtos\Payment\**;Dtos\Delivery\**" />
   </ItemGroup>
+
 </Project>

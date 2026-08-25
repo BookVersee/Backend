@@ -6,6 +6,8 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using BookStore.BE2.Domain.Entities;
 using Microsoft.Extensions.Configuration;
+using ShopEntity = BookStore.BE2.Domain.Entities.Shop;
+using OrderEntity = BookStore.BE2.Domain.Entities.Order;
 
 namespace BookManagement.Service.Services;
 
@@ -20,7 +22,7 @@ public class GhnService
         _configuration = configuration;
     }
 
-    public async Task<(string orderCode, decimal totalFee)> CreateShippingOrderAsync(Shop shop, Order order)
+    public async Task<(string orderCode, decimal totalFee)> CreateShippingOrderAsync(ShopEntity shop, OrderEntity order)
     {
         var token = _configuration["Ghn:Token"] ?? _configuration["GHN:Token"] ?? "DEMO_GHN_TOKEN";
         var shopId = _configuration["Ghn:ShopId"] ?? _configuration["GHN:ShopId"] ?? "123456";

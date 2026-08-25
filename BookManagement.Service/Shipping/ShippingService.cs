@@ -1,17 +1,15 @@
 using System;
 using System.Threading.Tasks;
-using BookManagement.Service.Dtos;
 using BookStore.BE2.Domain.Entities;
 using BookStore.BE2.Domain.Enums;
 using BookStore.BE2.Infrastructure.Persistence;
+using BookManagement.Service.Services;
 using Microsoft.EntityFrameworkCore;
 using DeliveryEntity = BookStore.BE2.Domain.Entities.Delivery;
-using ShopEntity = BookStore.BE2.Domain.Entities.Shop;
-using OrderEntity = BookStore.BE2.Domain.Entities.Order;
 
-namespace BookManagement.Service.Services;
+namespace BookManagement.Service.Shipping;
 
-public class ShippingService
+public class ShippingService : IShippingService
 {
     private readonly AppDbContext _db;
     private readonly GhnService _ghnService;
@@ -22,7 +20,7 @@ public class ShippingService
         _ghnService = ghnService;
     }
 
-    public async Task<DeliveryEntity> CreateGhnOrderAsync(int shopId, CreateGhnOrderDto dto)
+    public async Task<BookStore.BE2.Domain.Entities.Delivery> CreateGhnOrderAsync(int shopId, CreateGhnOrderRequest dto)
     {
         var order = await _db.Orders
             .Include(o => o.User)
@@ -31,17 +29,13 @@ public class ShippingService
             .FirstOrDefaultAsync(o => o.OrderId == dto.OrderId);
 
         if (order == null)
-        {
             throw new KeyNotFoundException("Order not found.");
-        }
 
         var shop = await _db.Shops.FirstOrDefaultAsync(s => s.ShopId == shopId);
         if (shop == null)
-        {
             throw new KeyNotFoundException("Shop not found.");
-        }
 
-        var (orderCode, totalFee) = await _ghnService.CreateShippingOrderAsync(shop!, order!);
+        var (orderCode, totalFee) = await _ghnService.CreateShippingOrderAsync(shop, order);
 
         var delivery = new DeliveryEntity
         {
@@ -61,7 +55,7 @@ public class ShippingService
         return delivery;
     }
 
-    public async Task ProcessGhnWebhookAsync(GhnWebhookPayload payload)
+    public async Task ProcessGhnWebhookAsync(GhnWebhookRequest payload)
     {
         if (string.IsNullOrEmpty(payload.OrderCode)) return;
 

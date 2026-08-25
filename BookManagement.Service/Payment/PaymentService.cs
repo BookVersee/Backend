@@ -1,16 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using BookManagement.Service.Dtos;
 using BookStore.BE2.Domain.Entities;
 using BookStore.BE2.Domain.Enums;
 using BookStore.BE2.Infrastructure.Persistence;
+using BookManagement.Service.Services;
 using Microsoft.EntityFrameworkCore;
-using PaymentEntity = BookStore.BE2.Domain.Entities.Payment;
 
-namespace BookManagement.Service.Services;
+namespace BookManagement.Service.Payment;
 
-public class PaymentService
+public class PaymentService : IPaymentService
 {
     private readonly AppDbContext _db;
     private readonly VnpayService _vnpayService;
@@ -21,15 +20,13 @@ public class PaymentService
         _vnpayService = vnpayService;
     }
 
-    public async Task<string> CreateVnpayUrlAsync(int userId, CreateVnpayUrlDto dto, string ipAddress)
+    public async Task<string> CreateVnpayUrlAsync(int userId, CreateVnpayUrlRequest dto, string ipAddress)
     {
         var order = await _db.Orders.FirstOrDefaultAsync(o => o.OrderId == dto.OrderId);
         if (order == null)
-        {
             throw new KeyNotFoundException("Order not found.");
-        }
 
-        var payment = new PaymentEntity
+        var payment = new BookStore.BE2.Domain.Entities.Payment
         {
             OrderId = dto.OrderId,
             PaymentType = PaymentType.PAYMENT,
@@ -42,43 +39,32 @@ public class PaymentService
         _db.Payments.Add(payment);
         await _db.SaveChangesAsync();
 
-        var paymentUrl = _vnpayService.CreatePaymentUrl(payment.PaymentId, payment.Amount, ipAddress, dto.BankCode);
-        return paymentUrl;
+        return _vnpayService.CreatePaymentUrl(payment.PaymentId, payment.Amount, ipAddress, dto.BankCode);
     }
 
     public async Task<(string RspCode, string Message)> ProcessVnpayIpnAsync(IDictionary<string, string> queryParams)
     {
         bool isValidSignature = _vnpayService.ValidateSignature(queryParams);
         if (!isValidSignature)
-        {
             return ("97", "Invalid Signature");
-        }
 
         if (!queryParams.TryGetValue("vnp_TxnRef", out var txnRefStr) || !int.TryParse(txnRefStr, out int paymentId))
-        {
             return ("01", "Order Not Found");
-        }
 
         var payment = await _db.Payments
             .Include(p => p.Order)
             .FirstOrDefaultAsync(p => p.PaymentId == paymentId);
 
         if (payment == null)
-        {
             return ("01", "Order Not Found");
-        }
 
         if (payment.Status == PaymentStatus.SUCCESS || payment.Status == PaymentStatus.FAILED)
-        {
             return ("02", "Order already confirmed");
-        }
 
         string responseCode = queryParams.TryGetValue("vnp_ResponseCode", out var code) ? code : "99";
         decimal amount = 0m;
         if (queryParams.TryGetValue("vnp_Amount", out var amountStr) && decimal.TryParse(amountStr, out var rawAmount))
-        {
             amount = rawAmount / 100m;
-        }
 
         if (responseCode == "00")
         {
@@ -116,7 +102,7 @@ public class PaymentService
         return ("00", "Confirm Success");
     }
 
-    public async Task ProcessVnpayRefundAsync(int shopId, VnpayRefundDto dto)
+    public async Task ProcessVnpayRefundAsync(int shopId, VnpayRefundRequest dto)
     {
         var returnReq = await _db.ReturnRequests
             .Include(r => r.OrderDetail)
@@ -126,26 +112,20 @@ public class PaymentService
             .FirstOrDefaultAsync(r => r.ReturnRequestId == dto.ReturnRequestId && r.OrderDetail.OrderId == dto.OrderId);
 
         if (returnReq == null)
-        {
             throw new KeyNotFoundException("Return request not found.");
-        }
 
         if (returnReq.OrderDetail.Book.ShopId != shopId)
-        {
             throw new InvalidOperationException("Unauthorized shop for this return request.");
-        }
 
         if (returnReq.Status != ReturnRequestStatus.APPROVED)
-        {
             throw new InvalidOperationException("Return request must be APPROVED before processing refund.");
-        }
 
         var order = returnReq.OrderDetail.Order;
         bool refundSuccess = await _vnpayService.ProcessRefundAsync(dto.ReturnRequestId, returnReq.RefundAmount, "REF" + DateTime.UtcNow.Ticks, "SHOP");
 
         if (refundSuccess)
         {
-            var refundPayment = new PaymentEntity
+            var refundPayment = new BookStore.BE2.Domain.Entities.Payment
             {
                 OrderId = dto.OrderId,
                 ReturnRequestId = dto.ReturnRequestId,
@@ -157,7 +137,6 @@ public class PaymentService
             };
 
             _db.Payments.Add(refundPayment);
-
             returnReq.OrderDetail.ReturnStatus = ReturnStatus.REFUNDED;
 
             var transaction = new TransactionHistory

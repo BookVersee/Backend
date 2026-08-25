@@ -1,16 +1,14 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
-using BookManagement.Service.Dtos;
 using BookStore.BE2.Domain.Entities;
 using BookStore.BE2.Domain.Enums;
 using BookStore.BE2.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
-using DeliveryEntity = BookStore.BE2.Domain.Entities.Delivery;
 
-namespace BookManagement.Service.Services;
+namespace BookManagement.Service.Delivery;
 
-public class DeliveryService
+public class DeliveryService : IDeliveryService
 {
     private readonly AppDbContext _db;
 
@@ -19,15 +17,13 @@ public class DeliveryService
         _db = db;
     }
 
-    public async Task<DeliveryEntity> CreateDeliveryAsync(CreateDeliveryDto dto)
+    public async Task<BookStore.BE2.Domain.Entities.Delivery> CreateDeliveryAsync(CreateDeliveryRequest dto)
     {
         var order = await _db.Orders.FirstOrDefaultAsync(o => o.OrderId == dto.OrderId);
         if (order == null)
-        {
             throw new KeyNotFoundException("Order not found.");
-        }
 
-        var delivery = new DeliveryEntity
+        var delivery = new BookStore.BE2.Domain.Entities.Delivery
         {
             OrderId = dto.OrderId,
             TrackingNumber = dto.TrackingNumber,
@@ -45,18 +41,14 @@ public class DeliveryService
         return delivery;
     }
 
-    public async Task<DeliveryEntity> UpdateDeliveryAsync(int deliveryId, UpdateDeliveryDto dto)
+    public async Task<BookStore.BE2.Domain.Entities.Delivery> UpdateDeliveryAsync(int deliveryId, UpdateDeliveryRequest dto)
     {
         var delivery = await _db.Deliveries.FirstOrDefaultAsync(d => d.DeliveryId == deliveryId);
         if (delivery == null)
-        {
             throw new KeyNotFoundException("Delivery record not found.");
-        }
 
         if (delivery.Status == DeliveryStatus.DELIVERED)
-        {
             throw new InvalidOperationException("Cannot update delivery information after package is delivered.");
-        }
 
         delivery.TrackingNumber = dto.TrackingNumber;
         delivery.CarrierName = dto.CarrierName;
@@ -67,35 +59,7 @@ public class DeliveryService
         return delivery;
     }
 
-    public async Task<PagedResultDto<DeliveryEntity>> GetDeliveryOrdersAsync(DeliveryStatus? status, int pageIndex, int pageSize)
-    {
-        var q = _db.Deliveries
-            .Include(d => d.Order)
-                .ThenInclude(o => o.User)
-            .AsQueryable();
-
-        if (status.HasValue)
-        {
-            q = q.Where(d => d.Status == status.Value);
-        }
-
-        var totalItems = await q.CountAsync();
-        var items = await q
-            .OrderByDescending(d => d.DeliveryId)
-            .Skip((pageIndex - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync();
-
-        return new PagedResultDto<DeliveryEntity>
-        {
-            TotalItems = totalItems,
-            PageIndex = pageIndex,
-            PageSize = pageSize,
-            Items = items
-        };
-    }
-
-    public async Task<DeliveryManifestDetailDto> GetDeliveryDetailAsync(int deliveryId)
+    public async Task<DeliveryManifestResponse> GetDeliveryDetailAsync(int deliveryId)
     {
         var delivery = await _db.Deliveries
             .Include(d => d.Order)
@@ -108,15 +72,13 @@ public class DeliveryService
             .FirstOrDefaultAsync(d => d.DeliveryId == deliveryId);
 
         if (delivery == null)
-        {
             throw new KeyNotFoundException("Delivery record not found.");
-        }
 
         var order = delivery.Order;
         var codPayment = order.Payments.FirstOrDefault(p => p.Method == PaymentMethod.COD && p.Status == PaymentStatus.PENDING);
-        decimal codAmount = codPayment != null ? codPayment.Amount : 0m;
+        decimal codAmount = codPayment?.Amount ?? 0m;
 
-        var items = order.OrderDetails.Select(od => new ShopOrderItemDto
+        var items = order.OrderDetails.Select(od => new DeliveryItemResponse
         {
             BookId = od.BookId,
             Title = od.Book?.Title ?? string.Empty,
@@ -125,7 +87,7 @@ public class DeliveryService
             ReturnStatus = od.ReturnStatus.ToString()
         }).ToList();
 
-        return new DeliveryManifestDetailDto
+        return new DeliveryManifestResponse
         {
             DeliveryId = delivery.DeliveryId,
             OrderId = delivery.OrderId,
@@ -142,7 +104,7 @@ public class DeliveryService
         };
     }
 
-    public async Task UpdateDeliveryStatusAsync(int deliveryId, UpdateDeliveryStatusDto dto)
+    public async Task UpdateDeliveryStatusAsync(int deliveryId, UpdateDeliveryStatusRequest dto)
     {
         var delivery = await _db.Deliveries
             .Include(d => d.Order)
@@ -150,9 +112,7 @@ public class DeliveryService
             .FirstOrDefaultAsync(d => d.DeliveryId == deliveryId);
 
         if (delivery == null)
-        {
             throw new KeyNotFoundException("Delivery record not found.");
-        }
 
         var order = delivery.Order;
 

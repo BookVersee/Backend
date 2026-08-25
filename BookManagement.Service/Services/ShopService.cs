@@ -7,6 +7,8 @@ using BookStore.BE2.Domain.Entities;
 using BookStore.BE2.Domain.Enums;
 using BookStore.BE2.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using BookEntity = BookStore.BE2.Domain.Entities.Book;
+using ShopEntity = BookStore.BE2.Domain.Entities.Shop;
 
 namespace BookManagement.Service.Services;
 
@@ -27,7 +29,7 @@ public class ShopService
             throw new InvalidOperationException("User already registered a shop.");
         }
 
-        var shop = new Shop
+        var shop = new ShopEntity
         {
             UserId = userId,
             ShopName = dto.ShopName,
@@ -89,7 +91,7 @@ public class ShopService
 
         var status = dto.StockQuantity > 0 ? BookStatus.ACTIVE : BookStatus.EMPTY;
 
-        var book = new Book
+        var book = new BookEntity
         {
             ShopId = shopId,
             CategoryId = dto.CategoryId,
@@ -238,7 +240,7 @@ public class ShopService
         return MapToBookDto(book, categoryName);
     }
 
-    private static BookResponseDto MapToBookDto(Book book, string? categoryName) => new BookResponseDto
+    private static BookResponseDto MapToBookDto(BookEntity book, string? categoryName) => new BookResponseDto
     {
         BookId = book.BookId,
         ShopId = book.ShopId,

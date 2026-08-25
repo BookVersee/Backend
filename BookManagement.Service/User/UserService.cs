@@ -25,14 +25,14 @@ namespace BookManagement.Service.User
             _notificationRepository = notificationRepository;
         }
 
-        public async Task<Response> GetProfileAsync(Guid userId)
+        public async Task<UserResponse> GetProfileAsync(Guid userId)
         {
             var user = await _userRepository.GetByIdAsync(userId);
             if (user == null) throw new KeyNotFoundException("User not found.");
             return MapToResponse(user);
         }
 
-        public async Task<Response> UpdateProfileAsync(Guid userId, UpdateProfileRequest request)
+        public async Task<UserResponse> UpdateProfileAsync(Guid userId, UpdateProfileRequest request)
         {
             var user = await _userRepository.GetByIdAsync(userId);
             if (user == null) throw new KeyNotFoundException("User not found.");
@@ -118,7 +118,7 @@ namespace BookManagement.Service.User
                 await _notificationRepository.MarkAsReadAsync(notificationId);
         }
 
-        private static Response MapToResponse(BookManagement.Repository.Entities.User user) => new Response
+        private static UserResponse MapToResponse(BookManagement.Repository.Entities.User user) => new UserResponse
         {
             Id = user.Id,
             Username = user.Username,

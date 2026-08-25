@@ -6,8 +6,8 @@ namespace BookManagement.Service.User
 {
     public interface IUserService
     {
-        Task<Response> GetProfileAsync(Guid userId);
-        Task<Response> UpdateProfileAsync(Guid userId, UpdateProfileRequest request);
+        Task<UserResponse> GetProfileAsync(Guid userId);
+        Task<UserResponse> UpdateProfileAsync(Guid userId, UpdateProfileRequest request);
         Task ForgotPasswordAsync(ForgotPasswordRequest request);
         Task ResetPasswordAsync(ResetPasswordRequest request);
         Task VerifyEmailAsync(VerifyEmailRequest request);

@@ -25,7 +25,7 @@ namespace BookManagement.Api.Controllers
         {
             var userId = GetCurrentUserId();
             var profile = await _userService.GetProfileAsync(userId);
-            return Ok(ApiResponse<Response>.SuccessResponse(profile));
+            return Ok(ApiResponse<UserResponse>.SuccessResponse(profile));
         }
 
         [Authorize]
@@ -34,7 +34,7 @@ namespace BookManagement.Api.Controllers
         {
             var userId = GetCurrentUserId();
             var updated = await _userService.UpdateProfileAsync(userId, request);
-            return Ok(ApiResponse<Response>.SuccessResponse(updated, "Profile updated successfully."));
+            return Ok(ApiResponse<UserResponse>.SuccessResponse(updated, "Profile updated successfully."));
         }
 
         [HttpPost("forgot-password")]

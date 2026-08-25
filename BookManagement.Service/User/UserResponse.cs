@@ -3,7 +3,7 @@ using BookManagement.Repository.Entities.Enums;
 
 namespace BookManagement.Service.User
 {
-    public class Response
+    public class UserResponse
     {
         public Guid Id { get; set; }
         public string Username { get; set; } = null!;

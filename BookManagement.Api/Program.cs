@@ -1,4 +1,5 @@
 using BookManagement.Api.Extensions;
+using BookManagement.Api.Hubs;
 using BookManagement.Api.Middlewares;
 using BookManagement.Repository.Data;
 using BookManagement.Repository.Abstractions;
@@ -13,17 +14,22 @@ using BookManagement.Service.JwtService;
 using BookManagement.Service.Notification;
 using BookManagement.Service.Order;
 using BookManagement.Service.User;
+using BookManagement.Service.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// 1. Add Controllers with JsonOptions
 builder.Services.AddControllers().AddJsonOptions(options =>
 {
     options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+    options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+    options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
 });
 
+builder.Services.AddSignalR();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddMemoryCache();
@@ -32,9 +38,12 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(connectionString, sqlServerOptions => sqlServerOptions.EnableRetryOnFailure()));
 
+// 3. Add Custom Extensions (JWT & Swagger & Application Services)
 builder.Services.AddJwtServices(builder.Configuration);
 builder.Services.AddSwaggerServices();
+builder.Services.AddApplicationServices();
 
+// Email Service & DI Registrations
 builder.Services.Configure<BookManagement.Service.Models.EmailOptions>(builder.Configuration.GetSection("EmailOptions"));
 builder.Services.AddScoped<BookManagement.Service.Email.IEmailService, BookManagement.Service.Email.EmailService>();
 
@@ -137,5 +146,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<ChatHub>("/hubs/chat");
 
 app.Run();

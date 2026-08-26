@@ -99,25 +99,25 @@ namespace BookManagement.Service.Book
             return books.Select(MapToResponse);
         }
 
-        private static BookResponse MapToResponse(BookManagement.Repository.Entities.Book book) => new BookResponse
+        private static BookResponse MapToResponse(BookManagement.Repository.Entities.Book b) => new BookResponse
         {
-            Id = book.Id,
-            ShopId = book.ShopId,
-            ShopName = book.Shop?.ShopName ?? "Unknown Shop",
-            CategoryId = book.CategoryId,
-            CategoryName = book.Category?.CategoryName ?? "General",
-            Title = book.Title,
-            Isbn = book.Isbn,
-            Author = book.Author,
-            Publisher = book.Publisher,
-            Price = book.Price,
-            StockQuantity = book.StockQuantity,
-            Description = book.Description,
-            ImageUrl = book.ImageUrl,
-            PublishedYear = book.PublishedYear,
-            Status = book.Status,
-            Rating = book.Rating,
-            CreatedAt = book.CreatedAt
+            Id = b.Id,
+            ShopId = b.ShopId,
+            ShopName = b.Shop?.ShopName ?? "Shop",
+            CategoryId = b.CategoryId,
+            CategoryName = b.Category?.CategoryName ?? "Category",
+            Title = b.Title,
+            Isbn = b.Isbn,
+            Author = b.Author,
+            Publisher = b.Publisher,
+            Price = b.Price,
+            StockQuantity = b.StockQuantity,
+            Description = b.Description,
+            ImageUrl = b.ImageUrl,
+            PublishedYear = b.PublishedYear,
+            Status = b.Status,
+            Rating = b.Rating,
+            CreatedAt = b.CreatedAt
         };
     }
 }

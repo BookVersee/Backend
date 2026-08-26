@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System;
 using BookManagement.Repository.Entities.Enums;
 
 namespace BookManagement.Service.Book
@@ -45,6 +44,6 @@ namespace BookManagement.Service.Book
         public int TotalCount { get; set; }
         public int Page { get; set; }
         public int PageSize { get; set; }
-        public int TotalPages => (int)Math.Ceiling((double)TotalCount / PageSize);
+        public int TotalPages => (int)Math.Ceiling((double)TotalCount / (PageSize < 1 ? 10 : PageSize));
     }
 }

@@ -54,9 +54,7 @@ namespace BookManagement.Repository.Data
         {
             base.OnModelCreating(modelBuilder);
 
-            // ==========================================
             // 1. User
-            // ==========================================
             modelBuilder.Entity<User>(builder =>
             {
                 builder.HasKey(u => u.Id);
@@ -78,9 +76,7 @@ namespace BookManagement.Repository.Data
                     .HasMaxLength(30);
             });
 
-            // ==========================================
-            // 2. Shop (Quan hệ 1-1 với User)
-            // ==========================================
+            // 2. Shop
             modelBuilder.Entity<Shop>(builder =>
             {
                 builder.HasKey(s => s.Id);
@@ -98,9 +94,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ==========================================
             // 3. Category
-            // ==========================================
             modelBuilder.Entity<Category>(builder =>
             {
                 builder.HasKey(c => c.Id);
@@ -108,9 +102,7 @@ namespace BookManagement.Repository.Data
                 builder.Property(c => c.Status).HasDefaultValue(true);
             });
 
-            // ==========================================
             // 4. Book
-            // ==========================================
             modelBuilder.Entity<Book>(builder =>
             {
                 builder.HasKey(b => b.Id);
@@ -137,9 +129,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ==========================================
-            // 5. Cart (Quan hệ 1-1 với User)
-            // ==========================================
+            // 5. Cart
             modelBuilder.Entity<Cart>(builder =>
             {
                 builder.HasKey(c => c.Id);
@@ -151,9 +141,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Cascade);
             });
 
-            // ==========================================
             // 6. CartBookDetail
-            // ==========================================
             modelBuilder.Entity<CartBookDetail>(builder =>
             {
                 builder.HasKey(cbd => cbd.Id);
@@ -170,9 +158,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ==========================================
             // 7. Order
-            // ==========================================
             modelBuilder.Entity<Order>(builder =>
             {
                 builder.HasKey(o => o.Id);
@@ -191,9 +177,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ==========================================
             // 8. OrderDetail
-            // ==========================================
             modelBuilder.Entity<OrderDetail>(builder =>
             {
                 builder.HasKey(od => od.Id);
@@ -214,9 +198,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ==========================================
             // 9. Delivery
-            // ==========================================
             modelBuilder.Entity<Delivery>(builder =>
             {
                 builder.HasKey(d => d.Id);
@@ -234,9 +216,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Cascade);
             });
 
-            // ==========================================
-            // 10. ReturnRequest (Quan hệ 1-1 với OrderDetail)
-            // ==========================================
+            // 10. ReturnRequest
             modelBuilder.Entity<ReturnRequest>(builder =>
             {
                 builder.HasKey(rr => rr.Id);
@@ -259,9 +239,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ==========================================
             // 11. Payment
-            // ==========================================
             modelBuilder.Entity<Payment>(builder =>
             {
                 builder.HasKey(p => p.Id);
@@ -290,9 +268,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ==========================================
             // 12. TransactionHistory
-            // ==========================================
             modelBuilder.Entity<TransactionHistory>(builder =>
             {
                 builder.HasKey(th => th.Id);
@@ -314,9 +290,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ==========================================
-            // 13. Feedback (Quan hệ 1-1 với OrderDetail)
-            // ==========================================
+            // 13. Feedback
             modelBuilder.Entity<Feedback>(builder =>
             {
                 builder.HasKey(f => f.Id);
@@ -339,9 +313,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ==========================================
-            // 14. Response (Quan hệ 1-1 với Feedback)
-            // ==========================================
+            // 14. Response
             modelBuilder.Entity<Response>(builder =>
             {
                 builder.HasKey(r => r.Id);
@@ -361,9 +333,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ==========================================
             // 15. Chat
-            // ==========================================
             modelBuilder.Entity<Chat>(builder =>
             {
                 builder.HasKey(c => c.Id);
@@ -379,9 +349,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ==========================================
             // 16. Message
-            // ==========================================
             modelBuilder.Entity<Message>(builder =>
             {
                 builder.HasKey(m => m.Id);
@@ -399,9 +367,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ==========================================
             // 17. Notification
-            // ==========================================
             modelBuilder.Entity<Notification>(builder =>
             {
                 builder.HasKey(n => n.Id);
@@ -418,9 +384,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Cascade);
             });
 
-            // ==========================================
             // 18. UserSession
-            // ==========================================
             modelBuilder.Entity<UserSession>(builder =>
             {
                 builder.HasKey(us => us.Id);

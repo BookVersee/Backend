@@ -8,7 +8,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.11" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
@@ -20,4 +20,9 @@
     <ProjectReference Include="..\BookManagement.Service\BookManagement.Service.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="Controllers\AdminController.cs;Controllers\AuthController.cs;Controllers\BookController.cs;Controllers\CartController.cs;Controllers\CategoryController.cs;Controllers\FeedbackController.cs;Controllers\NotificationController.cs;Controllers\OrderController.cs;Controllers\UserController.cs" />
+    <EmbeddedResource Remove="Controllers\AdminController.cs;Controllers\AuthController.cs;Controllers\BookController.cs;Controllers\CartController.cs;Controllers\CategoryController.cs;Controllers\FeedbackController.cs;Controllers\NotificationController.cs;Controllers\OrderController.cs;Controllers\UserController.cs" />
+    <None Remove="Controllers\AdminController.cs;Controllers\AuthController.cs;Controllers\BookController.cs;Controllers\CartController.cs;Controllers\CategoryController.cs;Controllers\FeedbackController.cs;Controllers\NotificationController.cs;Controllers\OrderController.cs;Controllers\UserController.cs" />
+  </ItemGroup>
 </Project>

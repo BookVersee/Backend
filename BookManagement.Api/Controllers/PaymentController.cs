@@ -4,7 +4,8 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using BookManagement.Service.Dtos;
 using BookManagement.Service.Models;
-using BookManagement.Service.Services;
+using BookManagement.Service.Payment;
+using BookManagement.Service.Shop;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -29,7 +30,10 @@ public class PaymentController : ControllerBase
         return Guid.TryParse(userIdStr, out var id) ? id : Guid.Empty;
     }
 
-    [HttpPost("vnpay/create-url")]
+    /// <summary>
+    /// Test Case 6.1: Tạo URL thanh toán VNPAY Sandbox
+    /// </summary>
+    [HttpPost("CreateVnpayUrl")]
     [Authorize]
     public async Task<IActionResult> CreateVnpayUrl([FromBody] CreateVnpayUrlDto dto)
     {
@@ -56,13 +60,16 @@ public class PaymentController : ControllerBase
         return Ok(new { RspCode = rspCode, Message = message });
     }
 
-    [HttpPost("vnpay/refund")]
+    /// <summary>
+    /// Test Case 6.2: Hoàn tiền đơn hàng qua VNPAY
+    /// </summary>
+    [HttpPost("ProcessVnpayRefund")]
     [Authorize(Roles = "SHOP,ADMIN")]
     public async Task<IActionResult> ProcessVnpayRefund([FromBody] VnpayRefundDto dto)
     {
         var userId = GetUserId();
         var profile = await _shopService.GetShopProfileAsync(userId);
         await _paymentService.ProcessVnpayRefundAsync(profile.ShopId, dto);
-        return Ok(ApiResponse.SuccessResponse(null, "VNPAY refund processed successfully"));
+        return Ok(ApiResponse.SuccessResponse(null, "VNPAY refund processed successfully."));
     }
 }

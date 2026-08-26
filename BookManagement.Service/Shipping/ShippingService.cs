@@ -3,10 +3,11 @@ using System.Threading.Tasks;
 using BookManagement.Service.Dtos;
 using BookManagement.Repository.Data;
 using BookManagement.Repository.Entities;
+using DeliveryEntity = BookManagement.Repository.Entities.Delivery;
 using BookManagement.Repository.Entities.Enums;
 using Microsoft.EntityFrameworkCore;
 
-namespace BookManagement.Service.Services;
+namespace BookManagement.Service.Shipping;
 
 public class ShippingService
 {
@@ -19,7 +20,7 @@ public class ShippingService
         _ghnService = ghnService;
     }
 
-    public async Task<Delivery> CreateGhnOrderAsync(Guid shopId, CreateGhnOrderDto dto)
+    public async Task<DeliveryEntity> CreateGhnOrderAsync(Guid shopId, CreateGhnOrderDto dto)
     {
         var order = await _db.Orders
             .Include(o => o.User)
@@ -40,7 +41,7 @@ public class ShippingService
 
         var (orderCode, totalFee) = await _ghnService.CreateShippingOrderAsync(shop, order);
 
-        var delivery = new Delivery
+        var delivery = new DeliveryEntity
         {
             OrderId = order.Id,
             TrackingNumber = orderCode,
@@ -97,3 +98,4 @@ public class ShippingService
         await _db.SaveChangesAsync();
     }
 }
+

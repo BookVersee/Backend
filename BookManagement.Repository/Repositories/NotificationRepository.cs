@@ -32,12 +32,32 @@ namespace BookManagement.Repository.Repositories
             return await _context.Notifications.FirstOrDefaultAsync(n => n.Id == id);
         }
 
-        public async Task MarkAsReadAsync(Guid notificationId)
+        public async Task<bool> MarkAsReadAsync(Guid userId, Guid notificationId)
         {
-            var notification = await GetByIdAsync(notificationId);
+            var notification = await _context.Notifications.FirstOrDefaultAsync(n => n.Id == notificationId && n.UserId == userId);
             if (notification != null)
             {
                 notification.IsRead = true;
+                notification.UpdatedAt = DateTimeOffset.UtcNow;
+                await _context.SaveChangesAsync();
+                return true;
+            }
+            return false;
+        }
+
+        public async Task MarkAllAsReadByUserIdAsync(Guid userId)
+        {
+            var notifications = await _context.Notifications
+                .Where(n => n.UserId == userId && !n.IsRead)
+                .ToListAsync();
+
+            if (notifications.Any())
+            {
+                foreach (var notification in notifications)
+                {
+                    notification.IsRead = true;
+                    notification.UpdatedAt = DateTimeOffset.UtcNow;
+                }
                 await _context.SaveChangesAsync();
             }
         }

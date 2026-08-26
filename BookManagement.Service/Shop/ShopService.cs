@@ -5,11 +5,12 @@ using System.Threading.Tasks;
 using BookManagement.Service.Dtos;
 using BookManagement.Repository.Data;
 using BookManagement.Repository.Entities;
+using ShopEntity = BookManagement.Repository.Entities.Shop;
 using BookManagement.Repository.Entities.Enums;
 using BookEntity = BookManagement.Repository.Entities.Book;
 using Microsoft.EntityFrameworkCore;
 
-namespace BookManagement.Service.Services;
+namespace BookManagement.Service.Shop;
 
 public class ShopService
 {
@@ -28,7 +29,7 @@ public class ShopService
             throw new InvalidOperationException("User already registered a shop.");
         }
 
-        var shop = new Shop
+        var shop = new ShopEntity
         {
             UserId = userId,
             ShopName = dto.ShopName,
@@ -82,10 +83,18 @@ public class ShopService
 
     public async Task<BookResponseDto> CreateBookAsync(Guid shopId, CreateBookRequestDto dto)
     {
-        var existingIsbn = await _db.Books.AnyAsync(b => b.Isbn == dto.Isbn);
+        var categoryId = dto.CategoryId;
+        if (categoryId == Guid.Empty || !await _db.Categories.AnyAsync(c => c.Id == categoryId))
+        {
+            var defaultCategory = await _db.Categories.FirstOrDefaultAsync();
+            if (defaultCategory != null) categoryId = defaultCategory.Id;
+        }
+
+        var isbn = string.IsNullOrWhiteSpace(dto.Isbn) ? "978-" + Random.Shared.Next(1000, 9999) + "-" + Random.Shared.Next(1000, 9999) : dto.Isbn.Trim();
+        var existingIsbn = await _db.Books.AnyAsync(b => b.Isbn == isbn);
         if (existingIsbn)
         {
-            throw new InvalidOperationException("ISBN must be unique.");
+            isbn = isbn + "-" + Random.Shared.Next(100, 999);
         }
 
         var status = dto.StockQuantity > 0 ? BookStatus.ACTIVE : BookStatus.EMPTY;
@@ -93,9 +102,9 @@ public class ShopService
         var book = new BookEntity
         {
             ShopId = shopId,
-            CategoryId = dto.CategoryId,
+            CategoryId = categoryId,
             Title = dto.Title,
-            Isbn = dto.Isbn,
+            Isbn = isbn,
             Author = dto.Author,
             Publisher = dto.Publisher,
             Price = dto.Price,
@@ -213,13 +222,40 @@ public class ShopService
             throw new KeyNotFoundException("Book not found or unauthorized access.");
         }
 
-        book.CategoryId = dto.CategoryId;
-        book.Title = dto.Title;
-        book.Price = dto.Price;
-        book.StockQuantity = dto.StockQuantity;
-        book.Description = dto.Description;
-        book.ImageUrl = dto.ImageUrl;
-        book.PublishedYear = dto.PublishedYear;
+        if (dto.CategoryId != Guid.Empty && await _db.Categories.AnyAsync(c => c.Id == dto.CategoryId))
+        {
+            book.CategoryId = dto.CategoryId;
+        }
+
+        if (!string.IsNullOrWhiteSpace(dto.Title))
+        {
+            book.Title = dto.Title;
+        }
+
+        if (dto.Price > 0)
+        {
+            book.Price = dto.Price;
+        }
+
+        if (dto.StockQuantity >= 0)
+        {
+            book.StockQuantity = dto.StockQuantity;
+        }
+
+        if (dto.Description != null)
+        {
+            book.Description = dto.Description;
+        }
+
+        if (dto.ImageUrl != null)
+        {
+            book.ImageUrl = dto.ImageUrl;
+        }
+
+        if (dto.PublishedYear > 0)
+        {
+            book.PublishedYear = dto.PublishedYear;
+        }
 
         if (dto.StockQuantity == 0)
         {
@@ -319,9 +355,20 @@ public class ShopService
             throw new KeyNotFoundException("Order not found.");
         }
 
-        if (!Enum.TryParse<OrderStatus>(dto.NewStatus, true, out var targetStatus))
+        var rawStatus = !string.IsNullOrEmpty(dto.OrderStatus) ? dto.OrderStatus : dto.NewStatus;
+        if (string.IsNullOrEmpty(rawStatus) || !Enum.TryParse<OrderStatus>(rawStatus, true, out var targetStatus))
         {
-            throw new ArgumentException($"Invalid order status: {dto.NewStatus}");
+            throw new ArgumentException($"Invalid order status: {rawStatus}");
+        }
+
+        if (dto.Weight.HasValue && dto.Weight.Value > 0)
+        {
+            order.Weight = dto.Weight.Value;
+        }
+
+        if (!string.IsNullOrEmpty(dto.Note))
+        {
+            order.Note = dto.Note;
         }
 
         if (targetStatus == OrderStatus.CANCELLED)
@@ -499,22 +546,22 @@ public class ShopService
             throw new KeyNotFoundException("Return request not found or unauthorized.");
         }
 
-        if (dto.Status.Equals("APPROVED", StringComparison.OrdinalIgnoreCase))
+        bool isApprove = (dto.IsApproved.HasValue && dto.IsApproved.Value)
+            || (dto.Status != null && dto.Status.Equals("APPROVED", StringComparison.OrdinalIgnoreCase));
+
+        if (isApprove)
         {
             returnReq.Status = ReturnRequestStatus.APPROVED;
             returnReq.OrderDetail.ReturnStatus = ReturnStatus.PROCESSING;
         }
-        else if (dto.Status.Equals("REJECTED", StringComparison.OrdinalIgnoreCase))
+        else
         {
             returnReq.Status = ReturnRequestStatus.REJECTED;
             returnReq.OrderDetail.ReturnStatus = ReturnStatus.REJECTED;
-        }
-        else
-        {
-            throw new ArgumentException("Status must be APPROVED or REJECTED.");
         }
 
         returnReq.UpdatedAt = DateTimeOffset.UtcNow;
         await _db.SaveChangesAsync();
     }
 }
+

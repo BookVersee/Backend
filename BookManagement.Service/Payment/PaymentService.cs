@@ -4,10 +4,11 @@ using System.Threading.Tasks;
 using BookManagement.Service.Dtos;
 using BookManagement.Repository.Data;
 using BookManagement.Repository.Entities;
+using PaymentEntity = BookManagement.Repository.Entities.Payment;
 using BookManagement.Repository.Entities.Enums;
 using Microsoft.EntityFrameworkCore;
 
-namespace BookManagement.Service.Services;
+namespace BookManagement.Service.Payment;
 
 public class PaymentService
 {
@@ -28,7 +29,7 @@ public class PaymentService
             throw new KeyNotFoundException("Order not found.");
         }
 
-        var payment = new Payment
+        var payment = new PaymentEntity
         {
             OrderId = dto.OrderId,
             PaymentType = PaymentType.PAYMENT,
@@ -117,57 +118,71 @@ public class PaymentService
 
     public async Task ProcessVnpayRefundAsync(Guid shopId, VnpayRefundDto dto)
     {
-        var returnReq = await _db.ReturnRequests
-            .Include(r => r.OrderDetail)
+        ReturnRequest? returnReq = null;
+
+        if (dto.ReturnRequestId.HasValue && dto.ReturnRequestId.Value != Guid.Empty)
+        {
+            returnReq = await _db.ReturnRequests
+                .Include(r => r.OrderDetail)
+                    .ThenInclude(od => od.Book)
+                .Include(r => r.OrderDetail)
+                    .ThenInclude(od => od.Order)
+                .FirstOrDefaultAsync(r => r.Id == dto.ReturnRequestId.Value && r.OrderDetail.OrderId == dto.OrderId);
+        }
+        else
+        {
+            returnReq = await _db.ReturnRequests
+                .Include(r => r.OrderDetail)
+                    .ThenInclude(od => od.Book)
+                .Include(r => r.OrderDetail)
+                    .ThenInclude(od => od.Order)
+                .FirstOrDefaultAsync(r => r.OrderDetail.OrderId == dto.OrderId);
+        }
+
+        var order = await _db.Orders
+            .Include(o => o.OrderDetails)
                 .ThenInclude(od => od.Book)
-            .Include(r => r.OrderDetail)
-                .ThenInclude(od => od.Order)
-            .FirstOrDefaultAsync(r => r.Id == dto.ReturnRequestId && r.OrderDetail.OrderId == dto.OrderId);
+            .FirstOrDefaultAsync(o => o.Id == dto.OrderId);
 
-        if (returnReq == null)
+        if (order == null)
         {
-            throw new KeyNotFoundException("Return request not found.");
+            throw new KeyNotFoundException("Order not found.");
         }
 
-        if (returnReq.OrderDetail.Book.ShopId != shopId)
-        {
-            throw new InvalidOperationException("Unauthorized shop for this return request.");
-        }
+        decimal refundAmount = dto.Amount ?? returnReq?.RefundAmount ?? order.TotalAmount;
+        Guid returnReqId = returnReq?.Id ?? Guid.NewGuid();
 
-        if (returnReq.Status != ReturnRequestStatus.APPROVED)
-        {
-            throw new InvalidOperationException("Return request must be APPROVED before processing refund.");
-        }
-
-        var order = returnReq.OrderDetail.Order;
-        bool refundSuccess = await _vnpayService.ProcessRefundAsync(dto.ReturnRequestId, returnReq.RefundAmount, "REF" + DateTime.UtcNow.Ticks, "SHOP");
+        bool refundSuccess = await _vnpayService.ProcessRefundAsync(returnReqId, refundAmount, dto.TransactionNo ?? ("REF" + DateTime.UtcNow.Ticks), "SHOP");
 
         if (refundSuccess)
         {
-            var refundPayment = new Payment
+            var refundPayment = new PaymentEntity
             {
                 OrderId = dto.OrderId,
-                ReturnRequestId = dto.ReturnRequestId,
+                ReturnRequestId = returnReq?.Id,
                 PaymentType = PaymentType.REFUND,
                 Method = PaymentMethod.ONLINE,
-                Amount = returnReq.RefundAmount,
+                Amount = refundAmount,
                 Status = PaymentStatus.SUCCESS,
                 CreatedAt = DateTimeOffset.UtcNow
             };
 
             _db.Payments.Add(refundPayment);
 
-            returnReq.OrderDetail.ReturnStatus = ReturnStatus.REFUNDED;
+            if (returnReq != null)
+            {
+                returnReq.OrderDetail.ReturnStatus = ReturnStatus.REFUNDED;
+            }
 
             var transaction = new TransactionHistory
             {
                 UserId = order.UserId,
                 ReferenceType = ReferenceType.REFUND,
-                ReferenceId = returnReq.Id,
+                ReferenceId = returnReq?.Id ?? order.Id,
                 TransactionType = TransactionType.OUT,
-                Amount = returnReq.RefundAmount,
-                TransactionCode = "REF" + Guid.NewGuid().ToString("N")[..10],
-                Description = $"Refund for Order #{dto.OrderId}, ReturnRequest #{dto.ReturnRequestId}",
+                Amount = refundAmount,
+                TransactionCode = dto.TransactionNo ?? ("REF" + Guid.NewGuid().ToString("N")[..10]),
+                Description = dto.RefundReason ?? $"Refund for Order #{dto.OrderId}",
                 CreatedAt = DateTimeOffset.UtcNow
             };
 
@@ -180,3 +195,4 @@ public class PaymentService
         }
     }
 }
+

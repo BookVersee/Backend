@@ -2,9 +2,11 @@ using System;
 using System.Net.Http;
 using System.Threading.Tasks;
 using BookManagement.Repository.Entities;
+using ShopEntity = BookManagement.Repository.Entities.Shop;
+using OrderEntity = BookManagement.Repository.Entities.Order;
 using Microsoft.Extensions.Configuration;
 
-namespace BookManagement.Service.Services;
+namespace BookManagement.Service.Shipping;
 
 public class GhnService
 {
@@ -17,7 +19,7 @@ public class GhnService
         _httpClient = httpClient;
     }
 
-    public async Task<(string OrderCode, decimal TotalFee)> CreateShippingOrderAsync(Shop shop, BookManagement.Repository.Entities.Order order)
+    public async Task<(string OrderCode, decimal TotalFee)> CreateShippingOrderAsync(ShopEntity shop, OrderEntity order)
     {
         var token = _config["Ghn:Token"];
         var shopIdStr = _config["Ghn:ShopId"];
@@ -32,3 +34,4 @@ public class GhnService
         return await Task.FromResult((mockCode, 30000m));
     }
 }
+

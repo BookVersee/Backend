@@ -8,7 +8,7 @@ using BookManagement.Repository.Entities;
 using BookManagement.Repository.Entities.Enums;
 using Microsoft.EntityFrameworkCore;
 
-namespace BookManagement.Service.Services;
+namespace BookManagement.Service.Delivery;
 
 public class DeliveryService
 {
@@ -19,7 +19,7 @@ public class DeliveryService
         _db = db;
     }
 
-    public async Task<Delivery> CreateDeliveryAsync(CreateDeliveryDto dto)
+    public async Task<BookManagement.Repository.Entities.Delivery> CreateDeliveryAsync(CreateDeliveryDto dto)
     {
         var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == dto.OrderId);
         if (order == null)
@@ -27,7 +27,7 @@ public class DeliveryService
             throw new KeyNotFoundException("Order not found.");
         }
 
-        var delivery = new Delivery
+        var delivery = new BookManagement.Repository.Entities.Delivery
         {
             OrderId = dto.OrderId,
             TrackingNumber = dto.TrackingNumber,
@@ -147,5 +147,63 @@ public class DeliveryService
         }
 
         await _db.SaveChangesAsync();
+    }
+
+    public async Task<List<DeliveryManifestDetailDto>> GetDeliveryOrdersAsync(string? status)
+    {
+        var q = _db.Deliveries
+            .Include(d => d.Order)
+                .ThenInclude(o => o.User)
+            .Include(d => d.Order)
+                .ThenInclude(o => o.OrderDetails)
+                    .ThenInclude(od => od.Book)
+            .Include(d => d.Order)
+                .ThenInclude(o => o.Payments)
+            .AsQueryable();
+
+        if (!string.IsNullOrEmpty(status) && Enum.TryParse<DeliveryStatus>(status, true, out var filterStatus))
+        {
+            q = q.Where(d => d.Status == filterStatus);
+        }
+
+        var deliveries = await q.OrderByDescending(d => d.CreatedAt).ToListAsync();
+
+        return deliveries.Select(delivery =>
+        {
+            var order = delivery.Order;
+            var user = order?.User;
+
+            decimal codAmount = 0m;
+            var codPayment = order?.Payments.FirstOrDefault(p => p.Method == PaymentMethod.COD && p.Status == PaymentStatus.PENDING);
+            if (codPayment != null)
+            {
+                codAmount = codPayment.Amount;
+            }
+
+            var items = order?.OrderDetails.Select(od => new ShopOrderItemDto
+            {
+                BookId = od.BookId,
+                Title = od.Book != null ? od.Book.Title : "Unknown",
+                Quantity = od.Quantity,
+                UnitPrice = od.UnitPrice,
+                ReturnStatus = od.ReturnStatus.ToString()
+            }).ToList() ?? new List<ShopOrderItemDto>();
+
+            return new DeliveryManifestDetailDto
+            {
+                DeliveryId = delivery.Id,
+                OrderId = delivery.OrderId,
+                TrackingNumber = delivery.TrackingNumber ?? string.Empty,
+                CarrierName = delivery.CarrierName ?? string.Empty,
+                ShipFee = delivery.ShipFee ?? 0m,
+                Status = delivery.Status.ToString(),
+                RecipientName = user != null ? (user.FullName ?? user.Username) : "Unknown",
+                RecipientPhone = user != null ? (user.Phone ?? string.Empty) : string.Empty,
+                RecipientAddress = order != null ? order.ShippingAddress : string.Empty,
+                Weight = order != null ? (order.Weight ?? 0m) : 0m,
+                CodAmount = codAmount,
+                Items = items
+            };
+        }).ToList();
     }
 }

@@ -1,8 +1,8 @@
 using System;
 using System.Threading.Tasks;
+using BookManagement.Service.Delivery;
 using BookManagement.Service.Dtos;
 using BookManagement.Service.Models;
-using BookManagement.Service.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -19,26 +19,41 @@ public class DeliveryController : ControllerBase
         _deliveryService = deliveryService;
     }
 
-    [HttpPost]
-    [Authorize(Roles = "SHOP,ADMIN")]
+    /// <summary>
+    /// Test Case 4.1: Tạo vận đơn giao hàng mới
+    /// </summary>
+    [HttpPost("CreateDelivery")]
+    [Authorize(Roles = "SHOP,ADMIN,DELIVER,SHIPPER")]
     public async Task<IActionResult> CreateDelivery([FromBody] CreateDeliveryDto dto)
     {
         var result = await _deliveryService.CreateDeliveryAsync(dto);
-        return StatusCode(201, ApiResponse.SuccessResponse(result, "Delivery created successfully"));
+        return Ok(ApiResponse.SuccessResponse(result, "Delivery created successfully"));
     }
 
-    [HttpGet("manifest/{delivery_id}")]
-    [Authorize(Roles = "SHIPPER,ADMIN,SHOP")]
-    public async Task<IActionResult> GetDeliveryManifestDetail([FromRoute(Name = "delivery_id")] Guid deliveryId)
+    /// <summary>
+    /// Test Case 4.2: Shipper xem danh sách đơn cần giao
+    /// </summary>
+    [HttpGet("GetDeliveryOrders")]
+    [Authorize(Roles = "SHIPPER,DELIVER,ADMIN,SHOP")]
+    public async Task<IActionResult> GetDeliveryOrders([FromQuery] string? status)
     {
-        var result = await _deliveryService.GetDeliveryManifestDetailAsync(deliveryId);
+        var result = await _deliveryService.GetDeliveryOrdersAsync(status);
         return Ok(ApiResponse.SuccessResponse(result));
     }
 
-    [HttpPut("{delivery_id}/status")]
-    [Authorize(Roles = "SHIPPER,ADMIN")]
-    public async Task<IActionResult> UpdateDeliveryStatus([FromRoute(Name = "delivery_id")] Guid deliveryId, [FromBody] UpdateDeliveryStatusDto dto)
+    /// <summary>
+    /// Test Case 4.3: Shipper cập nhật giao hàng thành công
+    /// </summary>
+    [HttpPost("UpdateDeliveryStatus")]
+    [Authorize(Roles = "SHIPPER,DELIVER,ADMIN,SHOP")]
+    public async Task<IActionResult> UpdateDeliveryStatus(
+        [FromQuery] Guid deliveryId,
+        [FromBody] UpdateDeliveryStatusDto dto)
     {
+        if (deliveryId == Guid.Empty)
+        {
+            return BadRequest(ApiResponse.ErrorResponse("deliveryId is required."));
+        }
         await _deliveryService.UpdateDeliveryStatusAsync(deliveryId, dto);
         return Ok(ApiResponse.SuccessResponse(null, "Delivery status updated successfully"));
     }

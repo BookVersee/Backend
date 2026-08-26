@@ -8,7 +8,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 
-namespace BookManagement.Service.Services;
+namespace BookManagement.Service.Payment;
 
 public class VnpayService
 {

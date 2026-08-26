@@ -299,8 +299,17 @@ public class ShopOrderDetailDto
 
 public class UpdateOrderStatusDto
 {
+    [JsonPropertyName("order_status")]
+    public string? OrderStatus { get; set; }
+
     [JsonPropertyName("new_status")]
-    public string NewStatus { get; set; } = string.Empty;
+    public string? NewStatus { get; set; }
+
+    [JsonPropertyName("weight")]
+    public decimal? Weight { get; set; }
+
+    [JsonPropertyName("note")]
+    public string? Note { get; set; }
 
     [JsonPropertyName("reason")]
     public string? Reason { get; set; }
@@ -341,8 +350,14 @@ public class FeedbackResponseRequestDto
 
 public class ProcessReturnRequestDto
 {
+    [JsonPropertyName("is_approved")]
+    public bool? IsApproved { get; set; }
+
     [JsonPropertyName("status")]
-    public string Status { get; set; } = string.Empty;
+    public string? Status { get; set; }
+
+    [JsonPropertyName("admin_note")]
+    public string? AdminNote { get; set; }
 
     [JsonPropertyName("rejection_reason")]
     public string? RejectionReason { get; set; }
@@ -426,6 +441,9 @@ public class UpdateDeliveryStatusDto
     [JsonPropertyName("status")]
     public string Status { get; set; } = string.Empty;
 
+    [JsonPropertyName("note")]
+    public string? Note { get; set; }
+
     [JsonPropertyName("failed_reason")]
     public string? FailedReason { get; set; }
 }
@@ -436,17 +454,32 @@ public class CreateVnpayUrlDto
     [JsonPropertyName("order_id")]
     public Guid OrderId { get; set; }
 
+    [JsonPropertyName("order_info")]
+    public string? OrderInfo { get; set; }
+
     [JsonPropertyName("bank_code")]
     public string? BankCode { get; set; }
 }
 
 public class VnpayRefundDto
 {
-    [JsonPropertyName("return_request_id")]
-    public Guid ReturnRequestId { get; set; }
-
     [JsonPropertyName("order_id")]
     public Guid OrderId { get; set; }
+
+    [JsonPropertyName("return_request_id")]
+    public Guid? ReturnRequestId { get; set; }
+
+    [JsonPropertyName("amount")]
+    public decimal? Amount { get; set; }
+
+    [JsonPropertyName("transaction_no")]
+    public string? TransactionNo { get; set; }
+
+    [JsonPropertyName("transaction_date")]
+    public string? TransactionDate { get; set; }
+
+    [JsonPropertyName("refund_reason")]
+    public string? RefundReason { get; set; }
 }
 
 // 5. GHN Shipping Integration DTOs
@@ -454,6 +487,9 @@ public class CreateGhnOrderDto
 {
     [JsonPropertyName("order_id")]
     public Guid OrderId { get; set; }
+
+    [JsonPropertyName("required_note")]
+    public string? RequiredNote { get; set; }
 }
 
 public class GhnWebhookPayload
@@ -466,6 +502,9 @@ public class GhnWebhookPayload
 
     [JsonPropertyName("Time")]
     public DateTime? Time { get; set; }
+
+    [JsonPropertyName("Description")]
+    public string? Description { get; set; }
 }
 
 // 6. Realtime Communication DTOs
@@ -516,3 +555,22 @@ public class MessageDto
     [JsonPropertyName("created_at")]
     public DateTimeOffset CreatedAt { get; set; }
 }
+
+public class SendMessageDto
+{
+    [JsonPropertyName("chat_id")]
+    public Guid? ChatId { get; set; }
+
+    [JsonPropertyName("shop_id")]
+    public Guid? ShopId { get; set; }
+
+    [JsonPropertyName("user_id")]
+    public Guid? UserId { get; set; }
+
+    [JsonPropertyName("content")]
+    public string Content { get; set; } = string.Empty;
+
+    [JsonPropertyName("image_url")]
+    public string? ImageUrl { get; set; }
+}
+

@@ -5,9 +5,10 @@ using System.Threading.Tasks;
 using BookManagement.Service.Dtos;
 using BookManagement.Repository.Data;
 using BookManagement.Repository.Entities;
+using ChatEntity = BookManagement.Repository.Entities.Chat;
 using Microsoft.EntityFrameworkCore;
 
-namespace BookManagement.Service.Services;
+namespace BookManagement.Service.Chat;
 
 public class ChatService
 {
@@ -115,7 +116,7 @@ public class ChatService
         var chat = await _db.Chats.FirstOrDefaultAsync(c => c.UserId == userId && c.ShopId == shopId);
         if (chat == null)
         {
-            chat = new Chat
+            chat = new ChatEntity
             {
                 UserId = userId,
                 ShopId = shopId,

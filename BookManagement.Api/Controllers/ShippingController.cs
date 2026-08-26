@@ -3,7 +3,8 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using BookManagement.Service.Dtos;
 using BookManagement.Service.Models;
-using BookManagement.Service.Services;
+using BookManagement.Service.Shipping;
+using BookManagement.Service.Shop;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -28,21 +29,27 @@ public class ShippingController : ControllerBase
         return Guid.TryParse(userIdStr, out var id) ? id : Guid.Empty;
     }
 
-    [HttpPost("ghn/create")]
+    /// <summary>
+    /// Test Case 5.1: Tạo đơn vận chuyển qua GHN
+    /// </summary>
+    [HttpPost("CreateGhnOrder")]
     [Authorize(Roles = "SHOP,ADMIN")]
     public async Task<IActionResult> CreateGhnOrder([FromBody] CreateGhnOrderDto dto)
     {
         var userId = GetUserId();
         var profile = await _shopService.GetShopProfileAsync(userId);
         var result = await _shippingService.CreateGhnOrderAsync(profile.ShopId, dto);
-        return StatusCode(201, ApiResponse.SuccessResponse(result, "GHN shipping order created successfully"));
+        return Ok(ApiResponse.SuccessResponse(result, "GHN shipping order created successfully"));
     }
 
-    [HttpPost("ghn/webhook")]
+    /// <summary>
+    /// Test Case 5.2: Tiếp nhận Webhook trạng thái từ GHN
+    /// </summary>
+    [HttpPost("GhnWebhook")]
     [AllowAnonymous]
     public async Task<IActionResult> GhnWebhook([FromBody] GhnWebhookPayload payload)
     {
         await _shippingService.ProcessGhnWebhookAsync(payload);
-        return Ok(new { message = "Webhook processed" });
+        return Ok(new { message = "Webhook processed successfully." });
     }
 }

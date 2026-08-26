@@ -43,7 +43,12 @@ namespace BookManagement.Api.Controllers
         [HttpPut("MarkAsRead")]
         public async Task<IActionResult> MarkAsRead([FromQuery] Guid id)
         {
-            await _notificationService.MarkNotificationAsReadAsync(id);
+            var userId = GetCurrentUserId();
+            var success = await _notificationService.MarkNotificationAsReadAsync(userId, id);
+            if (!success)
+            {
+                return NotFound(ApiResponse<string>.ErrorResponse("Notification not found or access denied."));
+            }
             return Ok(ApiResponse<string>.SuccessResponse("Notification marked as read."));
         }
 

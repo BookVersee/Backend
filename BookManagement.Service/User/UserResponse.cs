@@ -28,16 +28,4 @@ namespace BookManagement.Service.User
         public string? Description { get; set; }
         public DateTimeOffset CreatedAt { get; set; }
     }
-
-    public class NotificationResponse
-    {
-        public Guid Id { get; set; }
-        public Guid UserId { get; set; }
-        public NotificationType Type { get; set; }
-        public Guid? ReferenceId { get; set; }
-        public string Content { get; set; } = null!;
-        public string? ImageUrl { get; set; }
-        public bool IsRead { get; set; }
-        public DateTimeOffset CreatedAt { get; set; }
-    }
 }

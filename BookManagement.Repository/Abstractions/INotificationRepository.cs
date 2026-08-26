@@ -9,7 +9,8 @@ namespace BookManagement.Repository.Abstractions
     {
         Task<IEnumerable<Notification>> GetNotificationsByUserIdAsync(Guid userId);
         Task<Notification?> GetByIdAsync(Guid id);
-        Task MarkAsReadAsync(Guid notificationId);
+        Task<bool> MarkAsReadAsync(Guid userId, Guid notificationId);
+        Task MarkAllAsReadByUserIdAsync(Guid userId);
         Task CreateNotificationAsync(Notification notification);
     }
 }

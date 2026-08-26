@@ -146,29 +146,6 @@ namespace BookManagement.Service.User
             });
         }
 
-        public async Task<IEnumerable<NotificationResponse>> GetUserNotificationsAsync(Guid userId)
-        {
-            var notifications = await _notificationRepository.GetNotificationsByUserIdAsync(userId);
-            return notifications.Select(n => new NotificationResponse
-            {
-                Id = n.Id,
-                UserId = n.UserId,
-                Type = n.Type,
-                ReferenceId = n.ReferenceId,
-                Content = n.Content ?? string.Empty,
-                ImageUrl = n.ImageUrl,
-                IsRead = n.IsRead,
-                CreatedAt = n.CreatedAt
-            });
-        }
-
-        public async Task MarkNotificationAsReadAsync(Guid userId, Guid notificationId)
-        {
-            var notification = await _notificationRepository.GetByIdAsync(notificationId);
-            if (notification != null && notification.UserId == userId)
-                await _notificationRepository.MarkAsReadAsync(notificationId);
-        }
-
         public async Task<BookManagement.Service.Admin.ShopResponse> RegisterShopAsync(Guid userId, RegisterShopRequest request)
         {
             var user = await _userRepository.GetByIdAsync(userId);

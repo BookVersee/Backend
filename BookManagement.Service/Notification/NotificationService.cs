@@ -24,18 +24,14 @@ public class NotificationService : INotificationService
         return notifications.Where(n => !n.IsRead).Select(MapToResponse).ToList();
     }
 
-    public async Task MarkNotificationAsReadAsync(Guid notificationId)
+    public async Task<bool> MarkNotificationAsReadAsync(Guid userId, Guid notificationId)
     {
-        await _notificationRepository.MarkAsReadAsync(notificationId);
+        return await _notificationRepository.MarkAsReadAsync(userId, notificationId);
     }
 
     public async Task MarkAllNotificationsAsReadAsync(Guid userId)
     {
-        var notifications = await _notificationRepository.GetNotificationsByUserIdAsync(userId);
-        foreach (var notification in notifications.Where(n => !n.IsRead))
-        {
-            await _notificationRepository.MarkAsReadAsync(notification.Id);
-        }
+        await _notificationRepository.MarkAllAsReadByUserIdAsync(userId);
     }
 
     private static NotificationResponse MapToResponse(NotificationEntity notification)

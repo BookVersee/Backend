@@ -1,7 +1,11 @@
 using BookManagement.Service.Book;
+using BookManagement.Service.Chat;
+using BookManagement.Service.Delivery;
 using BookManagement.Service.Feedback;
 using BookManagement.Service.Order;
-using BookManagement.Service.Services;
+using BookManagement.Service.Payment;
+using BookManagement.Service.Shipping;
+using BookManagement.Service.Shop;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace BookManagement.Service.Extensions;

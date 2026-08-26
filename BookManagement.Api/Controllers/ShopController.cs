@@ -1,10 +1,10 @@
 using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using BookManagement.Repository.Entities.Enums;
 using BookManagement.Service.Dtos;
 using BookManagement.Service.Models;
-using BookManagement.Service.Services;
-using BookManagement.Repository.Entities.Enums;
+using BookManagement.Service.Shop;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -28,15 +28,10 @@ public class ShopController : ControllerBase
         return Guid.TryParse(userIdStr, out var id) ? id : Guid.Empty;
     }
 
-    [HttpPost("register")]
-    public async Task<IActionResult> RegisterShop([FromBody] ShopRegisterDto dto)
-    {
-        var userId = GetUserId();
-        var result = await _shopService.RegisterShopAsync(userId, dto);
-        return Ok(ApiResponse.SuccessResponse(result, "Shop registered successfully"));
-    }
-
-    [HttpGet("profile")]
+    /// <summary>
+    /// Test Case 1.1: Xem hồ sơ Shop hiện tại
+    /// </summary>
+    [HttpGet("GetMyProfile")]
     public async Task<IActionResult> GetShopProfile()
     {
         var userId = GetUserId();
@@ -44,79 +39,127 @@ public class ShopController : ControllerBase
         return Ok(ApiResponse.SuccessResponse(result));
     }
 
-    [HttpPost("books")]
+    /// <summary>
+    /// Test Case 1.2: Đăng bán sách mới
+    /// </summary>
+    [HttpPost("CreateShopBook")]
     [Authorize(Roles = "SHOP,ADMIN")]
     public async Task<IActionResult> CreateBook([FromBody] CreateBookRequestDto dto)
     {
         var userId = GetUserId();
         var profile = await _shopService.GetShopProfileAsync(userId);
         var result = await _shopService.CreateBookAsync(profile.ShopId, dto);
-        return StatusCode(201, ApiResponse.SuccessResponse(result, "Book created successfully"));
+        return Ok(ApiResponse.SuccessResponse(result, "Book created successfully"));
     }
 
-    [HttpGet("books/{book_id}")]
+    /// <summary>
+    /// Test Case 1.3: Lấy danh sách kho sách & Lọc sản phẩm
+    /// </summary>
+    [HttpGet("GetShopInventory")]
     [Authorize(Roles = "SHOP,ADMIN")]
-    public async Task<IActionResult> GetBookById([FromRoute(Name = "book_id")] Guid bookId)
+    public async Task<IActionResult> GetShopInventory(
+        [FromQuery] string? searchTerm,
+        [FromQuery] string? keyword,
+        [FromQuery] Guid? categoryId,
+        [FromQuery] BookStatus? status,
+        [FromQuery] int pageIndex = 1,
+        [FromQuery] int pageSize = 10)
     {
         var userId = GetUserId();
         var profile = await _shopService.GetShopProfileAsync(userId);
-        var result = await _shopService.GetBookByIdAsync(profile.ShopId, bookId);
-        return Ok(ApiResponse.SuccessResponse(result));
-    }
-
-    [HttpGet("books")]
-    [Authorize(Roles = "SHOP,ADMIN")]
-    public async Task<IActionResult> GetShopBooks([FromQuery] BookQueryDto query)
-    {
-        var userId = GetUserId();
-        var profile = await _shopService.GetShopProfileAsync(userId);
+        var query = new BookQueryDto
+        {
+            Keyword = searchTerm ?? keyword,
+            CategoryId = categoryId,
+            Status = status,
+            PageIndex = pageIndex > 0 ? pageIndex : 1,
+            PageSize = pageSize > 0 ? pageSize : 10
+        };
         var result = await _shopService.GetShopBooksAsync(profile.ShopId, query);
         return Ok(ApiResponse.SuccessResponse(result));
     }
 
-    [HttpPut("books/{book_id}")]
+    /// <summary>
+    /// Test Case 1.4: Cập nhật thông tin & Giá sách
+    /// </summary>
+    [HttpPost("UpdateShopBook")]
     [Authorize(Roles = "SHOP,ADMIN")]
-    public async Task<IActionResult> UpdateBook([FromRoute(Name = "book_id")] Guid bookId, [FromBody] UpdateBookRequestDto dto)
+    public async Task<IActionResult> UpdateShopBook(
+        [FromQuery] Guid bookId,
+        [FromBody] UpdateBookRequestDto dto)
     {
+        if (bookId == Guid.Empty)
+        {
+            return BadRequest(ApiResponse.ErrorResponse("bookId is required."));
+        }
         var userId = GetUserId();
         var profile = await _shopService.GetShopProfileAsync(userId);
         var result = await _shopService.UpdateBookAsync(profile.ShopId, bookId, dto);
         return Ok(ApiResponse.SuccessResponse(result, "Book updated successfully"));
     }
 
-    [HttpDelete("books/{book_id}")]
+    /// <summary>
+    /// Test Case 1.5: Ẩn sách khỏi gian hàng
+    /// </summary>
+    [HttpPost("DeleteShopBook")]
     [Authorize(Roles = "SHOP,ADMIN")]
-    public async Task<IActionResult> DeleteBook([FromRoute(Name = "book_id")] Guid bookId)
+    public async Task<IActionResult> DeleteShopBook([FromQuery] Guid bookId)
     {
+        if (bookId == Guid.Empty)
+        {
+            return BadRequest(ApiResponse.ErrorResponse("bookId is required."));
+        }
         var userId = GetUserId();
         var profile = await _shopService.GetShopProfileAsync(userId);
         await _shopService.DeleteBookAsync(profile.ShopId, bookId);
         return Ok(ApiResponse.SuccessResponse(null, "Book status updated to HIDDEN successfully"));
     }
 
-    [HttpGet("orders/{order_id}")]
+    /// <summary>
+    /// Test Case 3.1: Xem chi tiết đơn hàng của Shop
+    /// </summary>
+    [HttpGet("GetShopOrderDetail")]
     [Authorize(Roles = "SHOP,ADMIN")]
-    public async Task<IActionResult> GetShopOrderDetail([FromRoute(Name = "order_id")] Guid orderId)
+    public async Task<IActionResult> GetShopOrderDetail([FromQuery] Guid orderId)
     {
+        if (orderId == Guid.Empty)
+        {
+            return BadRequest(ApiResponse.ErrorResponse("orderId is required."));
+        }
         var userId = GetUserId();
         var profile = await _shopService.GetShopProfileAsync(userId);
         var result = await _shopService.GetShopOrderDetailAsync(profile.ShopId, orderId);
         return Ok(ApiResponse.SuccessResponse(result));
     }
 
-    [HttpPut("orders/{order_id}/status")]
+    /// <summary>
+    /// Test Case 3.2: Cập nhật trạng thái đơn hàng
+    /// </summary>
+    [HttpPost("UpdateOrderStatus")]
     [Authorize(Roles = "SHOP,ADMIN")]
-    public async Task<IActionResult> UpdateOrderStatus([FromRoute(Name = "order_id")] Guid orderId, [FromBody] UpdateOrderStatusDto dto)
+    public async Task<IActionResult> UpdateOrderStatus(
+        [FromQuery] Guid orderId,
+        [FromBody] UpdateOrderStatusDto dto)
     {
+        if (orderId == Guid.Empty)
+        {
+            return BadRequest(ApiResponse.ErrorResponse("orderId is required."));
+        }
         var userId = GetUserId();
         var profile = await _shopService.GetShopProfileAsync(userId);
         await _shopService.UpdateOrderStatusAsync(profile.ShopId, orderId, dto);
         return Ok(ApiResponse.SuccessResponse(null, "Order status updated successfully"));
     }
 
-    [HttpGet("revenue")]
+    /// <summary>
+    /// Test Case 3.3: Thống kê doanh thu Shop
+    /// </summary>
+    [HttpGet("GetRevenueStatistics")]
     [Authorize(Roles = "SHOP,ADMIN")]
-    public async Task<IActionResult> GetShopRevenue([FromQuery] DateTime? fromDate, [FromQuery] DateTime? toDate, [FromQuery] string? periodType)
+    public async Task<IActionResult> GetRevenueStatistics(
+        [FromQuery] DateTime? fromDate,
+        [FromQuery] DateTime? toDate,
+        [FromQuery] string? periodType)
     {
         var userId = GetUserId();
         var profile = await _shopService.GetShopProfileAsync(userId);
@@ -124,9 +167,16 @@ public class ShopController : ControllerBase
         return Ok(ApiResponse.SuccessResponse(result));
     }
 
-    [HttpGet("feedbacks")]
+    /// <summary>
+    /// Test Case 3.4: Xem & Trả lời đánh giá của khách
+    /// </summary>
+    [HttpGet("GetShopFeedbacks")]
     [Authorize(Roles = "SHOP,ADMIN")]
-    public async Task<IActionResult> GetShopFeedbacks([FromQuery] int? rating, [FromQuery] bool? hasResponse, [FromQuery] int pageIndex = 1, [FromQuery] int pageSize = 10)
+    public async Task<IActionResult> GetShopFeedbacks(
+        [FromQuery] int? rating,
+        [FromQuery] bool? hasResponse,
+        [FromQuery] int pageIndex = 1,
+        [FromQuery] int pageSize = 10)
     {
         var userId = GetUserId();
         var profile = await _shopService.GetShopProfileAsync(userId);
@@ -134,20 +184,35 @@ public class ShopController : ControllerBase
         return Ok(ApiResponse.SuccessResponse(result));
     }
 
-    [HttpPost("feedbacks/{feedback_id}/response")]
+    [HttpPost("ReplyFeedback")]
     [Authorize(Roles = "SHOP,ADMIN")]
-    public async Task<IActionResult> CreateFeedbackResponse([FromRoute(Name = "feedback_id")] Guid feedbackId, [FromBody] FeedbackResponseRequestDto dto)
+    public async Task<IActionResult> ReplyFeedback(
+        [FromQuery] Guid feedbackId,
+        [FromBody] FeedbackResponseRequestDto dto)
     {
+        if (feedbackId == Guid.Empty)
+        {
+            return BadRequest(ApiResponse.ErrorResponse("feedbackId is required."));
+        }
         var userId = GetUserId();
         var profile = await _shopService.GetShopProfileAsync(userId);
         var result = await _shopService.CreateFeedbackResponseAsync(profile.ShopId, feedbackId, dto);
-        return StatusCode(201, ApiResponse.SuccessResponse(result, "Feedback response created successfully"));
+        return Ok(ApiResponse.SuccessResponse(result, "Feedback response created successfully"));
     }
 
-    [HttpPut("return-requests/{return_request_id}")]
+    /// <summary>
+    /// Test Case 3.5: Xử lý yêu cầu hoàn trả hàng
+    /// </summary>
+    [HttpPost("ProcessReturnRequest")]
     [Authorize(Roles = "SHOP,ADMIN")]
-    public async Task<IActionResult> ProcessReturnRequest([FromRoute(Name = "return_request_id")] Guid returnRequestId, [FromBody] ProcessReturnRequestDto dto)
+    public async Task<IActionResult> ProcessReturnRequest(
+        [FromQuery] Guid returnRequestId,
+        [FromBody] ProcessReturnRequestDto dto)
     {
+        if (returnRequestId == Guid.Empty)
+        {
+            return BadRequest(ApiResponse.ErrorResponse("returnRequestId is required."));
+        }
         var userId = GetUserId();
         var profile = await _shopService.GetShopProfileAsync(userId);
         await _shopService.ProcessReturnRequestAsync(profile.ShopId, returnRequestId, dto);

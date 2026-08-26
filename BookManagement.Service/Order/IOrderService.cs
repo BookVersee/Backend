@@ -9,6 +9,7 @@ namespace BookManagement.Service.Order
     {
         Task<IEnumerable<OrderResponse>> GetUserOrdersAsync(Guid userId, OrderStatus? status = null);
         Task<OrderResponse> GetOrderDetailAsync(Guid userId, Guid orderId);
+        Task<OrderResponse> CreateOrderAsync(Guid userId, CreateOrderRequest request);
         Task CancelOrderAsync(Guid userId, Guid orderId);
         Task<ReturnRequestResponse> CreateReturnRequestAsync(Guid userId, Guid orderDetailId, CreateReturnRequest input);
     }

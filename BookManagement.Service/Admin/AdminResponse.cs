@@ -1,6 +1,5 @@
 namespace BookManagement.Service.Admin;
 
-// Response Classes
 public class PagedResult<T>
 {
     public IEnumerable<T> Items { get; set; } = new List<T>();
@@ -20,6 +19,9 @@ public class UserResponse
     public string? Address { get; set; }
     public string Role { get; set; } = null!;
     public string Status { get; set; } = null!;
+    public Guid? ShopId { get; set; }
+    public string? ShopName { get; set; }
+    public string? ShopStatus { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 }
 
@@ -33,6 +35,9 @@ public class UserDetailResponse
     public string? Address { get; set; }
     public string Role { get; set; } = null!;
     public string Status { get; set; } = null!;
+    public Guid? ShopId { get; set; }
+    public string? ShopName { get; set; }
+    public string? ShopStatus { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public List<OrderSummaryResponse> RecentOrders { get; set; } = new();
     public List<TransactionSummaryResponse> FinancialTransactions { get; set; } = new();

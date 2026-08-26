@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using BookManagement.Service.Book;
 using BookManagement.Service.Models;
@@ -7,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace BookManagement.Api.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/shop")]
     public class BookController : ControllerBase
     {
         private readonly IBookService _bookService;
@@ -17,32 +18,36 @@ namespace BookManagement.Api.Controllers
             _bookService = bookService;
         }
 
-        [HttpGet]
+        /// Chức năng: Tìm kiếm và lọc danh sách sản phẩm sách. Trả về: Danh sách sản phẩm sách phân trang.
+        [HttpGet("FindBooks")]
         public async Task<IActionResult> FindBooks([FromQuery] FilterRequest filter)
         {
             var result = await _bookService.FindBooksAsync(filter);
             return Ok(ApiResponse<PagedResponse<BookResponse>>.SuccessResponse(result));
         }
 
-        [HttpGet("{id}")]
-        public async Task<IActionResult> GetBookDetail(Guid id)
+        /// Chức năng: Xem thông tin chi tiết cuốn sách. Trả về: Dữ liệu chi tiết sản phẩm sách.
+        [HttpGet("GetBookDetail")]
+        public async Task<IActionResult> GetBookDetail([FromQuery] Guid id)
         {
             var book = await _bookService.GetBookDetailAsync(id);
             return Ok(ApiResponse<BookResponse>.SuccessResponse(book));
         }
 
-        [HttpGet("shops/{shopId}")]
-        public async Task<IActionResult> GetShopProfile(Guid shopId)
+        /// Chức năng: Xem thông tin hồ sơ cửa hàng. Trả về: Thông tin công khai của cửa hàng.
+        [HttpGet("GetShopProfile")]
+        public async Task<IActionResult> GetShopProfile([FromQuery] Guid shopId)
         {
             var shop = await _bookService.GetShopProfileAsync(shopId);
             return Ok(ApiResponse<ShopResponse>.SuccessResponse(shop));
         }
 
-        [HttpGet("shops/{shopId}/books")]
-        public async Task<IActionResult> GetBooksByShop(Guid shopId)
+        /// Chức năng: Lấy danh sách sản phẩm sách của cửa hàng. Trả về: Danh sách sách do cửa hàng đăng bán.
+        [HttpGet("GetBooksByShop")]
+        public async Task<IActionResult> GetBooksByShop([FromQuery] Guid shopId)
         {
             var books = await _bookService.GetBooksByShopAsync(shopId);
-            return Ok(ApiResponse<object>.SuccessResponse(books));
+            return Ok(ApiResponse<IEnumerable<BookResponse>>.SuccessResponse(books));
         }
     }
 }

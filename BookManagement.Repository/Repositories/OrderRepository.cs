@@ -48,6 +48,23 @@ namespace BookManagement.Repository.Repositories
             return await query.OrderByDescending(o => o.CreatedAt).ToListAsync();
         }
 
+        public async Task<IEnumerable<Order>> GetOrdersByShopUserIdAsync(Guid shopUserId, OrderStatus? status = null)
+        {
+            var query = _context.Orders
+                .Include(o => o.User)
+                .Include(o => o.OrderDetails)
+                    .ThenInclude(od => od.Book)
+                .Include(o => o.Deliveries)
+                .Where(o => o.OrderDetails.Any(od => od.Book.Shop.UserId == shopUserId));
+
+            if (status.HasValue)
+            {
+                query = query.Where(o => o.OrderStatus == status.Value);
+            }
+
+            return await query.OrderByDescending(o => o.CreatedAt).ToListAsync();
+        }
+
         public Task<IQueryable<Order>> GetQueryableAsync()
         {
             return Task.FromResult(_context.Orders

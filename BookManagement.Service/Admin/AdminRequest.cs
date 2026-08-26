@@ -1,6 +1,5 @@
 namespace BookManagement.Service.Admin;
 
-// Request Classes
 public class UserFilterRequest
 {
     public BookManagement.Repository.Entities.Enums.UserRole? Role { get; set; }

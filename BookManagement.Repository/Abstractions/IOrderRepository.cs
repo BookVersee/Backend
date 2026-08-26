@@ -11,6 +11,7 @@ namespace BookManagement.Repository.Abstractions
     {
         Task<Order?> GetByIdAsync(Guid id);
         Task<IEnumerable<Order>> GetOrdersByUserIdAsync(Guid userId, OrderStatus? status = null);
+        Task<IEnumerable<Order>> GetOrdersByShopUserIdAsync(Guid shopUserId, OrderStatus? status = null);
         Task<IQueryable<Order>> GetQueryableAsync();
         Task CreateOrderAsync(Order order);
         Task UpdateOrderAsync(Order order);

@@ -14,5 +14,6 @@ namespace BookManagement.Service.User
         Task<IEnumerable<TransactionResponse>> GetUserTransactionsAsync(Guid userId);
         Task<IEnumerable<NotificationResponse>> GetUserNotificationsAsync(Guid userId);
         Task MarkNotificationAsReadAsync(Guid userId, Guid notificationId);
+        Task<BookManagement.Service.Admin.ShopResponse> RegisterShopAsync(Guid userId, RegisterShopRequest request);
     }
 }

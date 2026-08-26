@@ -32,27 +32,23 @@ namespace BookManagement.Service.Feedback
 
         public async Task<FeedbackResponse> CreateFeedbackAsync(Guid userId, CreateFeedbackRequest request)
         {
-            // 1. Retrieve OrderDetail with Order
             var orderDetail = await _orderRepository.GetOrderDetailByIdAsync(request.OrderDetailId);
             if (orderDetail == null)
             {
                 throw new KeyNotFoundException("Order item not found.");
             }
 
-            // 2. Ensure Order belongs to the logged-in user
             if (orderDetail.Order.UserId != userId)
             {
                 throw new UnauthorizedAccessException("You can only submit feedback for your own orders.");
             }
 
-            // 3. Ensure Order status is COMPLETED or DELIVERED
             if (orderDetail.Order.OrderStatus != OrderStatus.COMPLETED &&
                 orderDetail.Order.OrderStatus != OrderStatus.DELIVERED)
             {
                 throw new InvalidOperationException("Feedback can only be submitted for completed or delivered orders.");
             }
 
-            // 4. Ensure feedback has not been submitted for this order item already
             var existingFeedback = await _feedbackRepository.GetFeedbackByOrderDetailIdAsync(request.OrderDetailId);
             if (existingFeedback != null)
             {

@@ -31,7 +31,7 @@ public class AdminService : IAdminService
     // ===== USER MANAGEMENT =====
     public async Task<PagedResult<UserResponse>> GetUsersAsync(UserFilterRequest filter)
     {
-        var query = _context.Users.AsNoTracking();
+        var query = _context.Users.AsNoTracking().Include(u => u.Shop).AsQueryable();
 
         if (filter.Role.HasValue)
             query = query.Where(u => u.Role == filter.Role.Value);
@@ -44,7 +44,8 @@ public class AdminService : IAdminService
             var kw = filter.Keyword.Trim().ToLower();
             query = query.Where(u => u.Username.ToLower().Contains(kw) ||
                                      u.Email.ToLower().Contains(kw) ||
-                                     (u.FullName != null && u.FullName.ToLower().Contains(kw)));
+                                     (u.FullName != null && u.FullName.ToLower().Contains(kw)) ||
+                                     (u.Shop != null && u.Shop.ShopName.ToLower().Contains(kw)));
         }
 
         var totalCount = await query.CountAsync();
@@ -65,14 +66,16 @@ public class AdminService : IAdminService
         };
     }
 
-    public async Task<UserDetailResponse> GetUserDetailAsync(Guid userId)
+    public async Task<UserDetailResponse> GetUserDetailAsync(Guid id)
     {
-        var user = await _userRepository.GetByIdAsync(userId);
-        if (user == null)
-            throw new Exception("User not found");
+        var user = await _context.Users.AsNoTracking().Include(u => u.Shop).FirstOrDefaultAsync(u => u.Id == id)
+                   ?? await _context.Users.AsNoTracking().Include(u => u.Shop).FirstOrDefaultAsync(u => u.Shop != null && u.Shop.Id == id);
 
-        var orders = await _orderRepository.GetOrdersByUserIdAsync(userId);
-        var transactions = await _context.TransactionHistories.AsNoTracking().Where(t => t.UserId == userId).ToListAsync();
+        if (user == null)
+            throw new KeyNotFoundException("User or Shop not found.");
+
+        var orders = await _orderRepository.GetOrdersByUserIdAsync(user.Id);
+        var transactions = await _context.TransactionHistories.AsNoTracking().Where(t => t.UserId == user.Id).ToListAsync();
 
         return new UserDetailResponse
         {
@@ -84,6 +87,9 @@ public class AdminService : IAdminService
             Address = user.Address,
             Role = user.Role.ToString(),
             Status = user.Status.ToString(),
+            ShopId = user.Shop?.Id,
+            ShopName = user.Shop?.ShopName,
+            ShopStatus = user.Shop?.Condition.ToString(),
             CreatedAt = user.CreatedAt,
             RecentOrders = orders.Select(o => new OrderSummaryResponse
             {
@@ -111,15 +117,31 @@ public class AdminService : IAdminService
 
     public async Task UpdateUserStatusAsync(Guid userId, string status)
     {
-        var user = await _userRepository.GetByIdAsync(userId);
+        var user = await _context.Users.Include(u => u.Shop).FirstOrDefaultAsync(u => u.Id == userId);
         if (user == null)
-            throw new Exception("User not found");
+            throw new KeyNotFoundException("User not found.");
 
-        user.Status = (UserStatus)Enum.Parse(typeof(UserStatus), status);
-        await _userRepository.UpdateAsync(user);
+        var newStatus = (UserStatus)Enum.Parse(typeof(UserStatus), status);
+        user.Status = newStatus;
+
+        if (user.Shop != null)
+        {
+            if (newStatus == UserStatus.LOCKED)
+            {
+                user.Shop.Condition = ShopCondition.LOCKED;
+            }
+            else if (newStatus == UserStatus.ACTIVE && user.Shop.Condition == ShopCondition.LOCKED)
+            {
+                user.Shop.Condition = ShopCondition.ACTIVE;
+            }
+        }
 
         if (user.Status == UserStatus.LOCKED)
+        {
             await _sessionRepository.RevokeAllUserSessionsAsync(userId);
+        }
+
+        await _context.SaveChangesAsync();
     }
 
     // ===== DISPUTE MANAGEMENT =====
@@ -304,21 +326,36 @@ public class AdminService : IAdminService
 
     public async Task ApproveShopAsync(Guid shopId)
     {
-        var shop = await _context.Shops.FindAsync(shopId);
+        var shop = await _context.Shops.Include(s => s.User).FirstOrDefaultAsync(s => s.Id == shopId);
         if (shop == null)
-            throw new Exception("Shop not found");
+            throw new KeyNotFoundException("Shop not found.");
 
         shop.Condition = ShopCondition.ACTIVE;
+        if (shop.User != null)
+        {
+            if (shop.User.Role != BookManagement.Repository.Entities.Enums.UserRole.ADMIN)
+            {
+                shop.User.Role = BookManagement.Repository.Entities.Enums.UserRole.SHOP;
+            }
+            shop.User.Status = UserStatus.ACTIVE;
+        }
+
         await _context.SaveChangesAsync();
     }
 
     public async Task LockShopAsync(Guid shopId, LockShopRequest request)
     {
-        var shop = await _context.Shops.FindAsync(shopId);
+        var shop = await _context.Shops.Include(s => s.User).FirstOrDefaultAsync(s => s.Id == shopId);
         if (shop == null)
-            throw new Exception("Shop not found");
+            throw new KeyNotFoundException("Shop not found.");
 
         shop.Condition = ShopCondition.LOCKED;
+        if (shop.User != null)
+        {
+            shop.User.Status = UserStatus.LOCKED;
+            await _sessionRepository.RevokeAllUserSessionsAsync(shop.UserId);
+        }
+
         await _context.SaveChangesAsync();
     }
 
@@ -429,6 +466,9 @@ public class AdminService : IAdminService
         Address = user.Address,
         Role = user.Role.ToString(),
         Status = user.Status.ToString(),
+        ShopId = user.Shop?.Id,
+        ShopName = user.Shop?.ShopName,
+        ShopStatus = user.Shop?.Condition.ToString(),
         CreatedAt = user.CreatedAt
     };
 

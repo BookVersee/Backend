@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using BookManagement.Service.Feedback;
@@ -9,7 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace BookManagement.Api.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/feedback")]
     public class FeedbackController : ControllerBase
     {
         private readonly IFeedbackService _feedbackService;
@@ -19,15 +20,17 @@ namespace BookManagement.Api.Controllers
             _feedbackService = feedbackService;
         }
 
-        [HttpGet("books/{bookId}")]
-        public async Task<IActionResult> GetBookFeedbacks(Guid bookId)
+        /// Chức năng: Lấy danh sách bài đánh giá sản phẩm sách. Trả về: Danh sách bình luận và điểm sao đánh giá.
+        [HttpGet("GetBookFeedbacks")]
+        public async Task<IActionResult> GetBookFeedbacks([FromQuery] Guid bookId)
         {
             var feedbacks = await _feedbackService.GetBookFeedbacksAsync(bookId);
-            return Ok(ApiResponse<object>.SuccessResponse(feedbacks));
+            return Ok(ApiResponse<IEnumerable<FeedbackResponse>>.SuccessResponse(feedbacks));
         }
 
+        /// Chức năng: Gửi bình luận và điểm đánh giá sản phẩm. Trả về: Thông tin bài đánh giá đã tạo.
         [Authorize]
-        [HttpPost]
+        [HttpPost("WriteFeedback")]
         public async Task<IActionResult> WriteFeedback([FromBody] CreateFeedbackRequest request)
         {
             var userId = GetCurrentUserId();
@@ -35,9 +38,10 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<FeedbackResponse>.SuccessResponse(feedback, "Feedback submitted successfully."));
         }
 
+        /// Chức năng: Báo cáo vi phạm phản hồi của người bán. Trả về: Thông báo xác nhận gửi báo cáo.
         [Authorize]
-        [HttpPost("responses/{responseId}/report")]
-        public async Task<IActionResult> ReportResponse(Guid responseId, [FromBody] ReportResponseRequest request)
+        [HttpPost("ReportResponse")]
+        public async Task<IActionResult> ReportResponse([FromQuery] Guid responseId, [FromBody] ReportResponseRequest request)
         {
             var userId = GetCurrentUserId();
             await _feedbackService.ReportResponseAsync(userId, responseId, request);

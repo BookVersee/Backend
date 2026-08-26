@@ -11,7 +11,7 @@ namespace BookManagement.Api.Controllers
 {
     [Authorize]
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/notifications")]
     public class NotificationController : ControllerBase
     {
         private readonly INotificationService _notificationService;
@@ -21,10 +21,8 @@ namespace BookManagement.Api.Controllers
             _notificationService = notificationService;
         }
 
-        /// <summary>
-        /// Get all notifications for current user
-        /// </summary>
-        [HttpGet]
+        /// Chức năng: Lấy toàn bộ danh sách thông báo cá nhân. Trả về: Danh sách thông báo của người dùng.
+        [HttpGet("GetNotifications")]
         public async Task<IActionResult> GetNotifications()
         {
             var userId = GetCurrentUserId();
@@ -32,10 +30,8 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<IEnumerable<NotificationResponse>>.SuccessResponse(notifications));
         }
 
-        /// <summary>
-        /// Get unread notifications for current user
-        /// </summary>
-        [HttpGet("unread")]
+        /// Chức năng: Lấy danh sách thông báo chưa đọc. Trả về: Danh sách thông báo chưa xem.
+        [HttpGet("GetUnreadNotifications")]
         public async Task<IActionResult> GetUnreadNotifications()
         {
             var userId = GetCurrentUserId();
@@ -43,20 +39,16 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<IEnumerable<NotificationResponse>>.SuccessResponse(notifications));
         }
 
-        /// <summary>
-        /// Mark a specific notification as read
-        /// </summary>
-        [HttpPut("{id}/read")]
-        public async Task<IActionResult> MarkAsRead(Guid id)
+        /// Chức năng: Đánh dấu 1 thông báo là đã đọc. Trả về: Thông báo xác nhận đã xem.
+        [HttpPut("MarkAsRead")]
+        public async Task<IActionResult> MarkAsRead([FromQuery] Guid id)
         {
             await _notificationService.MarkNotificationAsReadAsync(id);
             return Ok(ApiResponse<string>.SuccessResponse("Notification marked as read."));
         }
 
-        /// <summary>
-        /// Mark all notifications as read for current user
-        /// </summary>
-        [HttpPut("read-all")]
+        /// Chức năng: Đánh dấu tất cả thông báo là đã đọc. Trả về: Thông báo xác nhận đã đọc toàn bộ.
+        [HttpPut("MarkAllAsRead")]
         public async Task<IActionResult> MarkAllAsRead()
         {
             var userId = GetCurrentUserId();

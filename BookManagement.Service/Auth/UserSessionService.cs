@@ -14,15 +14,18 @@ namespace BookManagement.Service.Auth
         private readonly IUserRepository _userRepository;
         private readonly IUserSessionRepository _sessionRepository;
         private readonly ITokenService _tokenService;
+        private readonly BookManagement.Repository.Data.AppDbContext _context;
 
         public UserSessionService(
             IUserRepository userRepository,
             IUserSessionRepository sessionRepository,
-            ITokenService tokenService)
+            ITokenService tokenService,
+            BookManagement.Repository.Data.AppDbContext context)
         {
             _userRepository = userRepository;
             _sessionRepository = sessionRepository;
             _tokenService = tokenService;
+            _context = context;
         }
 
         public async Task<TokenResponse> RegisterAsync(RegisterRequest request, string? ipAddress = null, string? deviceInfo = null)

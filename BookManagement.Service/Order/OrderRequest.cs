@@ -10,4 +10,11 @@ namespace BookManagement.Service.Order
         public string? ImageUrl { get; set; }
         public decimal RefundAmount { get; set; }
     }
+
+    public class CreateOrderRequest
+    {
+        public string ShippingAddress { get; set; } = null!;
+        public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.COD;
+        public string? Note { get; set; }
+    }
 }

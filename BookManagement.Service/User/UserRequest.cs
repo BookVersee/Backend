@@ -25,4 +25,9 @@ namespace BookManagement.Service.User
         public string Email { get; set; } = null!;
         public string VerificationCode { get; set; } = null!;
     }
+
+    public class RegisterShopRequest
+    {
+        public string ShopName { get; set; } = null!;
+    }
 }

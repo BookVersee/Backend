@@ -46,7 +46,7 @@ public class NotificationService : INotificationService
             UserId = notification.UserId,
             Type = notification.Type.ToString(),
             ReferenceId = notification.ReferenceId,
-            Content = notification.Content,
+            Content = notification.Content ?? string.Empty,
             ImageUrl = notification.ImageUrl,
             IsRead = notification.IsRead,
             CreatedAt = notification.CreatedAt

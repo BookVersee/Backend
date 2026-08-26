@@ -86,7 +86,7 @@ public class ChatService
                 MessageId = m.Id,
                 ChatId = m.ChatId,
                 SenderId = m.SenderId,
-                Content = m.Content,
+                Content = m.Content ?? string.Empty,
                 ImageUrl = m.ImageUrl,
                 IsRead = m.IsRead,
                 CreatedAt = m.CreatedAt

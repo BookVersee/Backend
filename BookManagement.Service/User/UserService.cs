@@ -155,7 +155,7 @@ namespace BookManagement.Service.User
                 UserId = n.UserId,
                 Type = n.Type,
                 ReferenceId = n.ReferenceId,
-                Content = n.Content,
+                Content = n.Content ?? string.Empty,
                 ImageUrl = n.ImageUrl,
                 IsRead = n.IsRead,
                 CreatedAt = n.CreatedAt

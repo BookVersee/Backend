@@ -108,7 +108,7 @@ public class AdminService : IAdminService
                 ReferenceId = t.ReferenceId,
                 TransactionType = t.TransactionType.ToString(),
                 Amount = t.Amount,
-                TransactionCode = t.TransactionCode,
+                TransactionCode = t.TransactionCode ?? string.Empty,
                 Description = t.Description,
                 CreatedAt = t.CreatedAt
             }).ToList()
@@ -480,7 +480,7 @@ public class AdminService : IAdminService
         CustomerName = rr.OrderDetail?.Order?.User?.FullName ?? "Customer",
         ShopName = rr.OrderDetail?.Book?.Shop?.ShopName ?? "Shop",
         ReasonType = rr.ReasonType.ToString(),
-        DetailedReason = rr.DetailedReason,
+        DetailedReason = rr.DetailedReason ?? string.Empty,
         EvidenceImageUrl = rr.ImageUrl,
         Status = rr.Status.ToString(),
         RefundAmount = rr.RefundAmount,
@@ -520,7 +520,7 @@ public class AdminService : IAdminService
     {
         Id = delivery.Id,
         OrderId = delivery.OrderId,
-        TrackingNumber = delivery.TrackingNumber,
+        TrackingNumber = delivery.TrackingNumber ?? string.Empty,
         Status = delivery.Status.ToString(),
         EstimatedDelivery = delivery.EstimatedDelivery,
         ActualDeliveredAt = delivery.ActualDeliveredAt

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using BookManagement.Service.Dtos;
@@ -167,6 +167,11 @@ public class PaymentService
         if (order == null)
         {
             throw new KeyNotFoundException("Order not found.");
+        }
+
+        if (shopId != Guid.Empty && !order.OrderDetails.Any(od => od.Book != null && od.Book.ShopId == shopId))
+        {
+            throw new UnauthorizedAccessException("Shop does not have permission to refund this order.");
         }
 
         decimal itemRefundFallback = (returnReq?.OrderDetail != null) ? (returnReq.OrderDetail.UnitPrice * returnReq.OrderDetail.Quantity) : order.TotalAmount;

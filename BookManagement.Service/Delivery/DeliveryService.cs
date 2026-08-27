@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -157,7 +157,30 @@ public class DeliveryService
             }
             else if (targetStatus == DeliveryStatus.RETURNED)
             {
-                order.OrderStatus = OrderStatus.CANCELLED;
+                if (order.OrderStatus != OrderStatus.CANCELLED)
+                {
+                    order.OrderStatus = OrderStatus.CANCELLED;
+
+                    var fullOrder = await _db.Orders
+                        .Include(o => o.OrderDetails)
+                            .ThenInclude(od => od.Book)
+                        .FirstOrDefaultAsync(o => o.Id == order.Id);
+
+                    if (fullOrder != null)
+                    {
+                        foreach (var detail in fullOrder.OrderDetails)
+                        {
+                            if (detail.Book != null)
+                            {
+                                detail.Book.StockQuantity += detail.Quantity;
+                                if (detail.Book.Status == BookStatus.EMPTY && detail.Book.StockQuantity > 0)
+                                {
+                                    detail.Book.Status = BookStatus.ACTIVE;
+                                }
+                            }
+                        }
+                    }
+                }
             }
             else if (targetStatus == DeliveryStatus.TRANSIT)
             {

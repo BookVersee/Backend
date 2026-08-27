@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -33,8 +33,8 @@ public class ShopService
         {
             UserId = userId,
             ShopName = dto.ShopName,
-            Condition = ShopCondition.OPEN,
-            Rating = 5.0f,
+            Condition = ShopCondition.PENDING,
+            Rating = 0,
             CreatedAt = DateTimeOffset.UtcNow
         };
 
@@ -45,7 +45,20 @@ public class ShopService
         {
             user.Address = dto.Address ?? user.Address;
             user.QrImageUrl = dto.QrImageUrl ?? user.QrImageUrl;
-            user.Role = UserRole.SHOP;
+        }
+
+        var adminUsers = await _db.Users.Where(u => u.Role == UserRole.ADMIN).ToListAsync();
+        foreach (var admin in adminUsers)
+        {
+            _db.Notifications.Add(new BookManagement.Repository.Entities.Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = admin.Id,
+                Type = NotificationType.SYSTEM,
+                Content = $"Khách hàng {user?.FullName ?? user?.Username ?? "User"} vừa nộp đơn mở Cửa hàng '{shop.ShopName}'. Vui lòng phê duyệt!",
+                IsRead = false,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
         }
 
         await _db.SaveChangesAsync();
@@ -83,6 +96,16 @@ public class ShopService
 
     public async Task<BookResponseDto> CreateBookAsync(Guid shopId, CreateBookRequestDto dto)
     {
+        if (dto.Price <= 0)
+        {
+            throw new ArgumentException("Giá sản phẩm phải lớn hơn 0.");
+        }
+
+        if (dto.StockQuantity < 0)
+        {
+            throw new ArgumentException("Số lượng tồn kho không được là số âm.");
+        }
+
         var categoryId = dto.CategoryId;
         if (categoryId == Guid.Empty || !await _db.Categories.AnyAsync(c => c.Id == categoryId))
         {
@@ -373,15 +396,18 @@ public class ShopService
 
         if (targetStatus == OrderStatus.CANCELLED)
         {
-            foreach (var item in order.OrderDetails)
+            if (order.OrderStatus != OrderStatus.CANCELLED)
             {
-                var book = item.Book;
-                if (book != null)
+                foreach (var item in order.OrderDetails)
                 {
-                    book.StockQuantity += item.Quantity;
-                    if (book.Status == BookStatus.EMPTY && book.StockQuantity > 0)
+                    var book = item.Book;
+                    if (book != null)
                     {
-                        book.Status = BookStatus.ACTIVE;
+                        book.StockQuantity += item.Quantity;
+                        if (book.Status == BookStatus.EMPTY && book.StockQuantity > 0)
+                        {
+                            book.Status = BookStatus.ACTIVE;
+                        }
                     }
                 }
             }
@@ -398,7 +424,9 @@ public class ShopService
     {
         var query = _db.OrderDetails
             .Include(od => od.Order)
-            .Where(od => od.Book.ShopId == shopId && (od.Order.OrderStatus == OrderStatus.DELIVERED || od.Order.OrderStatus == OrderStatus.COMPLETED));
+            .Where(od => od.Book.ShopId == shopId
+                && (od.Order.OrderStatus == OrderStatus.DELIVERED || od.Order.OrderStatus == OrderStatus.COMPLETED)
+                && od.ReturnStatus != ReturnStatus.REFUNDED);
 
         if (fromDate.HasValue)
         {

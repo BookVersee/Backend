@@ -182,11 +182,40 @@ public class AdminService : IAdminService
 
     public async Task ResolveDisputeAsync(Guid disputeId, ResolveDisputeRequest request)
     {
-        var dispute = await _context.ReturnRequests.FindAsync(disputeId);
+        var dispute = await _context.ReturnRequests
+            .Include(rr => rr.OrderDetail)
+                .ThenInclude(od => od.Order)
+            .Include(rr => rr.OrderDetail)
+                .ThenInclude(od => od.Book)
+            .FirstOrDefaultAsync(rr => rr.Id == disputeId);
+
         if (dispute == null)
-            throw new Exception("Dispute not found");
+            throw new KeyNotFoundException("Dispute not found.");
 
         dispute.Status = request.ApproveRefund ? ReturnRequestStatus.APPROVED : ReturnRequestStatus.REJECTED;
+        dispute.UpdatedAt = DateTimeOffset.UtcNow;
+
+        if (dispute.OrderDetail != null)
+        {
+            dispute.OrderDetail.ReturnStatus = request.ApproveRefund ? ReturnStatus.PROCESSING : ReturnStatus.REJECTED;
+
+            if (dispute.OrderDetail.Order != null)
+            {
+                var buyerNotification = new BookManagement.Repository.Entities.Notification
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = dispute.OrderDetail.Order.UserId,
+                    Type = NotificationType.ORDER_UPDATE,
+                    ReferenceId = dispute.Id,
+                    Content = request.ApproveRefund
+                        ? $"Ban quản trị (Admin) đã chấp nhận khiếu nại trả hàng cuốn '{dispute.OrderDetail.Book?.Title}'. Yêu cầu hoàn tiền đang được xử lý."
+                        : $"Ban quản trị (Admin) đã từ chối khiếu nại trả hàng cuốn '{dispute.OrderDetail.Book?.Title}'. Ghi chú: {request.AdminResolutionNote ?? "Không đủ bằng chứng"}.",
+                    CreatedAt = DateTimeOffset.UtcNow
+                };
+                await _context.Notifications.AddAsync(buyerNotification);
+            }
+        }
+
         await _context.SaveChangesAsync();
     }
 
@@ -374,10 +403,13 @@ public class AdminService : IAdminService
     // ===== DASHBOARD & STATISTICS =====
     public async Task<DashboardStatisticsResponse> GetDashboardStatisticsAsync(string period = "month")
     {
+        var validStatuses = new[] { OrderStatus.PAID, OrderStatus.SHIPPING, OrderStatus.DELIVERING, OrderStatus.DELIVERED, OrderStatus.COMPLETED };
         var totalOrders = await _context.Orders.CountAsync();
         var totalUsers = await _context.Users.CountAsync();
         var activeShops = await _context.Shops.CountAsync(s => s.Condition == ShopCondition.ACTIVE);
-        var totalRevenue = await _context.Orders.SumAsync(o => o.TotalAmount);
+        var totalRevenue = await _context.Orders
+            .Where(o => validStatuses.Contains(o.OrderStatus))
+            .SumAsync(o => (decimal?)o.TotalAmount) ?? 0m;
         var disputesCount = await _context.ReturnRequests.CountAsync(rr => rr.Status == ReturnRequestStatus.PENDING);
 
         return new DashboardStatisticsResponse
@@ -392,7 +424,11 @@ public class AdminService : IAdminService
 
     public async Task<RevenueReportResponse> GetRevenueReportAsync(string period = "month")
     {
-        var orders = await _context.Orders.AsNoTracking().ToListAsync();
+        var validStatuses = new[] { OrderStatus.PAID, OrderStatus.SHIPPING, OrderStatus.DELIVERING, OrderStatus.DELIVERED, OrderStatus.COMPLETED };
+        var orders = await _context.Orders
+            .AsNoTracking()
+            .Where(o => validStatuses.Contains(o.OrderStatus))
+            .ToListAsync();
         var totalRevenue = orders.Sum(o => o.TotalAmount);
         var avgOrderValue = orders.Count > 0 ? totalRevenue / orders.Count : 0;
 

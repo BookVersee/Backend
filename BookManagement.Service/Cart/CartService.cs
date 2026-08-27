@@ -110,6 +110,12 @@ namespace BookManagement.Service.Cart
 
         public async Task<CartResponse> RemoveFromCartAsync(Guid userId, Guid cartDetailId)
         {
+            var cart = await _cartRepository.GetCartByUserIdAsync(userId);
+            if (cart == null) throw new KeyNotFoundException("Cart not found.");
+
+            var item = cart.CartBookDetails.FirstOrDefault(cbd => cbd.Id == cartDetailId);
+            if (item == null) throw new KeyNotFoundException("Cart item not found in user cart.");
+
             await _cartRepository.RemoveCartDetailAsync(cartDetailId);
             var updatedCart = await _cartRepository.GetCartByUserIdAsync(userId);
             return MapToResponse(updatedCart!);

@@ -90,10 +90,9 @@ namespace BookManagement.Service.User
             if (user == null) throw new KeyNotFoundException("User not found.");
 
             var cacheKey = $"reset_otp_{user.Email.ToLower()}";
-            if (_cache.TryGetValue(cacheKey, out string? savedOtp))
+            if (!_cache.TryGetValue(cacheKey, out string? savedOtp) || savedOtp != request.ResetToken)
             {
-                if (savedOtp != request.ResetToken)
-                    throw new InvalidOperationException("Mã OTP khôi phục mật khẩu không chính xác.");
+                throw new InvalidOperationException("Mã OTP khôi phục mật khẩu không chính xác hoặc đã hết hạn.");
             }
 
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
@@ -107,12 +106,11 @@ namespace BookManagement.Service.User
             if (user == null) throw new KeyNotFoundException("User not found.");
 
             var cacheKey = $"verify_otp_{user.Email.ToLower()}";
-            if (_cache.TryGetValue(cacheKey, out string? savedOtp))
+            if (!_cache.TryGetValue(cacheKey, out string? savedOtp) || savedOtp != request.VerificationCode)
             {
-                if (savedOtp != request.VerificationCode)
-                    throw new InvalidOperationException("Mã OTP xác thực email không chính xác.");
-                _cache.Remove(cacheKey);
+                throw new InvalidOperationException("Mã OTP xác thực email không chính xác hoặc đã hết hạn.");
             }
+            _cache.Remove(cacheKey);
 
             var htmlBody = $@"
                 <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;'>

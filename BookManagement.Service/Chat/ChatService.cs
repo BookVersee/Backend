@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -73,10 +73,21 @@ public class ChatService
 
     public async Task<List<MessageDto>> GetChatMessagesAsync(Guid chatId, Guid requesterId)
     {
-        var chat = await _db.Chats.FirstOrDefaultAsync(c => c.Id == chatId);
+        var chat = await _db.Chats
+            .Include(c => c.Shop)
+            .FirstOrDefaultAsync(c => c.Id == chatId);
+
         if (chat == null)
         {
             throw new KeyNotFoundException("Chat thread not found.");
+        }
+
+        var isCustomer = chat.UserId == requesterId;
+        var isShopOwner = chat.Shop != null && chat.Shop.UserId == requesterId;
+
+        if (!isCustomer && !isShopOwner)
+        {
+            throw new UnauthorizedAccessException("You are not authorized to view messages in this chat thread.");
         }
 
         var messages = await _db.Messages

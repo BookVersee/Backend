@@ -209,6 +209,7 @@ namespace BookManagement.Service.Order
             var orderDetail = await _context.OrderDetails
                 .Include(od => od.Order)
                 .Include(od => od.Book)
+                    .ThenInclude(b => b.Shop)
                 .FirstOrDefaultAsync(od => od.Id == orderDetailId);
 
             if (orderDetail == null)
@@ -226,6 +227,11 @@ namespace BookManagement.Service.Order
                 throw new InvalidOperationException("Chỉ có thể gửi yêu cầu trả hàng/hoàn tiền sau khi đơn hàng đã được giao thành công.");
             }
 
+            if (orderDetail.ReturnStatus != ReturnStatus.NONE)
+            {
+                throw new InvalidOperationException("Yêu cầu trả hàng cho sản phẩm này đã được gửi trước đó.");
+            }
+
             var returnRequest = new BookManagement.Repository.Entities.ReturnRequest
             {
                 Id = Guid.NewGuid(),
@@ -241,8 +247,8 @@ namespace BookManagement.Service.Order
 
             await _orderRepository.CreateReturnRequestAsync(returnRequest);
 
-            // Notification
-            var notification = new BookManagement.Repository.Entities.Notification
+            // Notification for Buyer
+            var buyerNotification = new BookManagement.Repository.Entities.Notification
             {
                 Id = Guid.NewGuid(),
                 UserId = userId,
@@ -251,7 +257,24 @@ namespace BookManagement.Service.Order
                 Content = $"Yêu cầu trả hàng cho cuốn '{orderDetail.Book?.Title}' đã được gửi tới Shop. Vui lòng chờ phản hồi.",
                 CreatedAt = DateTimeOffset.UtcNow
             };
-            await _context.Notifications.AddAsync(notification);
+            await _context.Notifications.AddAsync(buyerNotification);
+
+            // Notification for Shop Owner
+            var shopUserId = orderDetail.Book?.Shop?.UserId;
+            if (shopUserId.HasValue && shopUserId.Value != Guid.Empty)
+            {
+                var shopNotification = new BookManagement.Repository.Entities.Notification
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = shopUserId.Value,
+                    Type = NotificationType.ORDER_UPDATE,
+                    ReferenceId = returnRequest.Id,
+                    Content = $"Khách hàng gửi yêu cầu trả hàng cho sản phẩm '{orderDetail.Book?.Title}' (Đơn hàng #{orderDetail.OrderId}). Vui lòng xử lý.",
+                    CreatedAt = DateTimeOffset.UtcNow
+                };
+                await _context.Notifications.AddAsync(shopNotification);
+            }
+
             await _context.SaveChangesAsync();
 
             return new ReturnRequestResponse

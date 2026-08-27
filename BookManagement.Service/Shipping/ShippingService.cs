@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using BookManagement.Service.Dtos;
@@ -32,6 +32,11 @@ public class ShippingService
         if (order == null)
         {
             throw new KeyNotFoundException("Order not found.");
+        }
+
+        if (shopId != Guid.Empty && !order.OrderDetails.Any(od => od.Book != null && od.Book.ShopId == shopId))
+        {
+            throw new UnauthorizedAccessException("Shop does not have permission to create shipping order for this order.");
         }
 
         // Kiểm tra chống tạo trùng vận đơn GHN
@@ -123,7 +128,33 @@ public class ShippingService
                 break;
             case "return":
                 delivery.Status = DeliveryStatus.RETURNED;
-                if (order != null) order.OrderStatus = OrderStatus.CANCELLED;
+                if (order != null)
+                {
+                    if (order.OrderStatus != OrderStatus.CANCELLED)
+                    {
+                        order.OrderStatus = OrderStatus.CANCELLED;
+
+                        var fullOrder = await _db.Orders
+                            .Include(o => o.OrderDetails)
+                                .ThenInclude(od => od.Book)
+                            .FirstOrDefaultAsync(o => o.Id == order.Id);
+
+                        if (fullOrder != null)
+                        {
+                            foreach (var detail in fullOrder.OrderDetails)
+                            {
+                                if (detail.Book != null)
+                                {
+                                    detail.Book.StockQuantity += detail.Quantity;
+                                    if (detail.Book.Status == BookStatus.EMPTY && detail.Book.StockQuantity > 0)
+                                    {
+                                        detail.Book.Status = BookStatus.ACTIVE;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 break;
         }
 

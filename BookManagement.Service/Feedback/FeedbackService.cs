@@ -60,6 +60,11 @@ namespace BookManagement.Service.Feedback
                 throw new InvalidOperationException("Feedback has already been submitted for this order item.");
             }
 
+            if (request.Rating < 1 || request.Rating > 5)
+            {
+                throw new ArgumentException("Điểm đánh giá phải từ 1 đến 5 sao.");
+            }
+
             var shopId = request.ShopId == Guid.Empty
                 ? (orderDetail.Book?.ShopId ?? request.ShopId)
                 : request.ShopId;
@@ -76,6 +81,7 @@ namespace BookManagement.Service.Feedback
             };
 
             await _feedbackRepository.CreateFeedbackAsync(feedback);
+            await _context.SaveChangesAsync();
 
             // Recalculate average rating for Book & Shop
             if (orderDetail.BookId != Guid.Empty)

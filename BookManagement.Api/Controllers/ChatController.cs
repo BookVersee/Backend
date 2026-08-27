@@ -54,23 +54,18 @@ public class ChatController : ControllerBase
     public async Task<IActionResult> GetShopConversations([FromQuery] Guid? shopId)
     {
         var userId = GetUserId();
-        Guid targetShopId;
-
-        if (shopId.HasValue && shopId.Value != Guid.Empty)
+        var userShop = await _db.Shops.FirstOrDefaultAsync(s => s.UserId == userId);
+        if (userShop == null)
         {
-            targetShopId = shopId.Value;
-        }
-        else
-        {
-            var shop = await _db.Shops.FirstOrDefaultAsync(s => s.UserId == userId);
-            if (shop == null)
-            {
-                return NotFound(ApiResponse.ErrorResponse("Shop not found for this user."));
-            }
-            targetShopId = shop.Id;
+            return NotFound(ApiResponse.ErrorResponse("Shop not found for this user."));
         }
 
-        var conversations = await _chatService.GetShopChatThreadsAsync(targetShopId);
+        if (shopId.HasValue && shopId.Value != Guid.Empty && shopId.Value != userShop.Id)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, ApiResponse.ErrorResponse("You can only access conversations for your own shop."));
+        }
+
+        var conversations = await _chatService.GetShopChatThreadsAsync(userShop.Id);
         return Ok(ApiResponse.SuccessResponse(conversations));
     }
 
@@ -128,10 +123,9 @@ public class ChatController : ControllerBase
 
         var messageDto = await _chatService.SendMessageAsync(targetUserId, targetShopId, dto.Content, dto.ImageUrl, senderId);
 
-        // Broadcast real-time message via SignalR
+        // Broadcast real-time message via SignalR room only
         string roomName = $"chat_{messageDto.ChatId}";
         await _hubContext.Clients.Group(roomName).SendAsync("ReceiveMessage", messageDto);
-        await _hubContext.Clients.All.SendAsync("ReceiveMessage", messageDto);
 
         return Ok(ApiResponse.SuccessResponse(messageDto, "Message sent successfully"));
     }

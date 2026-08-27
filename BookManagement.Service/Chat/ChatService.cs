@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -56,7 +56,7 @@ public class ChatService
         return chats.Select(c =>
         {
             var lastMsg = c.Messages.OrderByDescending(m => m.CreatedAt).FirstOrDefault();
-            int unread = c.Messages.Count(m => !m.IsRead && m.SenderId != c.User?.Id);
+            int unread = c.Messages.Count(m => !m.IsRead && m.SenderId == c.UserId);
 
             return new ChatThreadDto
             {
@@ -153,3 +153,4 @@ public class ChatService
         };
     }
 }
+

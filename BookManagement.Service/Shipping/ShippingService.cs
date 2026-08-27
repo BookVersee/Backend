@@ -1,4 +1,5 @@
-using System;
+﻿using System;
+using System.Linq;
 using System.Threading.Tasks;
 using BookManagement.Service.Dtos;
 using BookManagement.Repository.Data;
@@ -31,6 +32,12 @@ public class ShippingService
         if (order == null)
         {
             throw new KeyNotFoundException("Order not found.");
+        }
+
+        // Kiểm tra chống tạo trùng vận đơn GHN
+        if (await _db.Deliveries.AnyAsync(d => d.OrderId == order.Id))
+        {
+            throw new InvalidOperationException($"Delivery already exists for Order #{order.Id}.");
         }
 
         var shop = await _db.Shops.FirstOrDefaultAsync(s => s.Id == shopId);
@@ -66,6 +73,7 @@ public class ShippingService
 
         var delivery = await _db.Deliveries
             .Include(d => d.Order)
+                .ThenInclude(o => o.Payments)
             .FirstOrDefaultAsync(d => d.TrackingNumber == payload.OrderCode);
 
         if (delivery == null) return;
@@ -86,11 +94,36 @@ public class ShippingService
             case "delivered":
                 delivery.Status = DeliveryStatus.DELIVERED;
                 delivery.ActualDeliveredAt = payload.Time ?? DateTime.UtcNow;
-                if (order != null) order.OrderStatus = OrderStatus.DELIVERED;
+                if (order != null)
+                {
+                    order.OrderStatus = OrderStatus.COMPLETED;
+
+                    // Đồng bộ dòng tiền COD khi GHN báo giao thành công
+                    var codPayment = order.Payments.FirstOrDefault(p => p.Method == PaymentMethod.COD && p.Status == PaymentStatus.PENDING);
+                    if (codPayment != null)
+                    {
+                        codPayment.Status = PaymentStatus.SUCCESS;
+                        codPayment.UpdatedAt = DateTimeOffset.UtcNow;
+
+                        var codTransaction = new TransactionHistory
+                        {
+                            UserId = order.UserId,
+                            ReferenceType = ReferenceType.ORDER_PAYMENT,
+                            ReferenceId = order.Id,
+                            TransactionType = TransactionType.IN,
+                            Amount = codPayment.Amount,
+                            TransactionCode = $"GHN_{delivery.TrackingNumber}_{DateTime.UtcNow.Ticks.ToString().Substring(0, 6)}",
+                            Description = $"GHN COD Cash collection for Order #{order.Id}",
+                            CreatedAt = DateTimeOffset.UtcNow
+                        };
+
+                        _db.TransactionHistories.Add(codTransaction);
+                    }
+                }
                 break;
             case "return":
                 delivery.Status = DeliveryStatus.RETURNED;
-                if (order != null) order.OrderStatus = OrderStatus.APPROVED;
+                if (order != null) order.OrderStatus = OrderStatus.CANCELLED;
                 break;
         }
 
@@ -98,4 +131,3 @@ public class ShippingService
         await _db.SaveChangesAsync();
     }
 }
-

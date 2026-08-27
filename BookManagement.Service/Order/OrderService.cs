@@ -124,32 +124,25 @@ namespace BookManagement.Service.Order
                 OrderId = order.Id,
                 BookId = cbd.BookId,
                 Quantity = cbd.Quantity,
-                UnitPrice = cbd.Book.Price
+                UnitPrice = cbd.Book.Price,
+                ReturnStatus = ReturnStatus.NONE
             }).ToList();
 
+            // 2. Gán Payment.Status = PENDING ban đầu cho TẤT CẢ các phương thức thanh toán
             var payment = new BookManagement.Repository.Entities.Payment
             {
                 Id = Guid.NewGuid(),
                 OrderId = order.Id,
                 PaymentType = PaymentType.PAYMENT,
                 Method = request.PaymentMethod,
-                Status = request.PaymentMethod == PaymentMethod.COD ? PaymentStatus.PENDING : PaymentStatus.SUCCESS,
-                Amount = totalAmount
-            };
-
-            var delivery = new BookManagement.Repository.Entities.Delivery
-            {
-                Id = Guid.NewGuid(),
-                OrderId = order.Id,
-                CarrierName = "Giao Hàng Nhanh",
-                TrackingNumber = "GHN" + Random.Shared.Next(10000000, 99999999).ToString(),
-                Status = DeliveryStatus.PENDING
+                Status = PaymentStatus.PENDING,
+                Amount = totalAmount,
+                CreatedAt = DateTimeOffset.UtcNow
             };
 
             await _context.Orders.AddAsync(order);
             await _context.OrderDetails.AddRangeAsync(orderDetails);
             await _context.Payments.AddAsync(payment);
-            await _context.Deliveries.AddAsync(delivery);
 
             // Automated Notification for Buyer
             var buyerNotification = new BookManagement.Repository.Entities.Notification
@@ -208,7 +201,6 @@ namespace BookManagement.Service.Order
                 CreatedAt = DateTimeOffset.UtcNow
             };
             await _context.Notifications.AddAsync(notification);
-
             await _context.SaveChangesAsync();
         }
 

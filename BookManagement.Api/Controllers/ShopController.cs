@@ -43,7 +43,7 @@ public class ShopController : ControllerBase
     /// Test Case 1.2: Đăng bán sách mới
     /// </summary>
     [HttpPost("CreateShopBook")]
-    [Authorize(Roles = "SHOP,ADMIN")]
+    [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> CreateBook([FromBody] CreateBookRequestDto dto)
     {
         var userId = GetUserId();
@@ -56,7 +56,7 @@ public class ShopController : ControllerBase
     /// Test Case 1.3: Lấy danh sách kho sách & Lọc sản phẩm
     /// </summary>
     [HttpGet("GetShopInventory")]
-    [Authorize(Roles = "SHOP,ADMIN")]
+    [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> GetShopInventory(
         [FromQuery] string? searchTerm,
         [FromQuery] string? keyword,
@@ -83,7 +83,7 @@ public class ShopController : ControllerBase
     /// Test Case 1.4: Cập nhật thông tin & Giá sách
     /// </summary>
     [HttpPost("UpdateShopBook")]
-    [Authorize(Roles = "SHOP,ADMIN")]
+    [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> UpdateShopBook(
         [FromQuery] Guid bookId,
         [FromBody] UpdateBookRequestDto dto)
@@ -102,7 +102,7 @@ public class ShopController : ControllerBase
     /// Test Case 1.5: Ẩn sách khỏi gian hàng
     /// </summary>
     [HttpPost("DeleteShopBook")]
-    [Authorize(Roles = "SHOP,ADMIN")]
+    [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> DeleteShopBook([FromQuery] Guid bookId)
     {
         if (bookId == Guid.Empty)
@@ -119,7 +119,7 @@ public class ShopController : ControllerBase
     /// Test Case 3.1: Xem chi tiết đơn hàng của Shop
     /// </summary>
     [HttpGet("GetShopOrderDetail")]
-    [Authorize(Roles = "SHOP,ADMIN")]
+    [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> GetShopOrderDetail([FromQuery] Guid orderId)
     {
         if (orderId == Guid.Empty)
@@ -136,7 +136,7 @@ public class ShopController : ControllerBase
     /// Test Case 3.2: Cập nhật trạng thái đơn hàng
     /// </summary>
     [HttpPost("UpdateOrderStatus")]
-    [Authorize(Roles = "SHOP,ADMIN")]
+    [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> UpdateOrderStatus(
         [FromQuery] Guid orderId,
         [FromBody] UpdateOrderStatusDto dto)
@@ -155,7 +155,7 @@ public class ShopController : ControllerBase
     /// Test Case 3.3: Thống kê doanh thu Shop
     /// </summary>
     [HttpGet("GetRevenueStatistics")]
-    [Authorize(Roles = "SHOP,ADMIN")]
+    [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> GetRevenueStatistics(
         [FromQuery] DateTime? fromDate,
         [FromQuery] DateTime? toDate,
@@ -171,7 +171,7 @@ public class ShopController : ControllerBase
     /// Test Case 3.4: Xem & Trả lời đánh giá của khách
     /// </summary>
     [HttpGet("GetShopFeedbacks")]
-    [Authorize(Roles = "SHOP,ADMIN")]
+    [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> GetShopFeedbacks(
         [FromQuery] int? rating,
         [FromQuery] bool? hasResponse,
@@ -185,7 +185,7 @@ public class ShopController : ControllerBase
     }
 
     [HttpPost("ReplyFeedback")]
-    [Authorize(Roles = "SHOP,ADMIN")]
+    [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> ReplyFeedback(
         [FromQuery] Guid feedbackId,
         [FromBody] FeedbackResponseRequestDto dto)
@@ -204,7 +204,7 @@ public class ShopController : ControllerBase
     /// Test Case 3.5: Xử lý yêu cầu hoàn trả hàng
     /// </summary>
     [HttpPost("ProcessReturnRequest")]
-    [Authorize(Roles = "SHOP,ADMIN")]
+    [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> ProcessReturnRequest(
         [FromQuery] Guid returnRequestId,
         [FromBody] ProcessReturnRequestDto dto)

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -398,7 +398,7 @@ public class ShopService
     {
         var query = _db.OrderDetails
             .Include(od => od.Order)
-            .Where(od => od.Book.ShopId == shopId && od.Order.OrderStatus == OrderStatus.DELIVERED);
+            .Where(od => od.Book.ShopId == shopId && (od.Order.OrderStatus == OrderStatus.DELIVERED || od.Order.OrderStatus == OrderStatus.COMPLETED));
 
         if (fromDate.HasValue)
         {
@@ -586,4 +586,6 @@ public class ShopService
         await _db.SaveChangesAsync();
     }
 }
+
+
 

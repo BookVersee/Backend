@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using BookManagement.Service.Dtos;
@@ -29,17 +29,31 @@ public class PaymentService
             throw new KeyNotFoundException("Order not found.");
         }
 
-        var payment = new PaymentEntity
-        {
-            OrderId = dto.OrderId,
-            PaymentType = PaymentType.PAYMENT,
-            Method = PaymentMethod.ONLINE,
-            Amount = order.TotalAmount,
-            Status = PaymentStatus.PENDING,
-            CreatedAt = DateTimeOffset.UtcNow
-        };
+        // 1. Tái sử dụng bản ghi Payment ONLINE PENDING đã tồn tại (Tránh tạo bản ghi trùng lặp)
+        var existingPayment = await _db.Payments
+            .FirstOrDefaultAsync(p => p.OrderId == dto.OrderId && p.Method == PaymentMethod.ONLINE && p.Status == PaymentStatus.PENDING);
 
-        _db.Payments.Add(payment);
+        PaymentEntity payment;
+        if (existingPayment != null)
+        {
+            payment = existingPayment;
+            payment.Amount = order.TotalAmount;
+            payment.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+        else
+        {
+            payment = new PaymentEntity
+            {
+                OrderId = dto.OrderId,
+                PaymentType = PaymentType.PAYMENT,
+                Method = PaymentMethod.ONLINE,
+                Amount = order.TotalAmount,
+                Status = PaymentStatus.PENDING,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            _db.Payments.Add(payment);
+        }
+
         await _db.SaveChangesAsync();
 
         var paymentUrl = _vnpayService.CreatePaymentUrl(payment.Id, payment.Amount, ipAddress, dto.BankCode);
@@ -80,6 +94,12 @@ public class PaymentService
             amount = rawAmount / 100m;
         }
 
+        // 5. Kiểm tra đối soát số tiền khớp chuẩn VNPAY
+        if (amount > 0 && payment.Amount > 0 && Math.Abs(amount - payment.Amount) > 0.01m)
+        {
+            return ("04", "Invalid Amount");
+        }
+
         if (responseCode == "00")
         {
             payment.Status = PaymentStatus.SUCCESS;
@@ -98,7 +118,7 @@ public class PaymentService
                     ReferenceId = order.Id,
                     TransactionType = TransactionType.IN,
                     Amount = amount > 0 ? amount : payment.Amount,
-                    TransactionCode = queryParams.TryGetValue("vnp_TransactionNo", out var tNo) ? tNo : Guid.NewGuid().ToString("N")[..10],
+                    TransactionCode = queryParams.TryGetValue("vnp_TransactionNo", out var tNo) ? tNo : Guid.NewGuid().ToString("N").Substring(0, 10),
                     Description = $"VNPAY Payment for Order #{order.Id}",
                     CreatedAt = DateTimeOffset.UtcNow
                 };
@@ -182,7 +202,7 @@ public class PaymentService
                 ReferenceId = returnReq?.Id ?? order.Id,
                 TransactionType = TransactionType.OUT,
                 Amount = refundAmount,
-                TransactionCode = dto.TransactionNo ?? ("REF" + Guid.NewGuid().ToString("N")[..10]),
+                TransactionCode = dto.TransactionNo ?? ("REF" + Guid.NewGuid().ToString("N").Substring(0, 10)),
                 Description = dto.RefundReason ?? $"Refund for Order #{dto.OrderId}",
                 CreatedAt = DateTimeOffset.UtcNow
             };
@@ -196,4 +216,3 @@ public class PaymentService
         }
     }
 }
-

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
@@ -54,23 +54,19 @@ public class ChatController : ControllerBase
     public async Task<IActionResult> GetShopConversations([FromQuery] Guid? shopId)
     {
         var userId = GetUserId();
-        Guid targetShopId;
-
-        if (shopId.HasValue && shopId.Value != Guid.Empty)
+        var shop = await _db.Shops.FirstOrDefaultAsync(s => s.UserId == userId);
+        if (shop == null)
         {
-            targetShopId = shopId.Value;
-        }
-        else
-        {
-            var shop = await _db.Shops.FirstOrDefaultAsync(s => s.UserId == userId);
-            if (shop == null)
-            {
-                return NotFound(ApiResponse.ErrorResponse("Shop not found for this user."));
-            }
-            targetShopId = shop.Id;
+            return NotFound(ApiResponse.ErrorResponse("Shop not found for this user."));
         }
 
-        var conversations = await _chatService.GetShopChatThreadsAsync(targetShopId);
+        // Xác minh shopId truyền vào phải thuộc về Shop do userId sở hữu
+        if (shopId.HasValue && shopId.Value != Guid.Empty && shopId.Value != shop.Id)
+        {
+            return StatusCode(403, ApiResponse.ErrorResponse("Forbidden: You do not own this shop."));
+        }
+
+        var conversations = await _chatService.GetShopChatThreadsAsync(shop.Id);
         return Ok(ApiResponse.SuccessResponse(conversations));
     }
 
@@ -86,7 +82,7 @@ public class ChatController : ControllerBase
     }
 
     /// <summary>
-    /// Test Case 2.4: Gửi tin nhắn mới & Broadcast Real-Time
+    /// Test Case 2.4: Gửi tin nhắn mới & Broadcast Real-Time trong Group phòng chat
     /// </summary>
     [HttpPost("SendMessage")]
     public async Task<IActionResult> SendMessage([FromBody] SendMessageDto dto)
@@ -97,12 +93,23 @@ public class ChatController : ControllerBase
 
         if (dto.ChatId.HasValue && dto.ChatId.Value != Guid.Empty)
         {
-            var chat = await _db.Chats.FirstOrDefaultAsync(c => c.Id == dto.ChatId.Value);
-            if (chat != null)
+            var chat = await _db.Chats
+                .Include(c => c.Shop)
+                .FirstOrDefaultAsync(c => c.Id == dto.ChatId.Value);
+
+            if (chat == null)
             {
-                targetUserId = chat.UserId;
-                targetShopId = chat.ShopId;
+                return NotFound(ApiResponse.ErrorResponse("Chat not found."));
             }
+
+            // Xác minh người gửi thuộc cuộc trò chuyện
+            if (chat.UserId != senderId && (chat.Shop == null || chat.Shop.UserId != senderId))
+            {
+                return StatusCode(403, ApiResponse.ErrorResponse("Forbidden: You do not belong to this conversation."));
+            }
+
+            targetUserId = chat.UserId;
+            targetShopId = chat.ShopId;
         }
         else if (dto.ShopId.HasValue && dto.ShopId.Value != Guid.Empty)
         {
@@ -128,10 +135,9 @@ public class ChatController : ControllerBase
 
         var messageDto = await _chatService.SendMessageAsync(targetUserId, targetShopId, dto.Content, dto.ImageUrl, senderId);
 
-        // Broadcast real-time message via SignalR
+        // Broadcast real-time CHỈ trong group phòng chat cụ thể (loại bỏ broadcast toàn hệ thống Clients.All)
         string roomName = $"chat_{messageDto.ChatId}";
         await _hubContext.Clients.Group(roomName).SendAsync("ReceiveMessage", messageDto);
-        await _hubContext.Clients.All.SendAsync("ReceiveMessage", messageDto);
 
         return Ok(ApiResponse.SuccessResponse(messageDto, "Message sent successfully"));
     }

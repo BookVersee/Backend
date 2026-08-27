@@ -73,10 +73,20 @@ public class ChatService
 
     public async Task<List<MessageDto>> GetChatMessagesAsync(Guid chatId, Guid requesterId)
     {
-        var chat = await _db.Chats.FirstOrDefaultAsync(c => c.Id == chatId);
+        var chat = await _db.Chats
+            .Include(c => c.Shop)
+            .FirstOrDefaultAsync(c => c.Id == chatId);
+
         if (chat == null)
         {
             throw new KeyNotFoundException("Chat thread not found.");
+        }
+
+        // Bắt buộc requesterId phải là Khách hàng (UserId) hoặc Chủ Shop (Shop.UserId) của phòng chat
+        bool isParticipant = chat.UserId == requesterId || (chat.Shop != null && chat.Shop.UserId == requesterId);
+        if (!isParticipant)
+        {
+            throw new UnauthorizedAccessException("Unauthorized: You are not a participant of this chat thread.");
         }
 
         var messages = await _db.Messages
@@ -113,6 +123,18 @@ public class ChatService
 
     public async Task<MessageDto> SendMessageAsync(Guid userId, Guid shopId, string content, string? imageUrl, Guid senderId)
     {
+        var shop = await _db.Shops.FirstOrDefaultAsync(s => s.Id == shopId);
+        if (shop == null)
+        {
+            throw new KeyNotFoundException("Shop not found.");
+        }
+
+        // Xác minh senderId thuộc về cuộc trò chuyện
+        if (senderId != userId && senderId != shop.UserId)
+        {
+            throw new UnauthorizedAccessException("Unauthorized: Sender does not belong to this conversation.");
+        }
+
         var chat = await _db.Chats.FirstOrDefaultAsync(c => c.UserId == userId && c.ShopId == shopId);
         if (chat == null)
         {
@@ -153,4 +175,3 @@ public class ChatService
         };
     }
 }
-

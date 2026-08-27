@@ -34,7 +34,14 @@ public class ShippingService
             throw new KeyNotFoundException("Order not found.");
         }
 
-        // Kiểm tra chống tạo trùng vận đơn GHN
+        // 1. Kiểm tra dto.OrderId có chứa sản phẩm thuộc shopId của người gọi API
+        var hasShopProduct = order.OrderDetails.Any(od => od.Book != null && od.Book.ShopId == shopId);
+        if (!hasShopProduct)
+        {
+            throw new UnauthorizedAccessException("Unauthorized: Order does not contain products belonging to this shop.");
+        }
+
+        // 2. Kiểm tra chống tạo trùng vận đơn GHN
         if (await _db.Deliveries.AnyAsync(d => d.OrderId == order.Id))
         {
             throw new InvalidOperationException($"Delivery already exists for Order #{order.Id}.");
@@ -72,6 +79,9 @@ public class ShippingService
         if (string.IsNullOrEmpty(payload.OrderCode)) return;
 
         var delivery = await _db.Deliveries
+            .Include(d => d.Order)
+                .ThenInclude(o => o.OrderDetails)
+                    .ThenInclude(od => od.Book)
             .Include(d => d.Order)
                 .ThenInclude(o => o.Payments)
             .FirstOrDefaultAsync(d => d.TrackingNumber == payload.OrderCode);
@@ -123,7 +133,26 @@ public class ShippingService
                 break;
             case "return":
                 delivery.Status = DeliveryStatus.RETURNED;
-                if (order != null) order.OrderStatus = OrderStatus.CANCELLED;
+                if (order != null)
+                {
+                    // Khi Webhook trả về trạng thái "return", cập nhật order.OrderStatus = CANCELLED và cộng trả lại tồn kho sách
+                    if (order.OrderStatus != OrderStatus.CANCELLED)
+                    {
+                        order.OrderStatus = OrderStatus.CANCELLED;
+
+                        foreach (var od in order.OrderDetails)
+                        {
+                            if (od.Book != null)
+                            {
+                                od.Book.StockQuantity += od.Quantity;
+                                if (od.Book.Status == BookStatus.EMPTY && od.Book.StockQuantity > 0)
+                                {
+                                    od.Book.Status = BookStatus.ACTIVE;
+                                }
+                            }
+                        }
+                    }
+                }
                 break;
         }
 

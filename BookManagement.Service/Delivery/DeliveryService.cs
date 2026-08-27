@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -25,6 +25,12 @@ public class DeliveryService
         if (order == null)
         {
             throw new KeyNotFoundException("Order not found.");
+        }
+
+        // 4. KIỂM TRA CHỐNG TẠO VẬN ĐƠN TRÙNG LẶP (DUPLICATE DELIVERY)
+        if (await _db.Deliveries.AnyAsync(d => d.OrderId == dto.OrderId))
+        {
+            throw new InvalidOperationException($"Delivery record already exists for Order #{dto.OrderId}.");
         }
 
         var delivery = new BookManagement.Repository.Entities.Delivery
@@ -125,13 +131,28 @@ public class DeliveryService
             if (targetStatus == DeliveryStatus.DELIVERED)
             {
                 delivery.ActualDeliveredAt = DateTime.UtcNow;
-                order.OrderStatus = OrderStatus.DELIVERED;
+                order.OrderStatus = OrderStatus.COMPLETED; // Cập nhật đơn hàng thành COMPLETED khi giao thành công
 
+                // 3. DÒNG TIỀN COD TỰ ĐỘNG THU TIỀN MẶT & GHI TRANSACTION HISTORY
                 var codPayment = order.Payments.FirstOrDefault(p => p.Method == PaymentMethod.COD && p.Status == PaymentStatus.PENDING);
                 if (codPayment != null)
                 {
                     codPayment.Status = PaymentStatus.SUCCESS;
                     codPayment.UpdatedAt = DateTimeOffset.UtcNow;
+
+                    var codTransaction = new TransactionHistory
+                    {
+                        UserId = order.UserId,
+                        ReferenceType = ReferenceType.ORDER_PAYMENT,
+                        ReferenceId = order.Id,
+                        TransactionType = TransactionType.IN,
+                        Amount = codPayment.Amount,
+                        TransactionCode = $"COD_{delivery.TrackingNumber}_{DateTime.UtcNow.Ticks.ToString().Substring(0, 6)}",
+                        Description = $"COD Cash collection for Order #{order.Id}",
+                        CreatedAt = DateTimeOffset.UtcNow
+                    };
+
+                    _db.TransactionHistories.Add(codTransaction);
                 }
             }
             else if (targetStatus == DeliveryStatus.RETURNED)

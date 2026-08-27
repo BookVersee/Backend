@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -60,6 +60,23 @@ namespace BookManagement.Service.Order
                 throw new InvalidOperationException("Giỏ hàng của bạn đang trống. Vui lòng thêm sản phẩm trước khi thanh toán.");
             }
 
+            // 1. Kiểm tra & trừ tồn kho chính xác cho từng mặt hàng
+            foreach (var cbd in cart.CartBookDetails)
+            {
+                if (cbd.Book != null)
+                {
+                    if (cbd.Book.StockQuantity < cbd.Quantity)
+                    {
+                        throw new InvalidOperationException($"Sản phẩm '{cbd.Book.Title}' không đủ số lượng tồn kho (còn {cbd.Book.StockQuantity}).");
+                    }
+                    cbd.Book.StockQuantity -= cbd.Quantity;
+                    if (cbd.Book.StockQuantity == 0)
+                    {
+                        cbd.Book.Status = BookStatus.EMPTY;
+                    }
+                }
+            }
+
             var totalAmount = cart.CartBookDetails.Sum(cbd => cbd.Quantity * cbd.UnitPrice);
 
             var order = new BookManagement.Repository.Entities.Order
@@ -78,34 +95,27 @@ namespace BookManagement.Service.Order
                 OrderId = order.Id,
                 BookId = cbd.BookId,
                 Quantity = cbd.Quantity,
-                UnitPrice = cbd.UnitPrice
+                UnitPrice = cbd.UnitPrice,
+                ReturnStatus = ReturnStatus.NONE
             }).ToList();
 
+            // 2. Gán Payment.Status = PENDING ban đầu cho TẤT CẢ các phương thức thanh toán
             var payment = new BookManagement.Repository.Entities.Payment
             {
                 Id = Guid.NewGuid(),
                 OrderId = order.Id,
                 PaymentType = PaymentType.PAYMENT,
                 Method = request.PaymentMethod,
-                Status = request.PaymentMethod == PaymentMethod.COD ? PaymentStatus.PENDING : PaymentStatus.SUCCESS,
-                Amount = totalAmount
-            };
-
-            var delivery = new BookManagement.Repository.Entities.Delivery
-            {
-                Id = Guid.NewGuid(),
-                OrderId = order.Id,
-                CarrierName = "Giao Hàng Nhanh",
-                TrackingNumber = "GHN" + Random.Shared.Next(10000000, 99999999).ToString(),
-                Status = DeliveryStatus.PENDING
+                Status = PaymentStatus.PENDING,
+                Amount = totalAmount,
+                CreatedAt = DateTimeOffset.UtcNow
             };
 
             await _context.Orders.AddAsync(order);
             await _context.OrderDetails.AddRangeAsync(orderDetails);
             await _context.Payments.AddAsync(payment);
-            await _context.Deliveries.AddAsync(delivery);
 
-            // Clear items from cart after checkout
+            // Xóa các sản phẩm trong giỏ hàng sau khi đặt thành công
             _context.CartBookDetails.RemoveRange(cart.CartBookDetails);
             await _context.SaveChangesAsync();
 
@@ -115,11 +125,30 @@ namespace BookManagement.Service.Order
 
         public async Task CancelOrderAsync(Guid userId, Guid orderId)
         {
-            var order = await _orderRepository.GetByIdAsync(orderId);
+            var order = await _context.Orders
+                .Include(o => o.OrderDetails)
+                    .ThenInclude(od => od.Book)
+                .FirstOrDefaultAsync(o => o.Id == orderId);
+
             if (order == null || order.UserId != userId) throw new KeyNotFoundException("Order not found.");
             if (order.OrderStatus != OrderStatus.PENDING) throw new InvalidOperationException("Only PENDING orders can be cancelled.");
+
+            // 3. Tự động hoàn lại số lượng tồn kho khi hủy đơn
+            foreach (var od in order.OrderDetails)
+            {
+                if (od.Book != null)
+                {
+                    od.Book.StockQuantity += od.Quantity;
+                    if (od.Book.Status == BookStatus.EMPTY && od.Book.StockQuantity > 0)
+                    {
+                        od.Book.Status = BookStatus.ACTIVE;
+                    }
+                }
+            }
+
             order.OrderStatus = OrderStatus.CANCELLED;
-            await _orderRepository.UpdateOrderAsync(order);
+            order.UpdatedAt = DateTimeOffset.UtcNow;
+            await _context.SaveChangesAsync();
         }
 
         public async Task<ReturnRequestResponse> CreateReturnRequestAsync(Guid userId, Guid orderDetailId, CreateReturnRequest input)

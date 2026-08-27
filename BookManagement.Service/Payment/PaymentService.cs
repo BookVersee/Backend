@@ -94,6 +94,12 @@ public class PaymentService
             amount = rawAmount / 100m;
         }
 
+        // 5. Kiểm tra đối soát số tiền khớp chuẩn VNPAY
+        if (amount > 0 && payment.Amount > 0 && Math.Abs(amount - payment.Amount) > 0.01m)
+        {
+            return ("04", "Invalid Amount");
+        }
+
         if (responseCode == "00")
         {
             payment.Status = PaymentStatus.SUCCESS;

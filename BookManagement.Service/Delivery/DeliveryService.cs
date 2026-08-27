@@ -19,15 +19,29 @@ public class DeliveryService
         _db = db;
     }
 
-    public async Task<BookManagement.Repository.Entities.Delivery> CreateDeliveryAsync(CreateDeliveryDto dto)
+    public async Task<BookManagement.Repository.Entities.Delivery> CreateDeliveryAsync(CreateDeliveryDto dto, Guid? callerShopId = null)
     {
-        var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == dto.OrderId);
+        var order = await _db.Orders
+            .Include(o => o.OrderDetails)
+                .ThenInclude(od => od.Book)
+            .FirstOrDefaultAsync(o => o.Id == dto.OrderId);
+
         if (order == null)
         {
             throw new KeyNotFoundException("Order not found.");
         }
 
-        // 4. KIỂM TRA CHỐNG TẠO VẬN ĐƠN TRÙNG LẶP (DUPLICATE DELIVERY)
+        // 1. Nếu người gọi là Shop, xác minh đơn hàng có chứa sản phẩm thuộc về Shop đó
+        if (callerShopId.HasValue && callerShopId.Value != Guid.Empty)
+        {
+            bool hasShopProduct = order.OrderDetails.Any(od => od.Book != null && od.Book.ShopId == callerShopId.Value);
+            if (!hasShopProduct)
+            {
+                throw new UnauthorizedAccessException("Unauthorized: Order does not contain products from your shop.");
+            }
+        }
+
+        // 2. Kiểm tra chống tạo vận đơn trùng lặp (Duplicate Delivery)
         if (await _db.Deliveries.AnyAsync(d => d.OrderId == dto.OrderId))
         {
             throw new InvalidOperationException($"Delivery record already exists for Order #{dto.OrderId}.");
@@ -109,6 +123,9 @@ public class DeliveryService
     {
         var delivery = await _db.Deliveries
             .Include(d => d.Order)
+                .ThenInclude(o => o.OrderDetails)
+                    .ThenInclude(od => od.Book)
+            .Include(d => d.Order)
                 .ThenInclude(o => o.Payments)
             .FirstOrDefaultAsync(d => d.Id == deliveryId);
 
@@ -133,7 +150,7 @@ public class DeliveryService
                 delivery.ActualDeliveredAt = DateTime.UtcNow;
                 order.OrderStatus = OrderStatus.COMPLETED; // Cập nhật đơn hàng thành COMPLETED khi giao thành công
 
-                // 3. DÒNG TIỀN COD TỰ ĐỘNG THU TIỀN MẶT & GHI TRANSACTION HISTORY
+                // Dòng tiền COD tự động thu tiền mặt & ghi TransactionHistory
                 var codPayment = order.Payments.FirstOrDefault(p => p.Method == PaymentMethod.COD && p.Status == PaymentStatus.PENDING);
                 if (codPayment != null)
                 {
@@ -157,7 +174,23 @@ public class DeliveryService
             }
             else if (targetStatus == DeliveryStatus.RETURNED)
             {
-                order.OrderStatus = OrderStatus.CANCELLED;
+                // Khi trạng thái chuyển thành RETURNED (hoàn hàng): kiểm tra nếu đơn hàng chưa từng bị hủy thì hoàn lại tồn kho
+                if (order.OrderStatus != OrderStatus.CANCELLED)
+                {
+                    order.OrderStatus = OrderStatus.CANCELLED;
+
+                    foreach (var od in order.OrderDetails)
+                    {
+                        if (od.Book != null)
+                        {
+                            od.Book.StockQuantity += od.Quantity;
+                            if (od.Book.Status == BookStatus.EMPTY && od.Book.StockQuantity > 0)
+                            {
+                                od.Book.Status = BookStatus.ACTIVE;
+                            }
+                        }
+                    }
+                }
             }
             else if (targetStatus == DeliveryStatus.TRANSIT)
             {

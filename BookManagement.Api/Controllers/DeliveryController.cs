@@ -1,10 +1,13 @@
-using System;
+﻿using System;
+using System.Security.Claims;
 using System.Threading.Tasks;
+using BookManagement.Repository.Data;
 using BookManagement.Service.Delivery;
 using BookManagement.Service.Dtos;
 using BookManagement.Service.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace BookManagement.Api.Controllers;
 
@@ -13,10 +16,12 @@ namespace BookManagement.Api.Controllers;
 public class DeliveryController : ControllerBase
 {
     private readonly DeliveryService _deliveryService;
+    private readonly AppDbContext _db;
 
-    public DeliveryController(DeliveryService deliveryService)
+    public DeliveryController(DeliveryService deliveryService, AppDbContext db)
     {
         _deliveryService = deliveryService;
+        _db = db;
     }
 
     /// <summary>
@@ -26,7 +31,18 @@ public class DeliveryController : ControllerBase
     [Authorize(Roles = "SHOP,ADMIN,DELIVER,SHIPPER")]
     public async Task<IActionResult> CreateDelivery([FromBody] CreateDeliveryDto dto)
     {
-        var result = await _deliveryService.CreateDeliveryAsync(dto);
+        Guid? shopId = null;
+        if (User.IsInRole("SHOP"))
+        {
+            var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+            if (Guid.TryParse(userIdStr, out var userId))
+            {
+                var shop = await _db.Shops.FirstOrDefaultAsync(s => s.UserId == userId);
+                if (shop != null) shopId = shop.Id;
+            }
+        }
+
+        var result = await _deliveryService.CreateDeliveryAsync(dto, shopId);
         return Ok(ApiResponse.SuccessResponse(result, "Delivery created successfully"));
     }
 

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using BookManagement.Service.Dtos;
 using BookManagement.Repository.Data;
@@ -94,7 +95,7 @@ public class PaymentService
             amount = rawAmount / 100m;
         }
 
-        // 5. Kiểm tra đối soát số tiền khớp chuẩn VNPAY
+        // Kiểm tra đối soát số tiền thanh toán (Anti-tampering Amount check)
         if (amount > 0 && payment.Amount > 0 && Math.Abs(amount - payment.Amount) > 0.01m)
         {
             return ("04", "Invalid Amount");
@@ -138,6 +139,24 @@ public class PaymentService
 
     public async Task ProcessVnpayRefundAsync(Guid shopId, VnpayRefundDto dto)
     {
+        // 1. Xác thực đơn hàng tồn tại
+        var order = await _db.Orders
+            .Include(o => o.OrderDetails)
+                .ThenInclude(od => od.Book)
+            .FirstOrDefaultAsync(o => o.Id == dto.OrderId);
+
+        if (order == null)
+        {
+            throw new KeyNotFoundException("Order not found.");
+        }
+
+        // Xác thực đơn hàng có chứa sản phẩm thuộc sở hữu của shopId gọi API
+        var shopItems = order.OrderDetails.Where(od => od.Book != null && od.Book.ShopId == shopId).ToList();
+        if (!shopItems.Any())
+        {
+            throw new UnauthorizedAccessException("Unauthorized: Order does not contain products belonging to this shop.");
+        }
+
         ReturnRequest? returnReq = null;
 
         if (dto.ReturnRequestId.HasValue && dto.ReturnRequestId.Value != Guid.Empty)
@@ -148,6 +167,17 @@ public class PaymentService
                 .Include(r => r.OrderDetail)
                     .ThenInclude(od => od.Order)
                 .FirstOrDefaultAsync(r => r.Id == dto.ReturnRequestId.Value && r.OrderDetail.OrderId == dto.OrderId);
+
+            if (returnReq == null)
+            {
+                throw new KeyNotFoundException("Return request not found for this order.");
+            }
+
+            // Xác thực yêu cầu trả hàng thuộc sản phẩm của shopId
+            if (returnReq.OrderDetail?.Book?.ShopId != shopId)
+            {
+                throw new UnauthorizedAccessException("Unauthorized: Return request does not belong to this shop.");
+            }
         }
         else
         {
@@ -156,17 +186,7 @@ public class PaymentService
                     .ThenInclude(od => od.Book)
                 .Include(r => r.OrderDetail)
                     .ThenInclude(od => od.Order)
-                .FirstOrDefaultAsync(r => r.OrderDetail.OrderId == dto.OrderId);
-        }
-
-        var order = await _db.Orders
-            .Include(o => o.OrderDetails)
-                .ThenInclude(od => od.Book)
-            .FirstOrDefaultAsync(o => o.Id == dto.OrderId);
-
-        if (order == null)
-        {
-            throw new KeyNotFoundException("Order not found.");
+                .FirstOrDefaultAsync(r => r.OrderDetail.OrderId == dto.OrderId && r.OrderDetail.Book.ShopId == shopId);
         }
 
         decimal refundAmount = dto.Amount ?? returnReq?.RefundAmount ?? order.TotalAmount;

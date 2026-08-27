@@ -8,6 +8,7 @@ using BookManagement.Repository.Entities;
 using ShopEntity = BookManagement.Repository.Entities.Shop;
 using BookManagement.Repository.Entities.Enums;
 using BookEntity = BookManagement.Repository.Entities.Book;
+using NotificationEntity = BookManagement.Repository.Entities.Notification;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookManagement.Service.Shop;
@@ -29,11 +30,12 @@ public class ShopService
             throw new InvalidOperationException("User already registered a shop.");
         }
 
+        // 1. Tạo Shop ở trạng thái PENDING chờ Admin duyệt
         var shop = new ShopEntity
         {
             UserId = userId,
             ShopName = dto.ShopName,
-            Condition = ShopCondition.OPEN,
+            Condition = ShopCondition.PENDING,
             Rating = 5.0f,
             CreatedAt = DateTimeOffset.UtcNow
         };
@@ -46,6 +48,21 @@ public class ShopService
             user.Address = dto.Address ?? user.Address;
             user.QrImageUrl = dto.QrImageUrl ?? user.QrImageUrl;
             user.Role = UserRole.SHOP;
+        }
+
+        // 2. Gửi thông báo đến Admin
+        var adminUsers = await _db.Users.Where(u => u.Role == UserRole.ADMIN).ToListAsync();
+        foreach (var admin in adminUsers)
+        {
+            _db.Notifications.Add(new NotificationEntity
+            {
+                UserId = admin.Id,
+                Type = NotificationType.SYSTEM,
+                ReferenceId = shop.Id,
+                Content = $"Gian hàng '{shop.ShopName}' vừa đăng ký và đang chờ Admin phê duyệt.",
+                IsRead = false,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
         }
 
         await _db.SaveChangesAsync();
@@ -361,6 +378,40 @@ public class ShopService
             throw new ArgumentException($"Invalid order status: {rawStatus}");
         }
 
+        // 1. Kiểm tra tính hợp lệ của luồng chuyển trạng thái đơn hàng
+        if (order.OrderStatus == OrderStatus.CANCELLED)
+        {
+            throw new InvalidOperationException("Cannot update status of an already cancelled order.");
+        }
+        if (order.OrderStatus == OrderStatus.COMPLETED && targetStatus != OrderStatus.COMPLETED)
+        {
+            throw new InvalidOperationException("Cannot update status of an already completed order.");
+        }
+
+        bool isValidTransition = (order.OrderStatus, targetStatus) switch
+        {
+            (OrderStatus.PENDING, OrderStatus.PROCESSING) => true,
+            (OrderStatus.PENDING, OrderStatus.CANCELLED) => true,
+            (OrderStatus.PAID, OrderStatus.PROCESSING) => true,
+            (OrderStatus.PAID, OrderStatus.CANCELLED) => true,
+            (OrderStatus.PROCESSING, OrderStatus.SHIPPING) => true,
+            (OrderStatus.PROCESSING, OrderStatus.CANCELLED) => true,
+            (OrderStatus.SHIPPING, OrderStatus.DELIVERING) => true,
+            (OrderStatus.SHIPPING, OrderStatus.CANCELLED) => true,
+            (OrderStatus.DELIVERING, OrderStatus.DELIVERED) => true,
+            (OrderStatus.DELIVERING, OrderStatus.COMPLETED) => true,
+            (OrderStatus.DELIVERING, OrderStatus.FAILED) => true,
+            (OrderStatus.DELIVERING, OrderStatus.CANCELLED) => true,
+            (OrderStatus.DELIVERED, OrderStatus.COMPLETED) => true,
+            (OrderStatus.DELIVERED, OrderStatus.APPROVED) => true,
+            _ => order.OrderStatus == targetStatus
+        };
+
+        if (!isValidTransition && targetStatus != OrderStatus.CANCELLED)
+        {
+            throw new InvalidOperationException($"Invalid order status transition from {order.OrderStatus} to {targetStatus}.");
+        }
+
         if (dto.Weight.HasValue && dto.Weight.Value > 0)
         {
             order.Weight = dto.Weight.Value;
@@ -371,7 +422,8 @@ public class ShopService
             order.Note = dto.Note;
         }
 
-        if (targetStatus == OrderStatus.CANCELLED)
+        // 2. Tránh cộng kho 2 lần: Chỉ cộng tồn kho khi đơn chưa bị CANCELLED trước đó
+        if (targetStatus == OrderStatus.CANCELLED && order.OrderStatus != OrderStatus.CANCELLED)
         {
             foreach (var item in order.OrderDetails)
             {
@@ -448,9 +500,13 @@ public class ShopService
 
     public async Task<PagedResultDto<FeedbackDto>> GetShopFeedbacksAsync(Guid shopId, int? rating, bool? hasResponse, int pageIndex, int pageSize)
     {
-        var q = _db.Feedbacks.Where(f => f.ShopId == shopId);
+        var q = _db.Feedbacks
+            .Include(f => f.OrderDetail)
+                .ThenInclude(od => od.Book)
+            .Include(f => f.Response)
+            .Where(f => f.ShopId == shopId);
 
-        if (rating.HasValue)
+        if (rating.HasValue && rating.Value > 0)
         {
             q = q.Where(f => f.Rating == rating.Value);
         }
@@ -511,7 +567,7 @@ public class ShopService
             throw new InvalidOperationException("Response already exists for this feedback.");
         }
 
-        var response = new Response
+        var response = new BookManagement.Repository.Entities.Response
         {
             FeedbackId = feedbackId,
             ShopId = shopId,
@@ -564,6 +620,3 @@ public class ShopService
         await _db.SaveChangesAsync();
     }
 }
-
-
-

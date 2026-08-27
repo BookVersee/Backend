@@ -144,3 +144,15 @@ public class TopSellingBooksResponse
     public int SoldCount { get; set; }
     public decimal TotalRevenue { get; set; }
 }
+
+public class ReportedResponseDto
+{
+    public Guid NotificationId { get; set; }
+    public Guid? ResponseId { get; set; }
+    public string CustomerUsername { get; set; } = null!;
+    public string? ShopName { get; set; }
+    public string? FeedbackContent { get; set; }
+    public string? ResponseContent { get; set; }
+    public string ReportReason { get; set; } = null!;
+    public DateTimeOffset CreatedAt { get; set; }
+}

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using BookManagement.Repository.Abstractions;
 using BookManagement.Repository.Entities;
+using BookManagement.Repository.Entities.Enums;
 
 namespace BookManagement.Service.Cart
 {
@@ -28,12 +29,30 @@ namespace BookManagement.Service.Cart
         {
             var cart = await _cartRepository.GetOrCreateCartAsync(userId);
             var book = await _bookRepository.GetByIdAsync(request.BookId);
-            if (book == null) throw new KeyNotFoundException("Book not found.");
+            if (book == null) throw new KeyNotFoundException("Sản phẩm sách không tồn tại.");
+
+            if (book.Status != BookStatus.ACTIVE)
+            {
+                throw new InvalidOperationException($"Sản phẩm '{book.Title}' hiện không còn mở bán.");
+            }
+
+            if (book.Shop != null && (book.Shop.Condition == ShopCondition.LOCKED || book.Shop.Condition == ShopCondition.CLOSED))
+            {
+                throw new InvalidOperationException($"Cửa hàng cung cấp cuốn sách '{book.Title}' hiện đang tạm đóng cửa hoặc bị khóa.");
+            }
 
             var existing = cart.CartBookDetails.FirstOrDefault(cbd => cbd.BookId == request.BookId);
+            int currentQtyInCart = existing?.Quantity ?? 0;
+            int totalTargetQty = currentQtyInCart + request.Quantity;
+
+            if (totalTargetQty > book.StockQuantity)
+            {
+                throw new InvalidOperationException($"Sản phẩm '{book.Title}' chỉ còn {book.StockQuantity} cuốn trong kho (bạn đang muốn mua tổng cộng {totalTargetQty} cuốn).");
+            }
+
             if (existing != null)
             {
-                existing.Quantity += request.Quantity;
+                existing.Quantity = totalTargetQty;
                 existing.UnitPrice = book.Price;
                 await _cartRepository.UpdateCartDetailAsync(existing);
             }
@@ -66,7 +85,22 @@ namespace BookManagement.Service.Cart
                 await _cartRepository.RemoveCartDetailAsync(cartDetailId);
             else
             {
+                var book = item.Book ?? await _bookRepository.GetByIdAsync(item.BookId);
+                if (book != null)
+                {
+                    if (book.Status != BookStatus.ACTIVE)
+                    {
+                        throw new InvalidOperationException($"Sản phẩm '{book.Title}' hiện không còn mở bán.");
+                    }
+
+                    if (request.Quantity > book.StockQuantity)
+                    {
+                        throw new InvalidOperationException($"Sản phẩm '{book.Title}' chỉ còn {book.StockQuantity} cuốn trong kho (bạn yêu cầu {request.Quantity} cuốn).");
+                    }
+                }
+
                 item.Quantity = request.Quantity;
+                if (book != null) item.UnitPrice = book.Price;
                 await _cartRepository.UpdateCartDetailAsync(item);
             }
 

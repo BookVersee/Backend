@@ -1,5 +1,7 @@
 using BookManagement.Repository.Abstractions;
+using BookManagement.Repository.Data;
 using BookManagement.Service.Models;
+using Microsoft.EntityFrameworkCore;
 using CategoryEntity = BookManagement.Repository.Entities.Category;
 
 namespace BookManagement.Service.Category;
@@ -7,10 +9,12 @@ namespace BookManagement.Service.Category;
 public class CategoryService : ICategoryService
 {
     private readonly ICategoryRepository _categoryRepository;
+    private readonly AppDbContext _context;
 
-    public CategoryService(ICategoryRepository categoryRepository)
+    public CategoryService(ICategoryRepository categoryRepository, AppDbContext context)
     {
         _categoryRepository = categoryRepository;
+        _context = context;
     }
 
     public async Task<CategoryResponse> GetCategoryAsync(Guid categoryId)
@@ -78,6 +82,11 @@ public class CategoryService : ICategoryService
 
     public async Task DeleteCategoryAsync(Guid categoryId)
     {
+        var hasBooks = await _context.Books.AnyAsync(b => b.CategoryId == categoryId);
+        if (hasBooks)
+        {
+            throw new InvalidOperationException("Không thể xóa danh mục đang có chứa sản phẩm sách. Vui lòng chuyển danh mục hoặc xóa sản phẩm trước.");
+        }
         await _categoryRepository.DeleteAsync(categoryId);
     }
 

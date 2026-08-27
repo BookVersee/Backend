@@ -52,7 +52,8 @@ namespace BookManagement.Service.Order
         {
             var cart = await _context.Carts
                 .Include(c => c.CartBookDetails)
-                .ThenInclude(cbd => cbd.Book)
+                    .ThenInclude(cbd => cbd.Book)
+                        .ThenInclude(b => b.Shop)
                 .FirstOrDefaultAsync(c => c.UserId == userId);
 
             if (cart == null || !cart.CartBookDetails.Any())
@@ -60,7 +61,52 @@ namespace BookManagement.Service.Order
                 throw new InvalidOperationException("Giỏ hàng của bạn đang trống. Vui lòng thêm sản phẩm trước khi thanh toán.");
             }
 
-            var totalAmount = cart.CartBookDetails.Sum(cbd => cbd.Quantity * cbd.UnitPrice);
+            var itemsToOrder = cart.CartBookDetails.AsQueryable();
+            if (request.SelectedCartItemIds != null && request.SelectedCartItemIds.Any())
+            {
+                itemsToOrder = itemsToOrder.Where(cbd => request.SelectedCartItemIds.Contains(cbd.Id));
+            }
+
+            var selectedCartList = itemsToOrder.ToList();
+            if (!selectedCartList.Any())
+            {
+                throw new InvalidOperationException("Không tìm thấy sản phẩm hợp lệ nào được chọn trong giỏ hàng.");
+            }
+
+            // Validate status, shop condition, stock and update stock
+            foreach (var item in selectedCartList)
+            {
+                var book = item.Book;
+                if (book == null)
+                {
+                    throw new InvalidOperationException("Sản phẩm trong giỏ hàng không tồn tại.");
+                }
+
+                if (book.Status != BookStatus.ACTIVE)
+                {
+                    throw new InvalidOperationException($"Sản phẩm '{book.Title}' hiện không còn mở bán.");
+                }
+
+                if (book.Shop == null || book.Shop.Condition == ShopCondition.LOCKED || book.Shop.Condition == ShopCondition.CLOSED)
+                {
+                    throw new InvalidOperationException($"Cửa hàng cung cấp cuốn sách '{book.Title}' hiện đang đóng cửa hoặc bị khóa.");
+                }
+
+                if (book.StockQuantity < item.Quantity)
+                {
+                    throw new InvalidOperationException($"Sản phẩm '{book.Title}' chỉ còn {book.StockQuantity} cuốn trong kho (bạn đặt {item.Quantity} cuốn).");
+                }
+
+                // Deduct stock quantity
+                book.StockQuantity -= item.Quantity;
+                if (book.StockQuantity == 0)
+                {
+                    book.Status = BookStatus.EMPTY;
+                }
+            }
+
+            // Calculate total using current Book.Price
+            var totalAmount = selectedCartList.Sum(cbd => cbd.Quantity * cbd.Book.Price);
 
             var order = new BookManagement.Repository.Entities.Order
             {
@@ -72,13 +118,13 @@ namespace BookManagement.Service.Order
                 CreatedAt = DateTimeOffset.UtcNow
             };
 
-            var orderDetails = cart.CartBookDetails.Select(cbd => new BookManagement.Repository.Entities.OrderDetail
+            var orderDetails = selectedCartList.Select(cbd => new BookManagement.Repository.Entities.OrderDetail
             {
                 Id = Guid.NewGuid(),
                 OrderId = order.Id,
                 BookId = cbd.BookId,
                 Quantity = cbd.Quantity,
-                UnitPrice = cbd.UnitPrice
+                UnitPrice = cbd.Book.Price
             }).ToList();
 
             var payment = new BookManagement.Repository.Entities.Payment
@@ -105,8 +151,20 @@ namespace BookManagement.Service.Order
             await _context.Payments.AddAsync(payment);
             await _context.Deliveries.AddAsync(delivery);
 
-            // Clear items from cart after checkout
-            _context.CartBookDetails.RemoveRange(cart.CartBookDetails);
+            // Automated Notification for Buyer
+            var buyerNotification = new BookManagement.Repository.Entities.Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                Type = NotificationType.ORDER_UPDATE,
+                ReferenceId = order.Id,
+                Content = $"Bạn đã đặt đơn hàng #{order.Id} thành công. Tổng tiền: {totalAmount:N0} VNĐ.",
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            await _context.Notifications.AddAsync(buyerNotification);
+
+            // Clear ONLY selected items from cart after checkout
+            _context.CartBookDetails.RemoveRange(selectedCartList);
             await _context.SaveChangesAsync();
 
             var createdOrder = await _orderRepository.GetByIdAsync(order.Id);
@@ -115,15 +173,67 @@ namespace BookManagement.Service.Order
 
         public async Task CancelOrderAsync(Guid userId, Guid orderId)
         {
-            var order = await _orderRepository.GetByIdAsync(orderId);
+            var order = await _context.Orders
+                .Include(o => o.OrderDetails)
+                    .ThenInclude(od => od.Book)
+                .FirstOrDefaultAsync(o => o.Id == orderId);
+
             if (order == null || order.UserId != userId) throw new KeyNotFoundException("Order not found.");
             if (order.OrderStatus != OrderStatus.PENDING) throw new InvalidOperationException("Only PENDING orders can be cancelled.");
+
             order.OrderStatus = OrderStatus.CANCELLED;
-            await _orderRepository.UpdateOrderAsync(order);
+            order.UpdatedAt = DateTimeOffset.UtcNow;
+
+            // Restore book stock quantity
+            foreach (var detail in order.OrderDetails)
+            {
+                if (detail.Book != null)
+                {
+                    detail.Book.StockQuantity += detail.Quantity;
+                    if (detail.Book.Status == BookStatus.EMPTY && detail.Book.StockQuantity > 0)
+                    {
+                        detail.Book.Status = BookStatus.ACTIVE;
+                    }
+                }
+            }
+
+            // Notification
+            var notification = new BookManagement.Repository.Entities.Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                Type = NotificationType.ORDER_UPDATE,
+                ReferenceId = order.Id,
+                Content = $"Đơn hàng #{order.Id} đã được hủy thành công. Tồn kho sản phẩm đã được hoàn trả.",
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            await _context.Notifications.AddAsync(notification);
+
+            await _context.SaveChangesAsync();
         }
 
         public async Task<ReturnRequestResponse> CreateReturnRequestAsync(Guid userId, Guid orderDetailId, CreateReturnRequest input)
         {
+            var orderDetail = await _context.OrderDetails
+                .Include(od => od.Order)
+                .Include(od => od.Book)
+                .FirstOrDefaultAsync(od => od.Id == orderDetailId);
+
+            if (orderDetail == null)
+            {
+                throw new KeyNotFoundException("Chi tiết đơn hàng không tồn tại.");
+            }
+
+            if (orderDetail.Order.UserId != userId)
+            {
+                throw new UnauthorizedAccessException("Bạn không có quyền gửi yêu cầu trả hàng cho đơn này.");
+            }
+
+            if (orderDetail.Order.OrderStatus != OrderStatus.DELIVERED && orderDetail.Order.OrderStatus != OrderStatus.COMPLETED)
+            {
+                throw new InvalidOperationException("Chỉ có thể gửi yêu cầu trả hàng/hoàn tiền sau khi đơn hàng đã được giao thành công.");
+            }
+
             var returnRequest = new BookManagement.Repository.Entities.ReturnRequest
             {
                 Id = Guid.NewGuid(),
@@ -132,10 +242,25 @@ namespace BookManagement.Service.Order
                 DetailedReason = input.DetailedReason,
                 ImageUrl = input.ImageUrl,
                 Status = ReturnRequestStatus.PENDING,
-                RefundAmount = input.RefundAmount
+                RefundAmount = input.RefundAmount > 0 ? input.RefundAmount : (orderDetail.UnitPrice * orderDetail.Quantity)
             };
 
+            orderDetail.ReturnStatus = ReturnStatus.REQUESTED;
+
             await _orderRepository.CreateReturnRequestAsync(returnRequest);
+
+            // Notification
+            var notification = new BookManagement.Repository.Entities.Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                Type = NotificationType.ORDER_UPDATE,
+                ReferenceId = returnRequest.Id,
+                Content = $"Yêu cầu trả hàng cho cuốn '{orderDetail.Book?.Title}' đã được gửi tới Shop. Vui lòng chờ phản hồi.",
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            await _context.Notifications.AddAsync(notification);
+            await _context.SaveChangesAsync();
 
             return new ReturnRequestResponse
             {
@@ -148,6 +273,41 @@ namespace BookManagement.Service.Order
                 RefundAmount = returnRequest.RefundAmount,
                 CreatedAt = returnRequest.CreatedAt
             };
+        }
+
+        public async Task EscalateReturnRequestAsync(Guid userId, Guid returnRequestId, string? reason)
+        {
+            var returnReq = await _context.ReturnRequests
+                .Include(rr => rr.OrderDetail)
+                    .ThenInclude(od => od.Order)
+                .FirstOrDefaultAsync(rr => rr.Id == returnRequestId);
+
+            if (returnReq == null || returnReq.OrderDetail.Order.UserId != userId)
+            {
+                throw new KeyNotFoundException("Không tìm thấy yêu cầu trả hàng.");
+            }
+
+            if (returnReq.Status != ReturnRequestStatus.REJECTED)
+            {
+                throw new InvalidOperationException("Chỉ có thể gửi khiếu nại lên Admin khi yêu cầu trả hàng bị Shop từ chối.");
+            }
+
+            // Mark as PENDING again for Admin escalation
+            returnReq.Status = ReturnRequestStatus.PENDING;
+            returnReq.DetailedReason = (returnReq.DetailedReason ?? "") + $" | [KHIẾU NẠI ADMIN: {reason}]";
+            returnReq.UpdatedAt = DateTimeOffset.UtcNow;
+
+            var notification = new BookManagement.Repository.Entities.Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                Type = NotificationType.SYSTEM,
+                ReferenceId = returnReq.Id,
+                Content = $"Yêu cầu khiếu nại của bạn cho sản phẩm đã được gửi lên Ban quản trị (Admin) xử lý.",
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            await _context.Notifications.AddAsync(notification);
+            await _context.SaveChangesAsync();
         }
 
         private static OrderResponse MapToResponse(BookManagement.Repository.Entities.Order order) => new OrderResponse

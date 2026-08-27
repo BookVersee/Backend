@@ -223,5 +223,21 @@ namespace BookManagement.Api.Controllers
             await _categoryService.DeleteCategoryAsync(id);
             return Ok(ApiResponse<string>.SuccessResponse("Category deleted successfully."));
         }
+
+        /// Chức năng: Xem danh sách Phản hồi của Shop bị báo cáo vi phạm.
+        [HttpGet("GetReportedResponses")]
+        public async Task<IActionResult> GetReportedResponses()
+        {
+            var reports = await _adminService.GetReportedResponsesAsync();
+            return Ok(ApiResponse<IEnumerable<ReportedResponseDto>>.SuccessResponse(reports));
+        }
+
+        /// Chức năng: Admin xử lý Phản hồi của Shop bị báo cáo (Xóa/Ẩn phản hồi vi phạm & Cảnh báo Shop).
+        [HttpPost("ModerateShopResponse")]
+        public async Task<IActionResult> ModerateShopResponse([FromQuery] Guid responseId, [FromQuery] bool isDelete = true, [FromQuery] string? adminNote = null)
+        {
+            await _adminService.ModerateShopResponseAsync(responseId, isDelete, adminNote);
+            return Ok(ApiResponse<string>.SuccessResponse("Đã xử lý phản hồi bị báo cáo thành công.", "Response moderated successfully."));
+        }
     }
 }

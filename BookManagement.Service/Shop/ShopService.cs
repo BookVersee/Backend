@@ -539,6 +539,8 @@ public class ShopService
         var returnReq = await _db.ReturnRequests
             .Include(r => r.OrderDetail)
                 .ThenInclude(od => od.Book)
+            .Include(r => r.OrderDetail)
+                .ThenInclude(od => od.Order)
             .FirstOrDefaultAsync(r => r.Id == returnRequestId && r.OrderDetail.Book.ShopId == shopId);
 
         if (returnReq == null)
@@ -549,18 +551,38 @@ public class ShopService
         bool isApprove = (dto.IsApproved.HasValue && dto.IsApproved.Value)
             || (dto.Status != null && dto.Status.Equals("APPROVED", StringComparison.OrdinalIgnoreCase));
 
+        string notificationContent;
+
         if (isApprove)
         {
             returnReq.Status = ReturnRequestStatus.APPROVED;
             returnReq.OrderDetail.ReturnStatus = ReturnStatus.PROCESSING;
+            notificationContent = $"Yêu cầu trả hàng cho cuốn '{returnReq.OrderDetail.Book?.Title}' đã được Shop chấp nhận. Đang xử lý hoàn tiền.";
         }
         else
         {
             returnReq.Status = ReturnRequestStatus.REJECTED;
             returnReq.OrderDetail.ReturnStatus = ReturnStatus.REJECTED;
+            notificationContent = $"Yêu cầu trả hàng cho cuốn '{returnReq.OrderDetail.Book?.Title}' đã bị Shop từ chối. Bạn có thể gửi Khiếu nại lên Admin nếu không đồng ý.";
         }
 
         returnReq.UpdatedAt = DateTimeOffset.UtcNow;
+
+        // Automated notification to Buyer
+        if (returnReq.OrderDetail?.Order != null)
+        {
+            var notification = new BookManagement.Repository.Entities.Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = returnReq.OrderDetail.Order.UserId,
+                Type = NotificationType.ORDER_UPDATE,
+                ReferenceId = returnReq.Id,
+                Content = notificationContent,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            await _db.Notifications.AddAsync(notification);
+        }
+
         await _db.SaveChangesAsync();
     }
 }

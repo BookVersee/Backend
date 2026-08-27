@@ -149,7 +149,8 @@ public class PaymentService
             throw new KeyNotFoundException("Order not found.");
         }
 
-        decimal refundAmount = dto.Amount ?? returnReq?.RefundAmount ?? order.TotalAmount;
+        decimal itemRefundFallback = (returnReq?.OrderDetail != null) ? (returnReq.OrderDetail.UnitPrice * returnReq.OrderDetail.Quantity) : order.TotalAmount;
+        decimal refundAmount = dto.Amount ?? ((returnReq?.RefundAmount > 0) ? returnReq.RefundAmount : itemRefundFallback);
         Guid returnReqId = returnReq?.Id ?? Guid.NewGuid();
 
         bool refundSuccess = await _vnpayService.ProcessRefundAsync(returnReqId, refundAmount, dto.TransactionNo ?? ("REF" + DateTime.UtcNow.Ticks), "SHOP");

@@ -36,5 +36,9 @@ public interface IAdminService
     // Delivery Monitoring
     Task<PagedResult<DeliveryResponse>> GetDeliveriesAsync(string? status, int page = 1, int pageSize = 10);
     Task<DeliveryResponse> GetDeliveryDetailAsync(Guid deliveryId);
+
+    // Response Moderation
+    Task<IEnumerable<ReportedResponseDto>> GetReportedResponsesAsync();
+    Task ModerateShopResponseAsync(Guid responseId, bool isDelete, string? adminNote);
 }
 

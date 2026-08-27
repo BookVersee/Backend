@@ -12,5 +12,6 @@ namespace BookManagement.Service.Order
         Task<OrderResponse> CreateOrderAsync(Guid userId, CreateOrderRequest request);
         Task CancelOrderAsync(Guid userId, Guid orderId);
         Task<ReturnRequestResponse> CreateReturnRequestAsync(Guid userId, Guid orderDetailId, CreateReturnRequest input);
+        Task EscalateReturnRequestAsync(Guid userId, Guid returnRequestId, string? reason);
     }
 }

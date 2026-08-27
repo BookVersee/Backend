@@ -14,6 +14,7 @@ namespace BookManagement.Service.Order
 
     public class CreateOrderRequest
     {
+        public List<Guid>? SelectedCartItemIds { get; set; }
         public string ShippingAddress { get; set; } = null!;
         public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.COD;
         public string? Note { get; set; }

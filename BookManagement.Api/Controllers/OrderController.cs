@@ -69,6 +69,15 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<ReturnRequestResponse>.SuccessResponse(returnRequest, "Return request submitted."));
         }
 
+        /// Chức năng: Gửi khiếu nại lên Admin khi yêu cầu trả hàng bị Shop từ chối.
+        [HttpPost("EscalateDispute")]
+        public async Task<IActionResult> EscalateDispute([FromQuery] Guid returnRequestId, [FromQuery] string? reason)
+        {
+            var userId = GetCurrentUserId();
+            await _orderService.EscalateReturnRequestAsync(userId, returnRequestId, reason);
+            return Ok(ApiResponse<string>.SuccessResponse("Khiếu nại của bạn đã được gửi tới Admin xử lý.", "Escalation submitted."));
+        }
+
         private Guid GetCurrentUserId()
         {
             var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;

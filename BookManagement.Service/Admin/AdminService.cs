@@ -338,6 +338,18 @@ public class AdminService : IAdminService
                 shop.User.Role = BookManagement.Repository.Entities.Enums.UserRole.SHOP;
             }
             shop.User.Status = UserStatus.ACTIVE;
+
+            // Automated notification to user instructing them to refresh token
+            var notification = new BookManagement.Repository.Entities.Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = shop.UserId,
+                Type = NotificationType.SYSTEM,
+                ReferenceId = shop.Id,
+                Content = $"Chúc mừng! Đơn đăng ký mở Cửa hàng '{shop.ShopName}' của bạn đã được Admin phê duyệt thành công. Vui lòng gọi API Refresh Token để nhận Access Token mới chứa quyền SHOP.",
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            await _context.Notifications.AddAsync(notification);
         }
 
         await _context.SaveChangesAsync();
@@ -525,4 +537,87 @@ public class AdminService : IAdminService
         EstimatedDelivery = delivery.EstimatedDelivery,
         ActualDeliveredAt = delivery.ActualDeliveredAt
     };
+
+    // ===== RESPONSE MODERATION =====
+    public async Task<IEnumerable<ReportedResponseDto>> GetReportedResponsesAsync()
+    {
+        var notifications = await _context.Notifications
+            .AsNoTracking()
+            .Include(n => n.User)
+            .Where(n => n.Type == NotificationType.SYSTEM && n.Content != null && n.Content.Contains("User reported shop response"))
+            .OrderByDescending(n => n.CreatedAt)
+            .ToListAsync();
+
+        var result = new List<ReportedResponseDto>();
+
+        foreach (var n in notifications)
+        {
+            var content = n.Content ?? "";
+            // Parse responseId from "User reported shop response {responseId}: {reason}"
+            var parts = content.Split(new[] { "User reported shop response ", ":" }, StringSplitOptions.RemoveEmptyEntries);
+            Guid responseId = Guid.Empty;
+            string reason = content;
+
+            if (parts.Length >= 2 && Guid.TryParse(parts[0].Trim(), out var parsedId))
+            {
+                responseId = parsedId;
+                reason = string.Join(":", parts.Skip(1)).Trim();
+            }
+
+            var responseObj = responseId != Guid.Empty
+                ? await _context.Responses
+                    .AsNoTracking()
+                    .Include(r => r.Shop)
+                    .Include(r => r.Feedback)
+                    .FirstOrDefaultAsync(r => r.Id == responseId)
+                : null;
+
+            result.Add(new ReportedResponseDto
+            {
+                NotificationId = n.Id,
+                ResponseId = responseId != Guid.Empty ? responseId : null,
+                CustomerUsername = n.User?.Username ?? n.UserId.ToString(),
+                ShopName = responseObj?.Shop?.ShopName,
+                FeedbackContent = responseObj?.Feedback?.Content,
+                ResponseContent = responseObj?.Content,
+                ReportReason = reason,
+                CreatedAt = n.CreatedAt
+            });
+        }
+
+        return result;
+    }
+
+    public async Task ModerateShopResponseAsync(Guid responseId, bool isDelete, string? adminNote)
+    {
+        var response = await _context.Responses
+            .Include(r => r.Shop)
+            .FirstOrDefaultAsync(r => r.Id == responseId);
+
+        if (response == null)
+        {
+            throw new KeyNotFoundException("Không tìm thấy phản hồi của Shop.");
+        }
+
+        if (isDelete)
+        {
+            _context.Responses.Remove(response);
+
+            if (response.Shop != null && response.Shop.UserId != Guid.Empty)
+            {
+                var warningNotification = new BookManagement.Repository.Entities.Notification
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = response.Shop.UserId,
+                    Type = NotificationType.SYSTEM,
+                    ReferenceId = response.Shop.Id,
+                    Content = $"Admin đã xóa Phản hồi của Shop trên đánh giá do vi phạm tiêu chuẩn cộng đồng. Ghi chú Admin: {adminNote ?? "Nội dung phản hồi không phù hợp"}.",
+                    CreatedAt = DateTimeOffset.UtcNow
+                };
+                await _context.Notifications.AddAsync(warningNotification);
+            }
+        }
+
+        await _context.SaveChangesAsync();
+    }
 }

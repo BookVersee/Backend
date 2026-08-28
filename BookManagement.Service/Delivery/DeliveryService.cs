@@ -131,7 +131,7 @@ public class DeliveryService
             if (targetStatus == DeliveryStatus.DELIVERED)
             {
                 delivery.ActualDeliveredAt = DateTime.UtcNow;
-                order.OrderStatus = OrderStatus.COMPLETED; // Cập nhật đơn hàng thành COMPLETED khi giao thành công
+                order.OrderStatus = OrderStatus.DELIVERED; // Cập nhật đơn hàng thành DELIVERED khi giao thành công
 
                 // 3. DÒNG TIỀN COD TỰ ĐỘNG THU TIỀN MẶT & GHI TRANSACTION HISTORY
                 var codPayment = order.Payments.FirstOrDefault(p => p.Method == PaymentMethod.COD && p.Status == PaymentStatus.PENDING);

@@ -222,7 +222,7 @@ namespace BookManagement.Service.Order
                 throw new UnauthorizedAccessException("Bạn không có quyền gửi yêu cầu trả hàng cho đơn này.");
             }
 
-            if (orderDetail.Order.OrderStatus != OrderStatus.DELIVERED && orderDetail.Order.OrderStatus != OrderStatus.COMPLETED)
+            if (orderDetail.Order.OrderStatus != OrderStatus.DELIVERED)
             {
                 throw new InvalidOperationException("Chỉ có thể gửi yêu cầu trả hàng/hoàn tiền sau khi đơn hàng đã được giao thành công.");
             }

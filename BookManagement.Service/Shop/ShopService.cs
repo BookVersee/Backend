@@ -425,7 +425,7 @@ public class ShopService
         var query = _db.OrderDetails
             .Include(od => od.Order)
             .Where(od => od.Book.ShopId == shopId
-                && (od.Order.OrderStatus == OrderStatus.DELIVERED || od.Order.OrderStatus == OrderStatus.COMPLETED)
+                && od.Order.OrderStatus == OrderStatus.DELIVERED
                 && od.ReturnStatus != ReturnStatus.REFUNDED);
 
         if (fromDate.HasValue)

@@ -403,7 +403,7 @@ public class AdminService : IAdminService
     // ===== DASHBOARD & STATISTICS =====
     public async Task<DashboardStatisticsResponse> GetDashboardStatisticsAsync(string period = "month")
     {
-        var validStatuses = new[] { OrderStatus.PAID, OrderStatus.SHIPPING, OrderStatus.DELIVERING, OrderStatus.DELIVERED, OrderStatus.COMPLETED };
+        var validStatuses = new[] { OrderStatus.PAID, OrderStatus.SHIPPING, OrderStatus.DELIVERING, OrderStatus.DELIVERED };
         var totalOrders = await _context.Orders.CountAsync();
         var totalUsers = await _context.Users.CountAsync();
         var activeShops = await _context.Shops.CountAsync(s => s.Condition == ShopCondition.ACTIVE);
@@ -424,7 +424,7 @@ public class AdminService : IAdminService
 
     public async Task<RevenueReportResponse> GetRevenueReportAsync(string period = "month")
     {
-        var validStatuses = new[] { OrderStatus.PAID, OrderStatus.SHIPPING, OrderStatus.DELIVERING, OrderStatus.DELIVERED, OrderStatus.COMPLETED };
+        var validStatuses = new[] { OrderStatus.PAID, OrderStatus.SHIPPING, OrderStatus.DELIVERING, OrderStatus.DELIVERED };
         var orders = await _context.Orders
             .AsNoTracking()
             .Where(o => validStatuses.Contains(o.OrderStatus))

@@ -101,7 +101,7 @@ public class ShippingService
                 delivery.ActualDeliveredAt = payload.Time ?? DateTime.UtcNow;
                 if (order != null)
                 {
-                    order.OrderStatus = OrderStatus.COMPLETED;
+                    order.OrderStatus = OrderStatus.DELIVERED;
 
                     // Đồng bộ dòng tiền COD khi GHN báo giao thành công
                     var codPayment = order.Payments.FirstOrDefault(p => p.Method == PaymentMethod.COD && p.Status == PaymentStatus.PENDING);

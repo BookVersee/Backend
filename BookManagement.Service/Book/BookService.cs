@@ -50,8 +50,8 @@ namespace BookManagement.Service.Book
                 "price_asc" => query.OrderBy(b => b.Price),
                 "price_desc" => query.OrderByDescending(b => b.Price),
                 "rating" => query.OrderByDescending(b => b.Rating),
-                "newest" => query.OrderByDescending(b => b.CreatedAt),
-                _ => query.OrderByDescending(b => b.CreatedAt)
+                "newest" => query.OrderBy(b => b.Title),
+                _ => query.OrderBy(b => b.Title)
             };
 
             var totalCount = await query.CountAsync();
@@ -116,8 +116,7 @@ namespace BookManagement.Service.Book
             ImageUrl = b.ImageUrl,
             PublishedYear = b.PublishedYear,
             Status = b.Status,
-            Rating = b.Rating,
-            CreatedAt = b.CreatedAt
+            Rating = b.Rating
         };
     }
 }

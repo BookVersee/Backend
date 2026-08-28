@@ -5,7 +5,7 @@ using BookManagement.Repository.Entities.Enums;
 
 namespace BookManagement.Repository.Entities
 {
-    public class Book : BaseEntity<Guid>, IAuditableEntity
+    public class Book : BaseEntity<Guid>
     {
         public Guid ShopId { get; set; }
         public Guid CategoryId { get; set; }
@@ -20,8 +20,6 @@ namespace BookManagement.Repository.Entities
         public int? PublishedYear { get; set; }
         public BookStatus Status { get; set; } = BookStatus.ACTIVE;
         public float Rating { get; set; } = 0;
-        public DateTimeOffset CreatedAt { get; set; }
-        public DateTimeOffset? UpdatedAt { get; set; }
 
         // Navigation Properties
         public Shop Shop { get; set; } = null!;

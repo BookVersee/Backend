@@ -136,8 +136,7 @@ public class ShopService
             ImageUrl = dto.ImageUrl,
             PublishedYear = dto.PublishedYear,
             Status = status,
-            Rating = 5.0f,
-            CreatedAt = DateTimeOffset.UtcNow
+            Rating = 5.0f
         };
 
         _db.Books.Add(book);
@@ -205,7 +204,7 @@ public class ShopService
 
         var totalItems = await q.CountAsync();
         var items = await q
-            .OrderByDescending(b => b.CreatedAt)
+            .OrderBy(b => b.Title)
             .Skip((query.PageIndex - 1) * query.PageSize)
             .Take(query.PageSize)
             .Select(b => new BookResponseDto

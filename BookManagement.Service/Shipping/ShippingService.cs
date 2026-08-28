@@ -60,8 +60,7 @@ public class ShippingService
             CarrierName = "GHN",
             ShipFee = totalFee,
             Status = DeliveryStatus.PENDING,
-            EstimatedDelivery = DateTime.UtcNow.AddDays(3),
-            CreatedAt = DateTimeOffset.UtcNow
+            EstimatedDelivery = DateTime.UtcNow.AddDays(3)
         };
 
         _db.Deliveries.Add(delivery);

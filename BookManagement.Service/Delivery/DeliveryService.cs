@@ -40,8 +40,7 @@ public class DeliveryService
             CarrierName = dto.CarrierName,
             ShipFee = dto.ShipFee,
             Status = DeliveryStatus.PENDING,
-            EstimatedDelivery = dto.EstimatedDelivery,
-            CreatedAt = DateTimeOffset.UtcNow
+            EstimatedDelivery = dto.EstimatedDelivery
         };
 
         _db.Deliveries.Add(delivery);
@@ -123,7 +122,6 @@ public class DeliveryService
         }
 
         delivery.Status = targetStatus;
-        delivery.UpdatedAt = DateTimeOffset.UtcNow;
 
         var order = delivery.Order;
         if (order != null)
@@ -210,7 +208,7 @@ public class DeliveryService
             q = q.Where(d => d.Status == filterStatus);
         }
 
-        var deliveries = await q.OrderByDescending(d => d.CreatedAt).ToListAsync();
+        var deliveries = await q.OrderByDescending(d => d.Id).ToListAsync();
 
         return deliveries.Select(delivery =>
         {

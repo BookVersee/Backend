@@ -277,7 +277,7 @@ public class AdminService : IAdminService
         var totalCount = await query.CountAsync();
 
         var items = await query
-            .OrderByDescending(b => b.CreatedAt)
+            .OrderBy(b => b.Title)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
@@ -298,7 +298,7 @@ public class AdminService : IAdminService
         var totalCount = await query.CountAsync();
 
         var items = await query
-            .OrderByDescending(b => b.CreatedAt)
+            .OrderBy(b => b.Title)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
@@ -481,7 +481,7 @@ public class AdminService : IAdminService
 
         var totalCount = await query.CountAsync();
         var items = await query
-            .OrderByDescending(d => d.CreatedAt)
+            .OrderByDescending(d => d.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();

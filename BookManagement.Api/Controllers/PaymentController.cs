@@ -1,6 +1,7 @@
-﻿using System;
+using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using BookManagement.Api.Filters;
 using BookManagement.Service.Dtos;
 using BookManagement.Service.Models;
 using BookManagement.Service.Payment;
@@ -85,6 +86,7 @@ public class PaymentController : ControllerBase
     /// </summary>
     [HttpPost("ProcessRefund")]
     [Authorize(Roles = "SHOP")]
+    [Idempotent]
     public async Task<IActionResult> ProcessRefund([FromBody] ProcessRefundDto dto)
     {
         var userId = GetUserId();

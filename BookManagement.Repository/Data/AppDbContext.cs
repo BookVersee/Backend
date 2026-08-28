@@ -244,6 +244,7 @@ namespace BookManagement.Repository.Data
             {
                 builder.HasKey(p => p.Id);
                 builder.Property(p => p.Amount).HasPrecision(12, 2);
+                builder.Property(p => p.TransactionCode).HasMaxLength(100);
 
                 builder.Property(p => p.PaymentType)
                     .HasConversion<string>()
@@ -256,6 +257,10 @@ namespace BookManagement.Repository.Data
                 builder.Property(p => p.Status)
                     .HasConversion<string>()
                     .HasMaxLength(30);
+
+                builder.HasIndex(p => p.TransactionCode)
+                    .IsUnique()
+                    .HasFilter("[TransactionCode] IS NOT NULL");
 
                 builder.HasOne(p => p.Order)
                     .WithMany(o => o.Payments)
@@ -283,6 +288,10 @@ namespace BookManagement.Repository.Data
                 builder.Property(th => th.TransactionType)
                     .HasConversion<string>()
                     .HasMaxLength(30);
+
+                builder.HasIndex(th => th.TransactionCode)
+                    .IsUnique()
+                    .HasFilter("[TransactionCode] IS NOT NULL");
 
                 builder.HasOne(th => th.User)
                     .WithMany(u => u.TransactionHistories)

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -7,6 +7,8 @@ using BookManagement.Repository.Entities;
 using BookManagement.Repository.Entities.Enums;
 using BookManagement.Service.Dtos;
 using Microsoft.EntityFrameworkCore;
+using System.Collections.Concurrent;
+using System.Threading;
 using PaymentEntity = BookManagement.Repository.Entities.Payment;
 
 namespace BookManagement.Service.Payment;
@@ -15,6 +17,7 @@ public class PaymentService
 {
     private readonly AppDbContext _db;
     private readonly MomoService _momoService;
+    private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> _paymentLocks = new();
 
     public PaymentService(AppDbContext db, MomoService momoService)
     {
@@ -75,54 +78,81 @@ public class PaymentService
             return (1, "Order Not Found");
         }
 
-        var payment = await _db.Payments
-            .Include(p => p.Order)
-            .FirstOrDefaultAsync(p => p.Id == paymentId || p.OrderId == paymentId);
+        var semaphore = _paymentLocks.GetOrAdd(paymentId, _ => new SemaphoreSlim(1, 1));
+        await semaphore.WaitAsync();
 
-        if (payment == null)
+        try
         {
-            return (1, "Payment Record Not Found");
-        }
+            var payment = await _db.Payments
+                .Include(p => p.Order)
+                .FirstOrDefaultAsync(p => p.Id == paymentId || p.OrderId == paymentId);
 
-        if (payment.Status == PaymentStatus.SUCCESS)
-        {
-            return (0, "Payment already confirmed");
-        }
-
-        if (req.ResultCode == 0)
-        {
-            payment.Status = PaymentStatus.SUCCESS;
-            payment.UpdatedAt = DateTimeOffset.UtcNow;
-
-            var order = payment.Order;
-            if (order != null)
+            if (payment == null)
             {
-                order.OrderStatus = OrderStatus.PAID;
-                order.UpdatedAt = DateTimeOffset.UtcNow;
+                return (1, "Payment Record Not Found");
+            }
 
-                var transaction = new TransactionHistory
+            // Chống Idempotency: Nếu Payment đã SUCCESS hoặc mã giao dịch MoMo đã ghi nhận
+            string transIdStr = req.TransId.ToString();
+            bool isTransRecorded = req.TransId > 0 && await _db.TransactionHistories
+                .AnyAsync(t => t.TransactionCode == transIdStr && t.ReferenceType == ReferenceType.ORDER_PAYMENT);
+
+            if (payment.Status == PaymentStatus.SUCCESS || isTransRecorded)
+            {
+                return (0, "Payment already confirmed");
+            }
+
+            using var tx = await _db.Database.BeginTransactionAsync();
+            try
+            {
+                if (req.ResultCode == 0)
                 {
-                    UserId = order.UserId,
-                    ReferenceType = ReferenceType.ORDER_PAYMENT,
-                    ReferenceId = order.Id,
-                    TransactionType = TransactionType.IN,
-                    Amount = req.Amount > 0 ? (decimal)req.Amount : payment.Amount,
-                    TransactionCode = req.TransId.ToString(),
-                    Description = $"MoMo Payment for Order #{order.Id}",
-                    CreatedAt = DateTimeOffset.UtcNow
-                };
+                    payment.Status = PaymentStatus.SUCCESS;
+                    payment.TransactionCode = transIdStr;
+                    payment.UpdatedAt = DateTimeOffset.UtcNow;
 
-                _db.TransactionHistories.Add(transaction);
+                    var order = payment.Order;
+                    if (order != null)
+                    {
+                        order.OrderStatus = OrderStatus.PAID;
+                        order.UpdatedAt = DateTimeOffset.UtcNow;
+
+                        var transaction = new TransactionHistory
+                        {
+                            UserId = order.UserId,
+                            ReferenceType = ReferenceType.ORDER_PAYMENT,
+                            ReferenceId = order.Id,
+                            TransactionType = TransactionType.IN,
+                            Amount = req.Amount > 0 ? (decimal)req.Amount : payment.Amount,
+                            TransactionCode = transIdStr,
+                            Description = $"MoMo Payment for Order #{order.Id}",
+                            CreatedAt = DateTimeOffset.UtcNow
+                        };
+
+                        _db.TransactionHistories.Add(transaction);
+                    }
+                }
+                else
+                {
+                    payment.Status = PaymentStatus.FAILED;
+                    payment.TransactionCode = transIdStr;
+                    payment.UpdatedAt = DateTimeOffset.UtcNow;
+                }
+
+                await _db.SaveChangesAsync();
+                await tx.CommitAsync();
+                return (0, "Confirm Success");
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+                throw;
             }
         }
-        else
+        finally
         {
-            payment.Status = PaymentStatus.FAILED;
-            payment.UpdatedAt = DateTimeOffset.UtcNow;
+            semaphore.Release();
         }
-
-        await _db.SaveChangesAsync();
-        return (0, "Confirm Success");
     }
 
     public async Task ProcessRefundAsync(Guid shopId, ProcessRefundDto dto)
@@ -148,6 +178,22 @@ public class PaymentService
                 .FirstOrDefaultAsync(r => r.OrderDetail.OrderId == dto.OrderId);
         }
 
+        // Chống Idempotency: Kiểm tra nếu yêu cầu đổi trả đã hoàn tiền
+        if (returnReq != null && returnReq.OrderDetail.ReturnStatus == ReturnStatus.REFUNDED)
+        {
+            throw new InvalidOperationException("Yêu cầu trả hàng này đã được hoàn tiền trước đó.");
+        }
+
+        if (returnReq != null)
+        {
+            bool hasExistingRefundPayment = await _db.Payments
+                .AnyAsync(p => p.ReturnRequestId == returnReq.Id && p.PaymentType == PaymentType.REFUND && p.Status == PaymentStatus.SUCCESS);
+            if (hasExistingRefundPayment)
+            {
+                throw new InvalidOperationException("Khoản tiền cho yêu cầu trả hàng này đã được xử lý hoàn trả trước đó.");
+            }
+        }
+
         var order = await _db.Orders
             .Include(o => o.OrderDetails)
                 .ThenInclude(od => od.Book)
@@ -165,44 +211,76 @@ public class PaymentService
 
         decimal itemRefundFallback = (returnReq?.OrderDetail != null) ? (returnReq.OrderDetail.UnitPrice * returnReq.OrderDetail.Quantity) : order.TotalAmount;
         decimal refundAmount = dto.Amount ?? ((returnReq?.RefundAmount > 0) ? returnReq.RefundAmount : itemRefundFallback);
-        Guid returnReqId = returnReq?.Id ?? Guid.NewGuid();
 
-        bool refundSuccess = await _momoService.ProcessRefundAsync(returnReqId, refundAmount, dto.TransactionNo ?? ("MOMO_REF_" + DateTime.UtcNow.Ticks), "SHOP");
+        // Kiểm tra tổng tiền đã hoàn cho đơn hàng
+        var alreadyRefundedAmount = await _db.Payments
+            .Where(p => p.OrderId == dto.OrderId && p.PaymentType == PaymentType.REFUND && p.Status == PaymentStatus.SUCCESS)
+            .SumAsync(p => p.Amount);
+
+        if (alreadyRefundedAmount + refundAmount > order.TotalAmount)
+        {
+            throw new InvalidOperationException($"Tổng số tiền hoàn ({alreadyRefundedAmount + refundAmount:N0} đ) vượt quá tổng giá trị đơn hàng ({order.TotalAmount:N0} đ).");
+        }
+
+        string transNo = dto.TransactionNo ?? ("MOMO_REF_" + DateTime.UtcNow.Ticks);
+        if (!string.IsNullOrEmpty(dto.TransactionNo))
+        {
+            bool isTransCodeDuplicate = await _db.TransactionHistories
+                .AnyAsync(t => t.TransactionCode == dto.TransactionNo && t.ReferenceType == ReferenceType.REFUND);
+            if (isTransCodeDuplicate)
+            {
+                throw new InvalidOperationException("Mã giao dịch hoàn tiền này đã tồn tại.");
+            }
+        }
+
+        Guid returnReqId = returnReq?.Id ?? Guid.NewGuid();
+        bool refundSuccess = await _momoService.ProcessRefundAsync(returnReqId, refundAmount, transNo, "SHOP");
 
         if (refundSuccess)
         {
-            var refundPayment = new PaymentEntity
+            using var tx = await _db.Database.BeginTransactionAsync();
+            try
             {
-                OrderId = dto.OrderId,
-                ReturnRequestId = returnReq?.Id,
-                PaymentType = PaymentType.REFUND,
-                Method = PaymentMethod.ONLINE,
-                Amount = refundAmount,
-                Status = PaymentStatus.SUCCESS,
-                CreatedAt = DateTimeOffset.UtcNow
-            };
+                var refundPayment = new PaymentEntity
+                {
+                    OrderId = dto.OrderId,
+                    ReturnRequestId = returnReq?.Id,
+                    PaymentType = PaymentType.REFUND,
+                    Method = PaymentMethod.ONLINE,
+                    Amount = refundAmount,
+                    Status = PaymentStatus.SUCCESS,
+                    TransactionCode = transNo,
+                    CreatedAt = DateTimeOffset.UtcNow
+                };
 
-            _db.Payments.Add(refundPayment);
+                _db.Payments.Add(refundPayment);
 
-            if (returnReq != null)
-            {
-                returnReq.OrderDetail.ReturnStatus = ReturnStatus.REFUNDED;
+                if (returnReq != null)
+                {
+                    returnReq.OrderDetail.ReturnStatus = ReturnStatus.REFUNDED;
+                }
+
+                var transaction = new TransactionHistory
+                {
+                    UserId = order.UserId,
+                    ReferenceType = ReferenceType.REFUND,
+                    ReferenceId = returnReq?.Id ?? order.Id,
+                    TransactionType = TransactionType.OUT,
+                    Amount = refundAmount,
+                    TransactionCode = transNo,
+                    Description = dto.RefundReason ?? $"Refund for Order #{dto.OrderId}",
+                    CreatedAt = DateTimeOffset.UtcNow
+                };
+
+                _db.TransactionHistories.Add(transaction);
+                await _db.SaveChangesAsync();
+                await tx.CommitAsync();
             }
-
-            var transaction = new TransactionHistory
+            catch
             {
-                UserId = order.UserId,
-                ReferenceType = ReferenceType.REFUND,
-                ReferenceId = returnReq?.Id ?? order.Id,
-                TransactionType = TransactionType.OUT,
-                Amount = refundAmount,
-                TransactionCode = dto.TransactionNo ?? ("MOMO_REF_" + Guid.NewGuid().ToString("N").Substring(0, 10)),
-                Description = dto.RefundReason ?? $"Refund for Order #{dto.OrderId}",
-                CreatedAt = DateTimeOffset.UtcNow
-            };
-
-            _db.TransactionHistories.Add(transaction);
-            await _db.SaveChangesAsync();
+                await tx.RollbackAsync();
+                throw;
+            }
         }
         else
         {

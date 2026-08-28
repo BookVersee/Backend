@@ -12,6 +12,7 @@ namespace BookManagement.Repository.Entities
         public PaymentMethod Method { get; set; } = PaymentMethod.COD;
         public decimal Amount { get; set; }
         public PaymentStatus Status { get; set; } = PaymentStatus.PENDING;
+        public string? TransactionCode { get; set; }
         public DateTimeOffset CreatedAt { get; set; }
         public DateTimeOffset? UpdatedAt { get; set; }
 

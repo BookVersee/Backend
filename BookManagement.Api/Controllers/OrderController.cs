@@ -1,7 +1,8 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using BookManagement.Api.Filters;
 using BookManagement.Repository.Entities.Enums;
 using BookManagement.Service.Models;
 using BookManagement.Service.Order;
@@ -22,7 +23,7 @@ namespace BookManagement.Api.Controllers
             _orderService = orderService;
         }
 
-        /// Chá»©c nÄƒng: Láº¥y danh sÃ¡ch lá»‹ch sá»­ Ä‘Æ¡n hÃ ng. Tráº£ vá»: Danh sÃ¡ch Ä‘Æ¡n hÃ ng theo tráº¡ng thÃ¡i.
+        /// Chá»©c nÄƒng: Láº¥y danh sÃ¡ch lá»‹ch sá»­ Ä‘Æ¡n hÃ ng. Tráº£ vá» : Danh sÃ¡ch Ä‘Æ¡n hÃ ng theo tráº¡ng thÃ¡i.
         [HttpGet("GetUserOrders")]
         public async Task<IActionResult> GetUserOrders([FromQuery] OrderStatus? status)
         {
@@ -31,9 +32,10 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<IEnumerable<OrderResponse>>.SuccessResponse(orders));
         }
 
-        /// Chá»©c nÄƒng: Äáº·t hÃ ng thanh toÃ¡n tá»« giá» hÃ ng. Tráº£ vá»: ThÃ´ng tin Ä‘Æ¡n hÃ ng má»›i táº¡o.
+        /// Chá»©c nÄƒng: Ä áº·t hÃ ng thanh toÃ¡n tá»« giá»  hÃ ng. Tráº£ vá» : ThÃ´ng tin Ä‘Æ¡n hÃ ng má»›i táº¡o.
         [Authorize(Roles = "CUSTOMER")]
         [HttpPost("CreateOrder")]
+        [Idempotent]
         public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest request)
         {
             var userId = GetCurrentUserId();

@@ -94,4 +94,32 @@ public class PaymentController : ControllerBase
         await _paymentService.ProcessRefundAsync(profile.ShopId, dto);
         return Ok(ApiResponse.SuccessResponse(null, "MoMo refund processed successfully."));
     }
+
+    /// <summary>
+    /// Chủ động truy vấn và đồng bộ trạng thái thanh toán từ MoMo (Query Status & Reconciliation - Vấn đề 6)
+    /// </summary>
+    [HttpPost("QueryPaymentStatus")]
+    [Authorize]
+    public async Task<IActionResult> QueryPaymentStatus([FromQuery] Guid orderId)
+    {
+        var (isPaid, message, transCode) = await _paymentService.SyncPaymentStatusAsync(orderId);
+        return Ok(ApiResponse.SuccessResponse(new
+        {
+            order_id = orderId,
+            is_paid = isPaid,
+            transaction_code = transCode
+        }, message));
+    }
+
+    /// <summary>
+    /// Quét và hủy đơn hàng quá hạn thanh toán thủ công hoặc qua Cron (Vấn đề 4)
+    /// </summary>
+    [HttpPost("ExpirePendingOrders")]
+    [Authorize(Roles = "ADMIN")]
+    public async Task<IActionResult> ExpirePendingOrders([FromQuery] int expiryMinutes = 15)
+    {
+        int count = await _paymentService.ExpirePendingOrdersAsync(expiryMinutes);
+        return Ok(ApiResponse.SuccessResponse(new { expired_count = count }, $"Đã xử lý hủy và hoàn kho cho {count} đơn hàng quá hạn."));
+    }
 }
+

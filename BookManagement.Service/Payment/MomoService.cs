@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
@@ -116,12 +116,56 @@ public class MomoService
         string rawSignature = $"accessKey={accessKey}&amount={req.Amount}&extraData={req.ExtraData}&message={req.Message}&orderId={req.OrderId}&orderInfo={req.OrderInfo}&orderType={req.OrderType}&partnerCode={req.PartnerCode}&payType={req.PayType}&requestId={req.RequestId}&responseTime={req.ResponseTime}&resultCode={req.ResultCode}&transId={req.TransId}";
         string expectedSignature = MomoSecurity.HmacSha256(rawSignature, secretKey);
 
-        // Cho phép bypass signature khi test thủ công trên Swagger với "test" hoặc "string"
-        if (req.Signature == "test" || req.Signature == "TEST" || req.Signature == "string" || string.IsNullOrEmpty(req.Signature))
+        // Chỉ cho phép bypass nếu cấu hình môi trường Development bật cờ AllowTestBypass
+        bool allowTestBypass = _config.GetValue<bool>("Momo:AllowTestBypassSignature", false);
+        if (allowTestBypass && (req.Signature == "test" || req.Signature == "TEST"))
         {
             return true;
         }
-        return req.Signature.Equals(expectedSignature, StringComparison.OrdinalIgnoreCase);
+        return !string.IsNullOrEmpty(req.Signature) && req.Signature.Equals(expectedSignature, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Chủ động truy vấn trạng thái thanh toán từ MoMo API (Query Transaction Status)
+    /// </summary>
+    public async Task<MomoQueryResponse?> QueryPaymentStatusAsync(string orderId)
+    {
+        string endpoint = _config["Momo:QueryUrl"] ?? "https://test-payment.momo.vn/v2/gateway/api/query";
+        string partnerCode = _config["Momo:PartnerCode"] ?? "MOMO";
+        string accessKey = _config["Momo:AccessKey"] ?? "F8BBA842ECF85";
+        string secretKey = _config["Momo:SecretKey"] ?? "K951B6PE1waDMi640xX08PD3vg6EkVlz";
+
+        string requestId = Guid.NewGuid().ToString();
+        string rawSignature = $"accessKey={accessKey}&orderId={orderId}&partnerCode={partnerCode}&requestId={requestId}";
+        string signature = MomoSecurity.HmacSha256(rawSignature, secretKey);
+
+        var payload = new
+        {
+            partnerCode,
+            requestId,
+            orderId,
+            lang = "vi",
+            signature
+        };
+
+        var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+        var response = await _httpClient.PostAsync(endpoint, content);
+        var responseContent = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            return null;
+        }
+
+        try
+        {
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            return JsonSerializer.Deserialize<MomoQueryResponse>(responseContent, options);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     public async Task<bool> ProcessRefundAsync(Guid returnRequestId, decimal refundAmount, string transactionNo, string createdBy)
@@ -129,5 +173,19 @@ public class MomoService
         await Task.Delay(100);
         return true;
     }
+}
+
+public class MomoQueryResponse
+{
+    public string PartnerCode { get; set; } = string.Empty;
+    public string OrderId { get; set; } = string.Empty;
+    public string RequestId { get; set; } = string.Empty;
+    public string ExtraData { get; set; } = string.Empty;
+    public long Amount { get; set; }
+    public long TransId { get; set; }
+    public string PayType { get; set; } = string.Empty;
+    public int ResultCode { get; set; }
+    public string Message { get; set; } = string.Empty;
+    public long ResponseTime { get; set; }
 }
 

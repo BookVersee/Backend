@@ -1,3 +1,4 @@
+using BookManagement.Api.BackgroundServices;
 using BookManagement.Api.Extensions;
 using BookManagement.Api.Hubs;
 using BookManagement.Api.Middlewares;
@@ -73,6 +74,7 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 
 builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
+builder.Services.AddHostedService<OrderExpirationBackgroundService>();
 
 builder.Services.AddCors(options =>
 {
@@ -123,6 +125,42 @@ using (var scope = app.Services.CreateScope())
             if (!dbCreator.HasTables())
             {
                 dbCreator.CreateTables();
+            }
+            else
+            {
+                // Auto-sync schema changes for existing database
+                // Step 1: Add TransactionCode column if not exists
+                dbContext.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (
+                        SELECT 1 FROM sys.columns 
+                        WHERE object_id = OBJECT_ID(N'[Payments]') 
+                        AND name = 'TransactionCode'
+                    )
+                    BEGIN
+                        ALTER TABLE [Payments] ADD [TransactionCode] NVARCHAR(100) NULL;
+                    END");
+
+                // Step 2: Create Index for Payments using dynamic SQL (deferred compilation)
+                dbContext.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (
+                        SELECT 1 FROM sys.indexes 
+                        WHERE object_id = OBJECT_ID(N'[Payments]') 
+                        AND name = 'IX_Payments_TransactionCode'
+                    )
+                    BEGIN
+                        EXEC('CREATE UNIQUE NONCLUSTERED INDEX [IX_Payments_TransactionCode] ON [Payments]([TransactionCode]) WHERE [TransactionCode] IS NOT NULL;');
+                    END");
+
+                // Step 3: Create Index for TransactionHistories using dynamic SQL (deferred compilation)
+                dbContext.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (
+                        SELECT 1 FROM sys.indexes 
+                        WHERE object_id = OBJECT_ID(N'[TransactionHistories]') 
+                        AND name = 'IX_TransactionHistories_TransactionCode'
+                    )
+                    BEGIN
+                        EXEC('CREATE UNIQUE NONCLUSTERED INDEX [IX_TransactionHistories_TransactionCode] ON [TransactionHistories]([TransactionCode]) WHERE [TransactionCode] IS NOT NULL;');
+                    END");
             }
 
             // Ensure any user with username starting with 'admin' has ADMIN role in DB

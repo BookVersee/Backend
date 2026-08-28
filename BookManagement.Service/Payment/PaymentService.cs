@@ -287,5 +287,169 @@ public class PaymentService
             throw new InvalidOperationException("Failed to process MoMo refund.");
         }
     }
+
+    /// <summary>
+    /// Chủ động truy vấn trạng thái thanh toán từ MoMo và đồng bộ trạng thái đơn hàng (Vấn đề 6: Query Status & Reconciliation)
+    /// </summary>
+    public async Task<(bool IsPaid, string Message, string? TransactionCode)> SyncPaymentStatusAsync(Guid orderId)
+    {
+        var order = await _db.Orders
+            .Include(o => o.Payments)
+            .FirstOrDefaultAsync(o => o.Id == orderId);
+
+        if (order == null)
+        {
+            throw new KeyNotFoundException("Order not found.");
+        }
+
+        var payment = order.Payments.FirstOrDefault(p => p.Method == PaymentMethod.ONLINE);
+        if (payment == null)
+        {
+            return (order.OrderStatus == OrderStatus.PAID, "Đơn hàng không có thông tin thanh toán Online.", null);
+        }
+
+        if (payment.Status == PaymentStatus.SUCCESS)
+        {
+            return (true, "Đơn hàng đã được thanh toán thành công trước đó.", payment.TransactionCode);
+        }
+
+        var semaphore = _paymentLocks.GetOrAdd(payment.Id, _ => new SemaphoreSlim(1, 1));
+        await semaphore.WaitAsync();
+
+        try
+        {
+            // Thử query theo payment.Id
+            var queryRes = await _momoService.QueryPaymentStatusAsync(payment.Id.ToString());
+
+            if (queryRes != null && queryRes.ResultCode == 0)
+            {
+                using var tx = await _db.Database.BeginTransactionAsync();
+                try
+                {
+                    string transIdStr = queryRes.TransId.ToString();
+                    payment.Status = PaymentStatus.SUCCESS;
+                    payment.TransactionCode = transIdStr;
+                    payment.UpdatedAt = DateTimeOffset.UtcNow;
+
+                    order.OrderStatus = OrderStatus.PAID;
+                    order.UpdatedAt = DateTimeOffset.UtcNow;
+
+                    bool isTransRecorded = await _db.TransactionHistories
+                        .AnyAsync(t => t.TransactionCode == transIdStr && t.ReferenceType == ReferenceType.ORDER_PAYMENT);
+
+                    if (!isTransRecorded)
+                    {
+                        var transaction = new TransactionHistory
+                        {
+                            UserId = order.UserId,
+                            ReferenceType = ReferenceType.ORDER_PAYMENT,
+                            ReferenceId = order.Id,
+                            TransactionType = TransactionType.IN,
+                            Amount = queryRes.Amount > 0 ? (decimal)queryRes.Amount : payment.Amount,
+                            TransactionCode = transIdStr,
+                            Description = $"MoMo Payment (Query Sync) for Order #{order.Id}",
+                            CreatedAt = DateTimeOffset.UtcNow
+                        };
+                        _db.TransactionHistories.Add(transaction);
+                    }
+
+                    await _db.SaveChangesAsync();
+                    await tx.CommitAsync();
+                    return (true, "Đồng bộ giao dịch thành công: Đơn hàng đã được xác nhận thanh toán.", transIdStr);
+                }
+                catch
+                {
+                    await tx.RollbackAsync();
+                    throw;
+                }
+            }
+
+            return (false, queryRes != null ? $"Giao dịch chưa thanh toán hoặc thất bại ({queryRes.Message})." : "Không thể tra cứu thông tin giao dịch từ MoMo.", null);
+        }
+        finally
+        {
+            semaphore.Release();
+        }
+    }
+
+    /// <summary>
+    /// Tự động quét và hủy các đơn hàng chờ thanh toán quá hạn (Hold Expiry / Zombie Orders - Vấn đề 4)
+    /// </summary>
+    public async Task<int> ExpirePendingOrdersAsync(int expiryMinutes = 15)
+    {
+        var cutoffTime = DateTimeOffset.UtcNow.AddMinutes(-expiryMinutes);
+
+        var expiredOrders = await _db.Orders
+            .Include(o => o.OrderDetails)
+                .ThenInclude(od => od.Book)
+            .Include(o => o.Payments)
+            .AsSplitQuery()
+            .Where(o => o.OrderStatus == OrderStatus.PENDING && o.CreatedAt <= cutoffTime)
+            .ToListAsync();
+
+        int cancelledCount = 0;
+
+        foreach (var order in expiredOrders)
+        {
+            var onlinePayment = order.Payments.FirstOrDefault(p => p.Method == PaymentMethod.ONLINE && p.Status == PaymentStatus.PENDING);
+            if (onlinePayment != null)
+            {
+                // Kiểm tra lại với MoMo trước khi quyết định hủy (Vấn đề 6: Tránh hủy nhầm đơn khách đã trả tiền nhưng rớt IPN)
+                try
+                {
+                    var syncResult = await SyncPaymentStatusAsync(order.Id);
+                    if (syncResult.IsPaid)
+                    {
+                        continue; // Khách đã trả tiền, đã sync thành PAID
+                    }
+                }
+                catch
+                {
+                    // Tiếp tục xử lý hủy nếu query lỗi
+                }
+            }
+
+            using var tx = await _db.Database.BeginTransactionAsync();
+            try
+            {
+                order.OrderStatus = OrderStatus.CANCELLED;
+                order.UpdatedAt = DateTimeOffset.UtcNow;
+
+                foreach (var payment in order.Payments.Where(p => p.Status == PaymentStatus.PENDING))
+                {
+                    payment.Status = PaymentStatus.FAILED;
+                    payment.UpdatedAt = DateTimeOffset.UtcNow;
+                }
+
+                // Hoàn lại tồn kho cho từng sản phẩm
+                foreach (var detail in order.OrderDetails)
+                {
+                    await _db.Database.ExecuteSqlInterpolatedAsync(
+                        $"UPDATE Books SET StockQuantity = StockQuantity + {detail.Quantity}, Status = CASE WHEN Status = 'EMPTY' THEN 'ACTIVE' ELSE Status END, UpdatedAt = {DateTimeOffset.UtcNow} WHERE Id = {detail.BookId}");
+                }
+
+                var notification = new BookManagement.Repository.Entities.Notification
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = order.UserId,
+                    Type = NotificationType.ORDER_UPDATE,
+                    ReferenceId = order.Id,
+                    Content = $"Đơn hàng #{order.Id} đã tự động hủy do quá hạn thanh toán ({expiryMinutes} phút). Số lượng sản phẩm đã được hoàn trả về kho.",
+                    CreatedAt = DateTimeOffset.UtcNow
+                };
+                _db.Notifications.Add(notification);
+
+                await _db.SaveChangesAsync();
+                await tx.CommitAsync();
+                cancelledCount++;
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+            }
+        }
+
+        return cancelledCount;
+    }
 }
 

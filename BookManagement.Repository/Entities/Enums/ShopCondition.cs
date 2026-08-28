@@ -4,8 +4,6 @@ namespace BookManagement.Repository.Entities.Enums
     {
         OPEN,
         CLOSED,
-        PENDING,
-        ACTIVE,
-        LOCKED
+        PENDING
     }
 }

@@ -128,11 +128,11 @@ public class AdminService : IAdminService
         {
             if (newStatus == UserStatus.LOCKED)
             {
-                user.Shop.Condition = ShopCondition.LOCKED;
+                user.Shop.Condition = ShopCondition.CLOSED;
             }
-            else if (newStatus == UserStatus.ACTIVE && user.Shop.Condition == ShopCondition.LOCKED)
+            else if (newStatus == UserStatus.ACTIVE && user.Shop.Condition == ShopCondition.CLOSED)
             {
-                user.Shop.Condition = ShopCondition.ACTIVE;
+                user.Shop.Condition = ShopCondition.OPEN;
             }
         }
 
@@ -359,7 +359,7 @@ public class AdminService : IAdminService
         if (shop == null)
             throw new KeyNotFoundException("Shop not found.");
 
-        shop.Condition = ShopCondition.ACTIVE;
+        shop.Condition = ShopCondition.OPEN;
         if (shop.User != null)
         {
             if (shop.User.Role != BookManagement.Repository.Entities.Enums.UserRole.ADMIN)
@@ -390,7 +390,7 @@ public class AdminService : IAdminService
         if (shop == null)
             throw new KeyNotFoundException("Shop not found.");
 
-        shop.Condition = ShopCondition.LOCKED;
+        shop.Condition = ShopCondition.CLOSED;
         if (shop.User != null)
         {
             shop.User.Status = UserStatus.LOCKED;
@@ -406,7 +406,7 @@ public class AdminService : IAdminService
         var validStatuses = new[] { OrderStatus.PAID, OrderStatus.SHIPPING, OrderStatus.DELIVERING, OrderStatus.DELIVERED };
         var totalOrders = await _context.Orders.CountAsync();
         var totalUsers = await _context.Users.CountAsync();
-        var activeShops = await _context.Shops.CountAsync(s => s.Condition == ShopCondition.ACTIVE);
+        var activeShops = await _context.Shops.CountAsync(s => s.Condition == ShopCondition.OPEN);
         var totalRevenue = await _context.Orders
             .Where(o => validStatuses.Contains(o.OrderStatus))
             .SumAsync(o => (decimal?)o.TotalAmount) ?? 0m;

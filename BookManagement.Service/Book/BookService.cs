@@ -20,7 +20,7 @@ namespace BookManagement.Service.Book
         public async Task<PagedResponse<BookResponse>> FindBooksAsync(FilterRequest filter)
         {
             var query = await _bookRepository.GetQueryableAsync();
-            query = query.Where(b => b.Status == BookStatus.ACTIVE && b.Shop != null && (b.Shop.Condition == ShopCondition.ACTIVE || b.Shop.Condition == ShopCondition.OPEN));
+            query = query.Where(b => b.Status == BookStatus.ACTIVE && b.Shop != null && b.Shop.Condition == ShopCondition.OPEN);
 
             if (!string.IsNullOrWhiteSpace(filter.Keyword))
             {

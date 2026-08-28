@@ -9,7 +9,7 @@ namespace BookManagement.Repository.Entities
     {
         public Guid UserId { get; set; }
         public string ShopName { get; set; } = null!;
-        public ShopCondition Condition { get; set; } = ShopCondition.OPEN;
+        public ShopCondition Condition { get; set; } = ShopCondition.PENDING;
         public float Rating { get; set; } = 0;
         public DateTimeOffset CreatedAt { get; set; }
         public DateTimeOffset? UpdatedAt { get; set; }

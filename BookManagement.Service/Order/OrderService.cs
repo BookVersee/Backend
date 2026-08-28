@@ -87,9 +87,9 @@ namespace BookManagement.Service.Order
                     throw new InvalidOperationException($"Sản phẩm '{book.Title}' hiện không còn mở bán.");
                 }
 
-                if (book.Shop == null || book.Shop.Condition == ShopCondition.LOCKED || book.Shop.Condition == ShopCondition.CLOSED)
+                if (book.Shop == null || book.Shop.Condition != ShopCondition.OPEN)
                 {
-                    throw new InvalidOperationException($"Cửa hàng cung cấp cuốn sách '{book.Title}' hiện đang đóng cửa hoặc bị khóa.");
+                    throw new InvalidOperationException($"Cửa hàng cung cấp cuốn sách '{book.Title}' hiện chưa được duyệt hoặc đang đóng cửa.");
                 }
 
                 if (book.StockQuantity < item.Quantity)

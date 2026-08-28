@@ -37,13 +37,13 @@ DECLARE @SO2Id UNIQUEIDENTIFIER = (SELECT Id FROM Users WHERE Username = 'shopow
 IF @SO1Id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Shops WHERE UserId = @SO1Id)
 BEGIN
     INSERT INTO Shops (Id, UserId, ShopName, Condition, Rating, CreatedAt, IsDeleted) VALUES
-    (NEWID(), @SO1Id, N'Nhà Sách Tri Thức Việt', 'ACTIVE', 4.8, SYSDATETIMEOFFSET(), 0);
+    (NEWID(), @SO1Id, N'Nhà Sách Tri Thức Việt', 'OPEN', 4.8, SYSDATETIMEOFFSET(), 0);
 END;
 
 IF @SO2Id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Shops WHERE UserId = @SO2Id)
 BEGIN
     INSERT INTO Shops (Id, UserId, ShopName, Condition, Rating, CreatedAt, IsDeleted) VALUES
-    (NEWID(), @SO2Id, N'Nhà Sách Nhã Nam Demo', 'ACTIVE', 4.9, SYSDATETIMEOFFSET(), 0);
+    (NEWID(), @SO2Id, N'Nhà Sách Nhã Nam Demo', 'OPEN', 4.9, SYSDATETIMEOFFSET(), 0);
 END;
 GO
 

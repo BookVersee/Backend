@@ -43,8 +43,9 @@ builder.Services.AddJwtServices(builder.Configuration);
 builder.Services.AddSwaggerServices();
 builder.Services.AddApplicationServices();
 
-// Email Service & DI Registrations
+// Email & Google Auth Services DI Registrations
 builder.Services.Configure<BookManagement.Service.Models.EmailOptions>(builder.Configuration.GetSection("EmailOptions"));
+builder.Services.Configure<BookManagement.Service.Models.GoogleAuthOptions>(builder.Configuration.GetSection("GoogleAuth"));
 builder.Services.AddScoped<BookManagement.Service.Email.IEmailService, BookManagement.Service.Email.EmailService>();
 
 builder.Services.AddScoped<IUserRepository, UserRepository>();

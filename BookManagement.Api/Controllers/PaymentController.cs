@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using BookManagement.Service.Dtos;
@@ -34,79 +33,63 @@ public class PaymentController : ControllerBase
     }
 
     /// <summary>
-    /// Test Case 6.1: Tạo URL thanh toán VNPAY Sandbox
+    /// Tạo URL thanh toán MoMo Sandbox (Quét mã QR Code / Ví MoMo)
     /// </summary>
-    [HttpPost("CreateVnpayUrl")]
+    [HttpPost("CreatePaymentUrl")]
     [Authorize]
-    public async Task<IActionResult> CreateVnpayUrl([FromBody] CreateVnpayUrlDto dto)
+    public async Task<IActionResult> CreatePaymentUrl([FromBody] CreatePaymentUrlDto dto)
     {
         var userId = GetUserId();
         var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-        var paymentUrl = await _paymentService.CreateVnpayUrlAsync(userId, dto, ipAddress);
-        return Ok(ApiResponse.SuccessResponse(new { payment_url = paymentUrl }));
+        var (paymentUrl, qrCodeUrl, deeplink) = await _paymentService.CreateMomoUrlAsync(userId, dto, ipAddress);
+        return Ok(ApiResponse.SuccessResponse(new 
+        { 
+            payment_url = paymentUrl, 
+            qr_code_url = qrCodeUrl,
+            deeplink = deeplink
+        }));
     }
 
     /// <summary>
-    /// Callback VNPAY: Tự động chuyển hướng trình duyệt về trang Frontend UI (/payment-result)
+    /// Callback MoMo: Nhận kết quả và chuyển hướng trình duyệt sau khi khách thanh toán
     /// </summary>
-    [HttpGet("vnpay/callback")]
-    [HttpGet("callback")]
+    [HttpGet("Callback")]
     [AllowAnonymous]
-    public async Task<IActionResult> VnpayCallback()
+    public IActionResult Callback([FromQuery] string? orderId, [FromQuery] int? resultCode, [FromQuery] string? message)
     {
-        var queryParams = new Dictionary<string, string>();
-        foreach (var key in Request.Query.Keys)
-        {
-            if (!string.IsNullOrEmpty(key))
-            {
-                queryParams[key] = Request.Query[key].ToString();
-            }
-        }
+        var status = (resultCode == 0) ? "SUCCESS" : "FAILED";
+        var msg = message ?? (resultCode == 0 ? "Giao dịch MoMo thành công." : "Giao dịch MoMo thất bại.");
 
-        var (rspCode, message) = await _paymentService.ProcessVnpayIpnAsync(queryParams);
-
-        var frontendReturnUrl = _configuration["VnPay:ReturnUrl"] 
-            ?? _configuration["Vnpay:FrontendReturnUrl"] 
-            ?? "http://localhost:3000/payment-result";
-
-        queryParams.TryGetValue("vnp_TxnRef", out var txnRef);
-        queryParams.TryGetValue("vnp_ResponseCode", out var responseCode);
-
-        var redirectUrl = $"{frontendReturnUrl}?vnp_ResponseCode={responseCode ?? rspCode}&vnp_TxnRef={txnRef}&message={Uri.EscapeDataString(message)}";
-        return Redirect(redirectUrl);
+        return Ok(ApiResponse.SuccessResponse(new 
+        { 
+            order_id = orderId, 
+            result_code = resultCode ?? 0, 
+            status = status,
+            message = msg
+        }, msg));
     }
 
     /// <summary>
-    /// IPN VNPAY: Webhook Server-to-Server ngầm từ VNPAY
+    /// IPN Webhook MoMo: Server-to-Server tự động cập nhật đơn hàng thành PAID
     /// </summary>
-    [HttpGet("vnpay/ipn")]
-    [HttpGet("ipn")]
+    [HttpPost("Ipn")]
     [AllowAnonymous]
-    public async Task<IActionResult> VnpayIpn()
+    public async Task<IActionResult> Ipn([FromBody] MomoIpnRequest req)
     {
-        var queryParams = new Dictionary<string, string>();
-        foreach (var key in Request.Query.Keys)
-        {
-            if (!string.IsNullOrEmpty(key))
-            {
-                queryParams[key] = Request.Query[key].ToString();
-            }
-        }
-
-        var (rspCode, message) = await _paymentService.ProcessVnpayIpnAsync(queryParams);
-        return Ok(new { RspCode = rspCode, Message = message });
+        var (resultCode, message) = await _paymentService.ProcessMomoIpnAsync(req);
+        return Ok(new { resultCode, message });
     }
 
     /// <summary>
-    /// Test Case 6.2: Hoàn tiền đơn hàng qua VNPAY
+    /// Hoàn tiền đơn hàng qua MoMo
     /// </summary>
-    [HttpPost("ProcessVnpayRefund")]
+    [HttpPost("ProcessRefund")]
     [Authorize(Roles = "SHOP")]
-    public async Task<IActionResult> ProcessVnpayRefund([FromBody] VnpayRefundDto dto)
+    public async Task<IActionResult> ProcessRefund([FromBody] ProcessRefundDto dto)
     {
         var userId = GetUserId();
         var profile = await _shopService.GetShopProfileAsync(userId);
-        await _paymentService.ProcessVnpayRefundAsync(profile.ShopId, dto);
-        return Ok(ApiResponse.SuccessResponse(null, "VNPAY refund processed successfully."));
+        await _paymentService.ProcessRefundAsync(profile.ShopId, dto);
+        return Ok(ApiResponse.SuccessResponse(null, "MoMo refund processed successfully."));
     }
 }

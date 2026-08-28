@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using BookManagement.Repository.Entities.Enums;
@@ -448,20 +448,17 @@ public class UpdateDeliveryStatusDto
     public string? FailedReason { get; set; }
 }
 
-// 4. Payment Gateway Integration DTOs
-public class CreateVnpayUrlDto
+// 4. Payment Gateway Integration DTOs (MoMo Gateway)
+public class CreatePaymentUrlDto
 {
     [JsonPropertyName("order_id")]
     public Guid OrderId { get; set; }
 
     [JsonPropertyName("order_info")]
     public string? OrderInfo { get; set; }
-
-    [JsonPropertyName("bank_code")]
-    public string? BankCode { get; set; }
 }
 
-public class VnpayRefundDto
+public class ProcessRefundDto
 {
     [JsonPropertyName("order_id")]
     public Guid OrderId { get; set; }
@@ -475,14 +472,14 @@ public class VnpayRefundDto
     [JsonPropertyName("transaction_no")]
     public string? TransactionNo { get; set; }
 
-    [JsonPropertyName("transaction_date")]
-    public string? TransactionDate { get; set; }
-
     [JsonPropertyName("refund_reason")]
     public string? RefundReason { get; set; }
 }
 
-// 5. GHN Shipping Integration DTOs
+// Backward compatibility aliases
+public class CreateVnpayUrlDto : CreatePaymentUrlDto { }
+public class VnpayRefundDto : ProcessRefundDto { }
+
 public class CreateGhnOrderDto
 {
     [JsonPropertyName("order_id")]
@@ -573,4 +570,5 @@ public class SendMessageDto
     [JsonPropertyName("image_url")]
     public string? ImageUrl { get; set; }
 }
+
 

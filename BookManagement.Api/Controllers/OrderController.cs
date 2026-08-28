@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
@@ -22,9 +22,8 @@ namespace BookManagement.Api.Controllers
             _orderService = orderService;
         }
 
-        /// Chức năng: Lấy danh sách lịch sử đơn hàng. Trả về: Danh sách đơn hàng theo trạng thái.
+        /// Chá»©c nÄƒng: Láº¥y danh sÃ¡ch lá»‹ch sá»­ Ä‘Æ¡n hÃ ng. Tráº£ vá»: Danh sÃ¡ch Ä‘Æ¡n hÃ ng theo tráº¡ng thÃ¡i.
         [HttpGet("GetUserOrders")]
-        [HttpGet("/api/shop/orders")]
         public async Task<IActionResult> GetUserOrders([FromQuery] OrderStatus? status)
         {
             var userId = GetCurrentUserId();
@@ -32,7 +31,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<IEnumerable<OrderResponse>>.SuccessResponse(orders));
         }
 
-        /// Chức năng: Đặt hàng thanh toán từ giỏ hàng. Trả về: Thông tin đơn hàng mới tạo.
+        /// Chá»©c nÄƒng: Äáº·t hÃ ng thanh toÃ¡n tá»« giá» hÃ ng. Tráº£ vá»: ThÃ´ng tin Ä‘Æ¡n hÃ ng má»›i táº¡o.
         [Authorize(Roles = "CUSTOMER")]
         [HttpPost("CreateOrder")]
         public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest request)
@@ -42,7 +41,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<OrderResponse>.SuccessResponse(order, "Order created successfully."));
         }
 
-        /// Chức năng: Xem thông tin chi tiết đơn hàng. Trả về: Dữ liệu chi tiết sản phẩm và thanh toán của đơn hàng.
+        /// Chá»©c nÄƒng: Xem thÃ´ng tin chi tiáº¿t Ä‘Æ¡n hÃ ng. Tráº£ vá»: Dá»¯ liá»‡u chi tiáº¿t sáº£n pháº©m vÃ  thanh toÃ¡n cá»§a Ä‘Æ¡n hÃ ng.
         [HttpGet("GetOrderDetail")]
         public async Task<IActionResult> GetOrderDetail([FromQuery] Guid id)
         {
@@ -51,7 +50,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<OrderResponse>.SuccessResponse(order));
         }
 
-        /// Chức năng: Hủy đơn hàng đang chờ xử lý. Trả về: Thông báo xác nhận hủy đơn thành công.
+        /// Chá»©c nÄƒng: Há»§y Ä‘Æ¡n hÃ ng Ä‘ang chá» xá»­ lÃ½. Tráº£ vá»: ThÃ´ng bÃ¡o xÃ¡c nháº­n há»§y Ä‘Æ¡n thÃ nh cÃ´ng.
         [HttpPost("CancelOrder")]
         public async Task<IActionResult> CancelOrder([FromQuery] Guid id)
         {
@@ -60,7 +59,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<string>.SuccessResponse("Order cancelled successfully."));
         }
 
-        /// Chức năng: Gửi yêu cầu khiếu nại trả hàng / hoàn tiền. Trả về: Dữ liệu đơn yêu cầu trả hàng.
+        /// Chá»©c nÄƒng: Gá»­i yÃªu cáº§u khiáº¿u náº¡i tráº£ hÃ ng / hoÃ n tiá»n. Tráº£ vá»: Dá»¯ liá»‡u Ä‘Æ¡n yÃªu cáº§u tráº£ hÃ ng.
         [HttpPost("SendRequestReturn")]
         public async Task<IActionResult> SendRequestReturn([FromQuery] Guid orderDetailId, [FromBody] CreateReturnRequest input)
         {
@@ -69,13 +68,13 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<ReturnRequestResponse>.SuccessResponse(returnRequest, "Return request submitted."));
         }
 
-        /// Chức năng: Gửi khiếu nại lên Admin khi yêu cầu trả hàng bị Shop từ chối.
+        /// Chá»©c nÄƒng: Gá»­i khiáº¿u náº¡i lÃªn Admin khi yÃªu cáº§u tráº£ hÃ ng bá»‹ Shop tá»« chá»‘i.
         [HttpPost("EscalateDispute")]
         public async Task<IActionResult> EscalateDispute([FromQuery] Guid returnRequestId, [FromQuery] string? reason)
         {
             var userId = GetCurrentUserId();
             await _orderService.EscalateReturnRequestAsync(userId, returnRequestId, reason);
-            return Ok(ApiResponse<string>.SuccessResponse("Khiếu nại của bạn đã được gửi tới Admin xử lý.", "Escalation submitted."));
+            return Ok(ApiResponse<string>.SuccessResponse("Khiáº¿u náº¡i cá»§a báº¡n Ä‘Ã£ Ä‘Æ°á»£c gá»­i tá»›i Admin xá»­ lÃ½.", "Escalation submitted."));
         }
 
         private Guid GetCurrentUserId()
@@ -89,3 +88,4 @@ namespace BookManagement.Api.Controllers
         }
     }
 }
+

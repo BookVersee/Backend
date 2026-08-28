@@ -1,27 +1,28 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
-using BookManagement.Service.Dtos;
 using BookManagement.Repository.Data;
 using BookManagement.Repository.Entities;
-using PaymentEntity = BookManagement.Repository.Entities.Payment;
 using BookManagement.Repository.Entities.Enums;
+using BookManagement.Service.Dtos;
 using Microsoft.EntityFrameworkCore;
+using PaymentEntity = BookManagement.Repository.Entities.Payment;
 
 namespace BookManagement.Service.Payment;
 
 public class PaymentService
 {
     private readonly AppDbContext _db;
-    private readonly VnpayService _vnpayService;
+    private readonly MomoService _momoService;
 
-    public PaymentService(AppDbContext db, VnpayService vnpayService)
+    public PaymentService(AppDbContext db, MomoService momoService)
     {
         _db = db;
-        _vnpayService = vnpayService;
+        _momoService = momoService;
     }
 
-    public async Task<string> CreateVnpayUrlAsync(Guid userId, CreateVnpayUrlDto dto, string ipAddress)
+    public async Task<(string PaymentUrl, string? QrCodeUrl, string? Deeplink)> CreateMomoUrlAsync(Guid userId, CreatePaymentUrlDto dto, string ipAddress)
     {
         var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == dto.OrderId);
         if (order == null)
@@ -29,7 +30,7 @@ public class PaymentService
             throw new KeyNotFoundException("Order not found.");
         }
 
-        // 1. Tái sử dụng bản ghi Payment ONLINE PENDING đã tồn tại (Tránh tạo bản ghi trùng lặp)
+        // Tái sử dụng hoặc tạo mới bản ghi Payment PENDING
         var existingPayment = await _db.Payments
             .FirstOrDefaultAsync(p => p.OrderId == dto.OrderId && p.Method == PaymentMethod.ONLINE && p.Status == PaymentStatus.PENDING);
 
@@ -56,51 +57,39 @@ public class PaymentService
 
         await _db.SaveChangesAsync();
 
-        var paymentUrl = _vnpayService.CreatePaymentUrl(payment.Id, payment.Amount, ipAddress, dto.BankCode);
-        return paymentUrl;
+        string orderInfo = !string.IsNullOrEmpty(dto.OrderInfo) ? dto.OrderInfo : $"Thanh toan don hang {order.Id}";
+        return await _momoService.CreatePaymentAsync(payment.Id, payment.Amount, orderInfo);
     }
 
-    public async Task<(string RspCode, string Message)> ProcessVnpayIpnAsync(IDictionary<string, string> queryParams)
+    public async Task<(int ResultCode, string Message)> ProcessMomoIpnAsync(MomoIpnRequest req)
     {
-        bool isValidSignature = _vnpayService.ValidateSignature(queryParams);
+        bool isValidSignature = _momoService.ValidateIpnSignature(req);
         if (!isValidSignature)
         {
-            return ("97", "Invalid Signature");
+            return (97, "Invalid Signature");
         }
 
-        if (!queryParams.TryGetValue("vnp_TxnRef", out var txnRefStr) || !Guid.TryParse(txnRefStr, out Guid paymentId))
+        string rawId = req.OrderId.Split('_')[0];
+        if (!Guid.TryParse(rawId, out Guid paymentId))
         {
-            return ("01", "Order Not Found");
+            return (1, "Order Not Found");
         }
 
         var payment = await _db.Payments
             .Include(p => p.Order)
-            .FirstOrDefaultAsync(p => p.Id == paymentId);
+            .FirstOrDefaultAsync(p => p.Id == paymentId || p.OrderId == paymentId);
 
         if (payment == null)
         {
-            return ("01", "Order Not Found");
+            return (1, "Payment Record Not Found");
         }
 
-        if (payment.Status == PaymentStatus.SUCCESS || payment.Status == PaymentStatus.FAILED)
+        if (payment.Status == PaymentStatus.SUCCESS)
         {
-            return ("02", "Order already confirmed");
+            return (0, "Payment already confirmed");
         }
 
-        string responseCode = queryParams.TryGetValue("vnp_ResponseCode", out var code) ? code : "99";
-        decimal amount = 0m;
-        if (queryParams.TryGetValue("vnp_Amount", out var amountStr) && decimal.TryParse(amountStr, out var rawAmount))
-        {
-            amount = rawAmount / 100m;
-        }
-
-        // 5. Kiểm tra đối soát số tiền khớp chuẩn VNPAY
-        if (amount > 0 && payment.Amount > 0 && Math.Abs(amount - payment.Amount) > 0.01m)
-        {
-            return ("04", "Invalid Amount");
-        }
-
-        if (responseCode == "00")
+        if (req.ResultCode == 0)
         {
             payment.Status = PaymentStatus.SUCCESS;
             payment.UpdatedAt = DateTimeOffset.UtcNow;
@@ -117,9 +106,9 @@ public class PaymentService
                     ReferenceType = ReferenceType.ORDER_PAYMENT,
                     ReferenceId = order.Id,
                     TransactionType = TransactionType.IN,
-                    Amount = amount > 0 ? amount : payment.Amount,
-                    TransactionCode = queryParams.TryGetValue("vnp_TransactionNo", out var tNo) ? tNo : Guid.NewGuid().ToString("N").Substring(0, 10),
-                    Description = $"VNPAY Payment for Order #{order.Id}",
+                    Amount = req.Amount > 0 ? (decimal)req.Amount : payment.Amount,
+                    TransactionCode = req.TransId.ToString(),
+                    Description = $"MoMo Payment for Order #{order.Id}",
                     CreatedAt = DateTimeOffset.UtcNow
                 };
 
@@ -133,10 +122,10 @@ public class PaymentService
         }
 
         await _db.SaveChangesAsync();
-        return ("00", "Confirm Success");
+        return (0, "Confirm Success");
     }
 
-    public async Task ProcessVnpayRefundAsync(Guid shopId, VnpayRefundDto dto)
+    public async Task ProcessRefundAsync(Guid shopId, ProcessRefundDto dto)
     {
         ReturnRequest? returnReq = null;
 
@@ -178,7 +167,7 @@ public class PaymentService
         decimal refundAmount = dto.Amount ?? ((returnReq?.RefundAmount > 0) ? returnReq.RefundAmount : itemRefundFallback);
         Guid returnReqId = returnReq?.Id ?? Guid.NewGuid();
 
-        bool refundSuccess = await _vnpayService.ProcessRefundAsync(returnReqId, refundAmount, dto.TransactionNo ?? ("REF" + DateTime.UtcNow.Ticks), "SHOP");
+        bool refundSuccess = await _momoService.ProcessRefundAsync(returnReqId, refundAmount, dto.TransactionNo ?? ("MOMO_REF_" + DateTime.UtcNow.Ticks), "SHOP");
 
         if (refundSuccess)
         {
@@ -207,7 +196,7 @@ public class PaymentService
                 ReferenceId = returnReq?.Id ?? order.Id,
                 TransactionType = TransactionType.OUT,
                 Amount = refundAmount,
-                TransactionCode = dto.TransactionNo ?? ("REF" + Guid.NewGuid().ToString("N").Substring(0, 10)),
+                TransactionCode = dto.TransactionNo ?? ("MOMO_REF_" + Guid.NewGuid().ToString("N").Substring(0, 10)),
                 Description = dto.RefundReason ?? $"Refund for Order #{dto.OrderId}",
                 CreatedAt = DateTimeOffset.UtcNow
             };
@@ -217,7 +206,8 @@ public class PaymentService
         }
         else
         {
-            throw new InvalidOperationException("Failed to process VNPAY refund.");
+            throw new InvalidOperationException("Failed to process MoMo refund.");
         }
     }
 }
+

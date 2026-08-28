@@ -1,4 +1,4 @@
-using BookManagement.Service.Book;
+﻿using BookManagement.Service.Book;
 using BookManagement.Service.Chat;
 using BookManagement.Service.Delivery;
 using BookManagement.Service.Feedback;
@@ -25,7 +25,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ShippingService>();
         services.AddScoped<PaymentService>();
         services.AddScoped<ChatService>();
-        services.AddScoped<VnpayService>();
+        services.AddHttpClient<MomoService>();
         services.AddHttpClient<GhnService>();
 
         return services;

@@ -49,6 +49,10 @@ builder.Services.Configure<BookManagement.Service.Models.EmailOptions>(builder.C
 builder.Services.Configure<BookManagement.Service.Models.GoogleAuthOptions>(builder.Configuration.GetSection("GoogleAuth"));
 builder.Services.AddScoped<BookManagement.Service.Email.IEmailService, BookManagement.Service.Email.EmailService>();
 
+// Cloudinary Service & DI Registrations
+builder.Services.Configure<BookManagement.Service.Cloudinary.CloudinarySettings>(builder.Configuration.GetSection("CloudinarySettings"));
+builder.Services.AddScoped<BookManagement.Service.Cloudinary.ICloudinaryService, BookManagement.Service.Cloudinary.CloudinaryService>();
+
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IUserSessionRepository, UserSessionRepository>();
 builder.Services.AddScoped<ITokenService, TokenService>();

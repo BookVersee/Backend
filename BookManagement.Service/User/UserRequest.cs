@@ -8,22 +8,27 @@ namespace BookManagement.Service.User
         public string? Address { get; set; }
     }
 
-    public class ForgotPasswordRequest
+    public class SendOtpRequest
     {
         public string Email { get; set; } = null!;
     }
 
-    public class ResetPasswordRequest
+    public class VerifyPasswordOtpRequest
     {
         public string Email { get; set; } = null!;
-        public string ResetToken { get; set; } = null!;
+        public string Otp { get; set; } = null!;
+    }
+
+    public class ResetNewPasswordRequest
+    {
+        public string Email { get; set; } = null!;
         public string NewPassword { get; set; } = null!;
     }
 
-    public class VerifyEmailRequest
+    public class ChangePasswordWithOldPasswordRequest
     {
-        public string Email { get; set; } = null!;
-        public string VerificationCode { get; set; } = null!;
+        public string OldPassword { get; set; } = null!;
+        public string NewPassword { get; set; } = null!;
     }
 
     public class RegisterShopRequest

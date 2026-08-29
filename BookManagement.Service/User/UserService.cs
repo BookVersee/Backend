@@ -59,14 +59,15 @@ namespace BookManagement.Service.User
             return MapToResponse(user);
         }
 
-        public async Task ForgotPasswordAsync(ForgotPasswordRequest request)
+        // TH1 - Bước 1: Gửi mã OTP khôi phục / đổi mật khẩu qua Gmail
+        public async Task SendPasswordOtpAsync(SendOtpRequest request)
         {
             var user = await _userRepository.GetByUsernameOrEmailAsync(request.Email);
-            if (user == null) throw new KeyNotFoundException("User email not found.");
+            if (user == null) throw new KeyNotFoundException("Không tìm thấy tài khoản với Email này.");
 
             var otp = Random.Shared.Next(100000, 999999).ToString();
             
-            // Store OTP in RAM memory cache for 15 minutes (No DB columns required)
+            // Lưu OTP vào RAM Memory Cache trong 15 phút
             var cacheKey = $"reset_otp_{user.Email.ToLower()}";
             _cache.Set(cacheKey, otp, TimeSpan.FromMinutes(15));
 
@@ -74,52 +75,65 @@ namespace BookManagement.Service.User
                 <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;'>
                     <h2 style='color: #4F46E5; text-align: center;'>Hệ Thống BookManagement</h2>
                     <p>Xin chào <strong>{user.FullName ?? user.Username}</strong>,</p>
-                    <p>Bạn đã gửi yêu cầu đặt lại mật khẩu tài khoản. Mã OTP xác thực của bạn là:</p>
+                    <p>Bạn đã yêu cầu gửi mã OTP để đổi / khôi phục mật khẩu. Mã OTP của bạn là:</p>
                     <div style='background-color: #F3F4F6; text-align: center; padding: 15px; font-size: 24px; font-weight: bold; letter-spacing: 5px; color: #111827; border-radius: 6px; margin: 20px 0;'>
                         {otp}
                     </div>
                     <p style='color: #6B7280; font-size: 14px;'>Mã OTP có hiệu lực trong <strong>15 phút</strong>. Vui lòng không chia sẻ mã này cho bất kỳ ai.</p>
                 </div>";
 
-            await _emailService.SendEmailAsync(user.Email, "Mã OTP Đặt Lại Mật Khẩu - BookManagement", htmlBody);
+            await _emailService.SendEmailAsync(user.Email, "Mã OTP Xác Thực Đổi Mật Khẩu - BookManagement", htmlBody);
         }
 
-        public async Task ResetPasswordAsync(ResetPasswordRequest request)
+        // TH1 - Bước 2: Xác thực mã OTP (Nếu đúng mới cho phép sang bước nhập mật khẩu mới)
+        public async Task VerifyPasswordOtpAsync(VerifyPasswordOtpRequest request)
         {
             var user = await _userRepository.GetByUsernameOrEmailAsync(request.Email);
-            if (user == null) throw new KeyNotFoundException("User not found.");
+            if (user == null) throw new KeyNotFoundException("Không tìm thấy tài khoản với Email này.");
 
             var cacheKey = $"reset_otp_{user.Email.ToLower()}";
-            if (!_cache.TryGetValue(cacheKey, out string? savedOtp) || savedOtp != request.ResetToken)
+            if (!_cache.TryGetValue(cacheKey, out string? savedOtp) || savedOtp != request.Otp)
             {
-                throw new InvalidOperationException("Mã OTP khôi phục mật khẩu không chính xác hoặc đã hết hạn.");
+                throw new InvalidOperationException("Mã OTP không chính xác hoặc đã hết hạn.");
+            }
+
+            // Đánh dấu xác thực OTP thành công trong RAM Cache (10 phút) để dùng ở Bước 3
+            _cache.Set($"verified_reset_{user.Email.ToLower()}", true, TimeSpan.FromMinutes(10));
+            _cache.Remove(cacheKey); // Xóa OTP cũ sau khi đã xác thực thành công
+        }
+
+        // TH1 - Bước 3: Đặt mật khẩu mới (Chỉ cần Email và Mật khẩu mới, không cần nhập lại OTP)
+        public async Task ResetNewPasswordAsync(ResetNewPasswordRequest request)
+        {
+            var user = await _userRepository.GetByUsernameOrEmailAsync(request.Email);
+            if (user == null) throw new KeyNotFoundException("Không tìm thấy tài khoản.");
+
+            var verifiedCacheKey = $"verified_reset_{user.Email.ToLower()}";
+
+            if (!_cache.TryGetValue(verifiedCacheKey, out bool isVerified) || !isVerified)
+            {
+                throw new InvalidOperationException("Vui lòng xác thực mã OTP trước khi nhập mật khẩu mới.");
             }
 
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
-            _cache.Remove(cacheKey);
+            _cache.Remove(verifiedCacheKey); // Xóa trạng thái xác thực sau khi đổi mật khẩu thành công
             await _userRepository.UpdateAsync(user);
         }
 
-        public async Task VerifyEmailAsync(VerifyEmailRequest request)
+        // TH2: Thay đổi mật khẩu khi nhớ Mật khẩu cũ (Yêu cầu đăng nhập)
+        public async Task ChangePasswordAsync(Guid userId, ChangePasswordWithOldPasswordRequest request)
         {
-            var user = await _userRepository.GetByUsernameOrEmailAsync(request.Email);
-            if (user == null) throw new KeyNotFoundException("User not found.");
+            var user = await _userRepository.GetByIdAsync(userId);
+            if (user == null) throw new KeyNotFoundException("Tài khoản không tồn tại.");
 
-            var cacheKey = $"verify_otp_{user.Email.ToLower()}";
-            if (!_cache.TryGetValue(cacheKey, out string? savedOtp) || savedOtp != request.VerificationCode)
+            // Kiểm tra mật khẩu cũ
+            if (!BCrypt.Net.BCrypt.Verify(request.OldPassword, user.PasswordHash))
             {
-                throw new InvalidOperationException("Mã OTP xác thực email không chính xác hoặc đã hết hạn.");
+                throw new InvalidOperationException("Mật khẩu cũ không chính xác.");
             }
-            _cache.Remove(cacheKey);
 
-            var htmlBody = $@"
-                <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;'>
-                    <h2 style='color: #10B981;'>Xác Thực Email Thành Công!</h2>
-                    <p>Xin chào <strong>{user.FullName ?? user.Username}</strong>,</p>
-                    <p>Địa chỉ email <strong>{user.Email}</strong> của bạn đã được xác minh thành công trên hệ thống BookManagement.</p>
-                </div>";
-
-            await _emailService.SendEmailAsync(user.Email, "Xác Minh Email Thành Công - BookManagement", htmlBody);
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+            await _userRepository.UpdateAsync(user);
         }
 
         public async Task<IEnumerable<TransactionResponse>> GetUserTransactionsAsync(Guid userId)

@@ -85,53 +85,5 @@ namespace BookManagement.Api.Controllers
             var response = await _sessionService.ValidateAndRefreshTokenAsync(request.RefreshToken);
             return Ok(ApiResponse<TokenResponse>.SuccessResponse(response, "Token refreshed successfully."));
         }
-
-        /// Chức năng: Đăng xuất và hủy phiên làm việc hiện tại. Trả về: Thông báo đăng xuất thành công.
-        [HttpPost("Logout")]
-        public async Task<IActionResult> Logout([FromBody] RevokeTokenRequest? request)
-        {
-            if (!string.IsNullOrEmpty(request?.RefreshToken))
-            {
-                await _sessionService.RevokeSessionAsync(request.RefreshToken);
-            }
-
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (Guid.TryParse(userIdClaim, out var userId))
-            {
-                await _sessionService.RevokeAllUserSessionsAsync(userId);
-            }
-
-            return Ok(ApiResponse<string>.SuccessResponse("Logged out successfully.", "Session revoked."));
-        }
-
-        /// Chức năng: Đăng xuất khỏi tất cả các thiết bị. Trả về: Thông báo thu hồi toàn bộ phiên đăng nhập.
-        [Authorize]
-        [HttpPost("RevokeAllSessions")]
-        public async Task<IActionResult> RevokeAllSessions()
-        {
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
-            {
-                return Unauthorized(ApiResponse<string>.FailureResponse("Invalid token claims."));
-            }
-
-            await _sessionService.RevokeAllUserSessionsAsync(userId);
-            return Ok(ApiResponse<string>.SuccessResponse("All user sessions revoked successfully."));
-        }
-
-        /// Chức năng: Xem danh sách các phiên đăng nhập đang hoạt động. Trả về: Danh sách phiên làm việc kích hoạt.
-        [Authorize]
-        [HttpGet("GetActiveSessions")]
-        public async Task<IActionResult> GetActiveSessions()
-        {
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
-            {
-                return Unauthorized(ApiResponse<string>.FailureResponse("Invalid token claims."));
-            }
-
-            var sessions = await _sessionService.GetUserSessionsAsync(userId);
-            return Ok(ApiResponse<IEnumerable<UserSessionResponse>>.SuccessResponse(sessions, "Active sessions retrieved."));
-        }
     }
 }

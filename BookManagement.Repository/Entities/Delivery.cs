@@ -4,7 +4,7 @@ using BookManagement.Repository.Entities.Enums;
 
 namespace BookManagement.Repository.Entities
 {
-    public class Delivery : BaseEntity<Guid>, IAuditableEntity
+    public class Delivery : BaseEntity<Guid>
     {
         public Guid OrderId { get; set; }
         public string? TrackingNumber { get; set; }
@@ -13,8 +13,6 @@ namespace BookManagement.Repository.Entities
         public DeliveryStatus Status { get; set; } = DeliveryStatus.PENDING;
         public DateTime? EstimatedDelivery { get; set; }
         public DateTime? ActualDeliveredAt { get; set; }
-        public DateTimeOffset CreatedAt { get; set; }
-        public DateTimeOffset? UpdatedAt { get; set; }
 
         // Navigation Properties
         public Order Order { get; set; } = null!;

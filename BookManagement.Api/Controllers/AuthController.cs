@@ -43,6 +43,33 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<TokenResponse>.SuccessResponse(response, "Login successful."));
         }
 
+        /// Chức năng: Đăng nhập nhanh bằng Google (Google Cloud Client ID). Trả về: Chuỗi JWT Access Token và Refresh Token.
+        [HttpPost("GoogleLogin")]
+        public async Task<IActionResult> GoogleLogin([FromBody] GoogleLoginRequest request)
+        {
+            var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
+            var deviceInfo = Request.Headers["User-Agent"].ToString();
+
+            var response = await _sessionService.GoogleLoginAsync(request, ipAddress, deviceInfo);
+            return Ok(ApiResponse<TokenResponse>.SuccessResponse(response, "Google authentication successful."));
+        }
+
+        /// Chức năng: Yêu cầu gửi mã OTP Đặt lại mật khẩu về Email. Trả về: Thông báo đã gửi mã OTP.
+        [HttpPost("ForgotPassword")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
+        {
+            await _sessionService.SendPasswordResetOtpAsync(request.Email);
+            return Ok(ApiResponse<string>.SuccessResponse("Mã OTP đặt lại mật khẩu đã được gửi về Email của bạn. Vui lòng kiểm tra hộp thư."));
+        }
+
+        /// Chức năng: Xác thực mã OTP và đặt lại mật khẩu mới. Trả về: Thông báo đổi mật khẩu thành công.
+        [HttpPost("ResetPassword")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordWithOtpRequest request)
+        {
+            await _sessionService.ResetPasswordWithOtpAsync(request);
+            return Ok(ApiResponse<string>.SuccessResponse("Đặt lại mật khẩu mới thành công. Vui lòng sử dụng mật khẩu mới để đăng nhập."));
+        }
+
         /// Chức năng: Cấp mới Access Token bằng Refresh Token. Trả về: Chuỗi Access Token mới.
         [HttpPost("RefreshToken")]
         public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)

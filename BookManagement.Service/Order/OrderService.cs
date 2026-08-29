@@ -91,9 +91,9 @@ namespace BookManagement.Service.Order
                         throw new InvalidOperationException($"Sản phẩm '{book.Title}' hiện không còn mở bán.");
                     }
 
-                    if (book.Shop == null || book.Shop.Condition == ShopCondition.LOCKED || book.Shop.Condition == ShopCondition.CLOSED)
+                    if (book.Shop == null || book.Shop.Condition != ShopCondition.OPEN)
                     {
-                        throw new InvalidOperationException($"Cửa hàng cung cấp cuốn sách '{book.Title}' hiện đang đóng cửa hoặc bị khóa.");
+                        throw new InvalidOperationException($"Cửa hàng cung cấp cuốn sách '{book.Title}' hiện chưa được duyệt hoặc đang đóng cửa.");
                     }
 
                     // Chống bán vượt tồn kho (Overselling Race Condition): Thực hiện trừ kho nguyên tử trên Database
@@ -230,7 +230,7 @@ namespace BookManagement.Service.Order
                 throw new UnauthorizedAccessException("Bạn không có quyền gửi yêu cầu trả hàng cho đơn này.");
             }
 
-            if (orderDetail.Order.OrderStatus != OrderStatus.DELIVERED && orderDetail.Order.OrderStatus != OrderStatus.COMPLETED)
+            if (orderDetail.Order.OrderStatus != OrderStatus.DELIVERED)
             {
                 throw new InvalidOperationException("Chỉ có thể gửi yêu cầu trả hàng/hoàn tiền sau khi đơn hàng đã được giao thành công.");
             }

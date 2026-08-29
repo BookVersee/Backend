@@ -20,7 +20,7 @@ namespace BookManagement.Service.Book
         public async Task<PagedResponse<BookResponse>> FindBooksAsync(FilterRequest filter)
         {
             var query = await _bookRepository.GetQueryableAsync();
-            query = query.Where(b => b.Status == BookStatus.ACTIVE && b.Shop != null && (b.Shop.Condition == ShopCondition.ACTIVE || b.Shop.Condition == ShopCondition.OPEN));
+            query = query.Where(b => b.Status == BookStatus.ACTIVE && b.Shop != null && b.Shop.Condition == ShopCondition.OPEN);
 
             if (!string.IsNullOrWhiteSpace(filter.Keyword))
             {
@@ -50,8 +50,8 @@ namespace BookManagement.Service.Book
                 "price_asc" => query.OrderBy(b => b.Price),
                 "price_desc" => query.OrderByDescending(b => b.Price),
                 "rating" => query.OrderByDescending(b => b.Rating),
-                "newest" => query.OrderByDescending(b => b.CreatedAt),
-                _ => query.OrderByDescending(b => b.CreatedAt)
+                "newest" => query.OrderBy(b => b.Title),
+                _ => query.OrderBy(b => b.Title)
             };
 
             var totalCount = await query.CountAsync();
@@ -116,8 +116,7 @@ namespace BookManagement.Service.Book
             ImageUrl = b.ImageUrl,
             PublishedYear = b.PublishedYear,
             Status = b.Status,
-            Rating = b.Rating,
-            CreatedAt = b.CreatedAt
+            Rating = b.Rating
         };
     }
 }

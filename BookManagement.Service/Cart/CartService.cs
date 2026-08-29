@@ -36,9 +36,9 @@ namespace BookManagement.Service.Cart
                 throw new InvalidOperationException($"Sản phẩm '{book.Title}' hiện không còn mở bán.");
             }
 
-            if (book.Shop != null && (book.Shop.Condition == ShopCondition.LOCKED || book.Shop.Condition == ShopCondition.CLOSED))
+            if (book.Shop == null || book.Shop.Condition != ShopCondition.OPEN)
             {
-                throw new InvalidOperationException($"Cửa hàng cung cấp cuốn sách '{book.Title}' hiện đang tạm đóng cửa hoặc bị khóa.");
+                throw new InvalidOperationException($"Cửa hàng cung cấp cuốn sách '{book.Title}' hiện chưa được duyệt hoặc đang tạm đóng cửa.");
             }
 
             var existing = cart.CartBookDetails.FirstOrDefault(cbd => cbd.BookId == request.BookId);

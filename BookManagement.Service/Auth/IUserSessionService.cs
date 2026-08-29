@@ -15,6 +15,7 @@ namespace BookManagement.Service.Auth
         Task<TokenResponse> ValidateAndRefreshTokenAsync(string refreshToken);
         Task<TokenResponse> GoogleLoginAsync(GoogleLoginRequest request, string? ipAddress = null, string? deviceInfo = null);
         Task SendPasswordResetOtpAsync(string email);
+        Task<bool> VerifyResetOtpAsync(VerifyResetOtpRequest request);
         Task ResetPasswordWithOtpAsync(ResetPasswordWithOtpRequest request);
         Task<IEnumerable<UserSessionResponse>> GetUserSessionsAsync(Guid userId);
     }

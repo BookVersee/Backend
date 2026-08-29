@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -298,6 +298,28 @@ namespace BookManagement.Service.Auth
                 </div>";
 
             await _emailService.SendEmailAsync(user.Email, "Mã OTP Đặt Lại Mật Khẩu - BookManagement", htmlBody);
+        }
+
+        public async Task<bool> VerifyResetOtpAsync(VerifyResetOtpRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.OtpCode))
+            {
+                throw new ArgumentException("Email và mã OTP không được để trống.");
+            }
+
+            var user = await _userRepository.GetByUsernameOrEmailAsync(request.Email.Trim());
+            if (user == null)
+            {
+                throw new KeyNotFoundException("Tài khoản với Email này không tồn tại.");
+            }
+
+            var cacheKey = $"reset_otp_{user.Email.ToLower()}";
+            if (!_memoryCache.TryGetValue(cacheKey, out string? cachedOtp) || cachedOtp != request.OtpCode.Trim())
+            {
+                throw new InvalidOperationException("Mã OTP không chính xác hoặc đã hết hạn (hiệu lực 5 phút).");
+            }
+
+            return true;
         }
 
         public async Task ResetPasswordWithOtpAsync(ResetPasswordWithOtpRequest request)

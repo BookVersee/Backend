@@ -62,6 +62,14 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<string>.SuccessResponse("Mã OTP đặt lại mật khẩu đã được gửi về Email của bạn. Vui lòng kiểm tra hộp thư."));
         }
 
+        /// Chức năng: Kiểm tra mã OTP hợp lệ trước khi đổi mật khẩu. Trả về: Thông báo OTP hợp lệ.
+        [HttpPost("VerifyOtp")]
+        public async Task<IActionResult> VerifyOtp([FromBody] VerifyResetOtpRequest request)
+        {
+            await _sessionService.VerifyResetOtpAsync(request);
+            return Ok(ApiResponse<string>.SuccessResponse("Mã OTP xác thực thành công. Vui lòng nhập mật khẩu mới."));
+        }
+
         /// Chức năng: Xác thực mã OTP và đặt lại mật khẩu mới. Trả về: Thông báo đổi mật khẩu thành công.
         [HttpPost("ResetPassword")]
         public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordWithOtpRequest request)

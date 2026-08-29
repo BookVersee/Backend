@@ -33,7 +33,7 @@ public class ShippingController : ControllerBase
     /// Test Case 5.1: Tạo đơn vận chuyển qua GHN
     /// </summary>
     [HttpPost("CreateGhnOrder")]
-    [Authorize(Roles = "SHOP,ADMIN")]
+    [Authorize(Roles = "SHOP,ADMIN,SUPER_ADMIN")]
     public async Task<IActionResult> CreateGhnOrder([FromBody] CreateGhnOrderDto dto)
     {
         var userId = GetUserId();

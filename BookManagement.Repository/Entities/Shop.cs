@@ -11,6 +11,8 @@ namespace BookManagement.Repository.Entities
         public string ShopName { get; set; } = null!;
         public ShopCondition Condition { get; set; } = ShopCondition.PENDING;
         public float Rating { get; set; } = 0;
+        public int ViolationCount { get; set; } = 0;
+        public DateTimeOffset? LockedUntil { get; set; }
         public DateTimeOffset CreatedAt { get; set; }
         public DateTimeOffset? UpdatedAt { get; set; }
 

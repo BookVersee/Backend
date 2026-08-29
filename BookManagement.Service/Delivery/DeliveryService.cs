@@ -152,6 +152,18 @@ public class DeliveryService
 
                     _db.TransactionHistories.Add(codTransaction);
                 }
+
+                // Thông báo ORDER_UPDATE: Giao hàng thành công
+                _db.Notifications.Add(new BookManagement.Repository.Entities.Notification
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = order.UserId,
+                    Type = NotificationType.ORDER_UPDATE,
+                    ReferenceId = order.Id,
+                    Content = $"Đơn hàng #{order.Id} đã được giao thành công.",
+                    IsRead = false,
+                    CreatedAt = DateTimeOffset.UtcNow
+                });
             }
             else if (targetStatus == DeliveryStatus.RETURNED)
             {
@@ -178,11 +190,35 @@ public class DeliveryService
                             }
                         }
                     }
+
+                    // Thông báo ORDER_UPDATE: Giao thất bại bị trả hàng
+                    _db.Notifications.Add(new BookManagement.Repository.Entities.Notification
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = order.UserId,
+                        Type = NotificationType.ORDER_UPDATE,
+                        ReferenceId = order.Id,
+                        Content = $"Đơn hàng #{order.Id} giao không thành công và đã được hoàn trả về Cửa hàng.",
+                        IsRead = false,
+                        CreatedAt = DateTimeOffset.UtcNow
+                    });
                 }
             }
             else if (targetStatus == DeliveryStatus.TRANSIT)
             {
                 order.OrderStatus = OrderStatus.DELIVERING;
+
+                // Thông báo ORDER_UPDATE: Đơn hàng đang được giao
+                _db.Notifications.Add(new BookManagement.Repository.Entities.Notification
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = order.UserId,
+                    Type = NotificationType.ORDER_UPDATE,
+                    ReferenceId = order.Id,
+                    Content = $"Đơn hàng #{order.Id} đang trên đường giao tới bạn bởi {delivery.CarrierName ?? "Đơn vị vận chuyển"} (Mã vận đơn: {delivery.TrackingNumber ?? "N/A"}).",
+                    IsRead = false,
+                    CreatedAt = DateTimeOffset.UtcNow
+                });
             }
 
             order.UpdatedAt = DateTimeOffset.UtcNow;

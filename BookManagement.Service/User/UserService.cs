@@ -179,15 +179,18 @@ namespace BookManagement.Service.User
                 Id = Guid.NewGuid(),
                 UserId = userId,
                 ShopName = request.ShopName.Trim(),
-                Condition = BookManagement.Repository.Entities.Enums.ShopCondition.PENDING,
+                Condition = BookManagement.Repository.Entities.Enums.ShopCondition.OPEN,
                 Rating = 0
             };
+
+            user.Role = BookManagement.Repository.Entities.Enums.UserRole.SHOP;
+            user.UpdatedAt = DateTimeOffset.UtcNow;
 
             await _context.Shops.AddAsync(shop);
             await _context.SaveChangesAsync();
 
-            // Auto-notify Admin accounts about pending shop application
-            var adminUsers = await _context.Users.Where(u => u.Role == BookManagement.Repository.Entities.Enums.UserRole.ADMIN).ToListAsync();
+            // Auto-notify Admin & Super Admin accounts about new shop activation
+            var adminUsers = await _context.Users.Where(u => u.Role == BookManagement.Repository.Entities.Enums.UserRole.ADMIN || u.Role == BookManagement.Repository.Entities.Enums.UserRole.SUPER_ADMIN).ToListAsync();
             foreach (var admin in adminUsers)
             {
                 await _notificationRepository.CreateNotificationAsync(new BookManagement.Repository.Entities.Notification
@@ -195,11 +198,23 @@ namespace BookManagement.Service.User
                     Id = Guid.NewGuid(),
                     UserId = admin.Id,
                     Type = BookManagement.Repository.Entities.Enums.NotificationType.SYSTEM,
-                    Content = $"Khách hàng {user.FullName ?? user.Username} vừa nộp đơn mở Cửa hàng '{shop.ShopName}'. Vui lòng phê duyệt!",
+                    Content = $"Khách hàng {user.FullName ?? user.Username} đã đăng ký mở Cửa hàng '{shop.ShopName}' thành công (Trạng thái: Hoạt động).",
                     IsRead = false,
                     CreatedAt = DateTimeOffset.UtcNow
                 });
             }
+
+            // Auto-notify New Shop Owner
+            await _notificationRepository.CreateNotificationAsync(new BookManagement.Repository.Entities.Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                Type = BookManagement.Repository.Entities.Enums.NotificationType.SYSTEM,
+                ReferenceId = shop.Id,
+                Content = $"Chúc mừng! Cửa hàng '{shop.ShopName}' của bạn đã được đăng ký thành công và gian hàng đã đi vào hoạt động. Bạn có thể bắt đầu đăng bán sách ngay!",
+                IsRead = false,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
 
             return new BookManagement.Service.Admin.ShopResponse
             {

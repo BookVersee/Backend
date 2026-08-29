@@ -23,7 +23,7 @@ public class DeliveryController : ControllerBase
     /// Test Case 4.1: Tạo vận đơn giao hàng mới
     /// </summary>
     [HttpPost("CreateDelivery")]
-    [Authorize(Roles = "SHOP,ADMIN,DELIVER,SHIPPER")]
+    [Authorize(Roles = "SHOP,ADMIN,SUPER_ADMIN,DELIVER,SHIPPER")]
     public async Task<IActionResult> CreateDelivery([FromBody] CreateDeliveryDto dto)
     {
         var result = await _deliveryService.CreateDeliveryAsync(dto);
@@ -34,7 +34,7 @@ public class DeliveryController : ControllerBase
     /// Test Case 4.2: Shipper xem danh sách đơn cần giao
     /// </summary>
     [HttpGet("GetDeliveryOrders")]
-    [Authorize(Roles = "SHIPPER,DELIVER,ADMIN,SHOP")]
+    [Authorize(Roles = "SHIPPER,DELIVER,ADMIN,SUPER_ADMIN,SHOP")]
     public async Task<IActionResult> GetDeliveryOrders([FromQuery] string? status)
     {
         var result = await _deliveryService.GetDeliveryOrdersAsync(status);
@@ -45,7 +45,7 @@ public class DeliveryController : ControllerBase
     /// Test Case 4.3: Shipper cập nhật giao hàng thành công
     /// </summary>
     [HttpPost("UpdateDeliveryStatus")]
-    [Authorize(Roles = "SHIPPER,DELIVER,ADMIN,SHOP")]
+    [Authorize(Roles = "SHIPPER,DELIVER,ADMIN,SUPER_ADMIN,SHOP")]
     public async Task<IActionResult> UpdateDeliveryStatus(
         [FromQuery] Guid deliveryId,
         [FromBody] UpdateDeliveryStatusDto dto)

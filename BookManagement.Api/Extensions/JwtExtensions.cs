@@ -71,8 +71,8 @@ public static class JwtExtensions
 
         services.AddAuthorization(options =>
         {
-            options.AddPolicy(AdminPolicy, policy => policy.RequireRole("ADMIN", "Admin"));
-            options.AddPolicy(CustomerPolicy, policy => policy.RequireRole("CUSTOMER", "Customer"));
+            options.AddPolicy(AdminPolicy, policy => policy.RequireRole("ADMIN", "Admin", "SUPER_ADMIN", "SuperAdmin"));
+            options.AddPolicy(CustomerPolicy, policy => policy.RequireRole("CUSTOMER", "Customer", "SHOP", "Shop"));
             options.AddPolicy(StaffPolicy, policy => policy.RequireRole("STAFF", "Staff"));
         });
     }

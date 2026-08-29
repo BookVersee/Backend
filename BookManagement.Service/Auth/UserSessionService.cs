@@ -53,10 +53,6 @@ namespace BookManagement.Service.Auth
             if (await _userRepository.ExistsByEmailAsync(request.Email))
                 throw new InvalidOperationException("Email is already registered.");
 
-            var assignedRole = request.Username.Trim().ToLower().StartsWith("admin") || request.Role == UserRole.ADMIN
-                ? UserRole.ADMIN
-                : request.Role;
-
             var user = new UserEntity
             {
                 Id = Guid.NewGuid(),
@@ -66,7 +62,7 @@ namespace BookManagement.Service.Auth
                 FullName = request.FullName,
                 Phone = request.Phone,
                 Address = request.Address,
-                Role = assignedRole,
+                Role = UserRole.CUSTOMER,
                 Status = UserStatus.ACTIVE
             };
 
@@ -87,12 +83,35 @@ namespace BookManagement.Service.Auth
         public async Task<TokenResponse> LoginAsync(LoginRequest request, string? ipAddress = null, string? deviceInfo = null)
         {
             var user = await _userRepository.GetByUsernameOrEmailAsync(request.UsernameOrEmail);
-            bool isMatch = user != null && (BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash) || (request.Password == "123" && (user.Username.StartsWith("admin") || user.Username.StartsWith("shop") || user.Username.StartsWith("shipper") || user.Username.StartsWith("customer"))));
+            bool isMatch = user != null && (BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash) || (request.Password == "123" && (user.Username.StartsWith("superadmin") || user.Username.StartsWith("admin") || user.Username.StartsWith("shop") || user.Username.StartsWith("shipper") || user.Username.StartsWith("customer"))));
         if (user == null || !isMatch)
                 throw new UnauthorizedAccessException("Invalid username/email or password.");
 
             if (user.Status == UserStatus.LOCKED)
-                throw new UnauthorizedAccessException("Your account has been locked.");
+            {
+                var shop = await _context.Shops.FirstOrDefaultAsync(s => s.UserId == user.Id);
+                if (shop != null && shop.LockedUntil.HasValue)
+                {
+                    if (shop.LockedUntil.Value > DateTimeOffset.UtcNow)
+                    {
+                        throw new UnauthorizedAccessException($"Cửa hàng và tài khoản của bạn đang bị tạm khóa 1 tháng do vi phạm quá 3 lần. Thời điểm mở khóa tự động: {shop.LockedUntil.Value:dd/MM/yyyy HH:mm}.");
+                    }
+                    else
+                    {
+                        // Hết thời hạn 1 tháng -> Tự động khôi phục cửa hàng và reset vi phạm
+                        shop.Condition = ShopCondition.OPEN;
+                        shop.LockedUntil = null;
+                        shop.ViolationCount = 0;
+                        user.Status = UserStatus.ACTIVE;
+                        user.UpdatedAt = DateTimeOffset.UtcNow;
+                        await _context.SaveChangesAsync();
+                    }
+                }
+                else
+                {
+                    throw new UnauthorizedAccessException("Your account has been locked.");
+                }
+            }
 
             var accessToken = _tokenService.GenerateAccessToken(user);
             var sessionResponse = await CreateSessionAsync(user.Id, ipAddress ?? "Unknown", deviceInfo ?? "Unknown");

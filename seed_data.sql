@@ -14,6 +14,12 @@ END;
 GO
 
 -- 2. Thêm Người dùng mẫu (Users) - Mật khẩu chung: Password123!
+IF NOT EXISTS (SELECT 1 FROM Users WHERE Username = 'superadmin')
+BEGIN
+    INSERT INTO Users (Id, Username, Email, PasswordHash, FullName, Phone, Address, Role, Status, CreatedAt, IsDeleted) VALUES
+    (NEWID(), 'superadmin', 'superadmin@bookmanagement.com', '$2a$11$EjTnc3zQKJPdkXfPYn0vN.nboiLN2KE8ZzSvCUblR2WVhWQamN.pu', N'Super Admin Hệ Thống', '0999999999', N'Hà Nội, Việt Nam', 'SUPER_ADMIN', 'ACTIVE', SYSDATETIMEOFFSET(), 0);
+END;
+
 IF NOT EXISTS (SELECT 1 FROM Users WHERE Username = 'admin')
 BEGIN
     INSERT INTO Users (Id, Username, Email, PasswordHash, FullName, Phone, Address, Role, Status, CreatedAt, IsDeleted) VALUES

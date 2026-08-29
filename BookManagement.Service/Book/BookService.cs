@@ -116,7 +116,9 @@ namespace BookManagement.Service.Book
             ImageUrl = b.ImageUrl,
             PublishedYear = b.PublishedYear,
             Status = b.Status,
-            Rating = b.Rating
+            Rating = b.Rating,
+            CreatedAt = b.CreatedAt,
+            UpdatedAt = b.UpdatedAt
         };
     }
 }

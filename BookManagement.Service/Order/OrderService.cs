@@ -73,103 +73,107 @@ namespace BookManagement.Service.Order
                 throw new InvalidOperationException("Không tìm thấy sản phẩm hợp lệ nào được chọn trong giỏ hàng.");
             }
 
-            using var tx = await _context.Database.BeginTransactionAsync();
-            try
+            var strategy = _context.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
             {
-                var now = DateTimeOffset.UtcNow;
-                // Validate status, shop condition, and deduct stock atomically
-                foreach (var item in selectedCartList)
+                using var tx = await _context.Database.BeginTransactionAsync();
+                try
                 {
-                    var book = item.Book;
-                    if (book == null)
+                    var now = DateTimeOffset.UtcNow;
+                    // Validate status, shop condition, and deduct stock atomically
+                    foreach (var item in selectedCartList)
                     {
-                        throw new InvalidOperationException("Sản phẩm trong giỏ hàng không tồn tại.");
+                        var book = item.Book;
+                        if (book == null)
+                        {
+                            throw new InvalidOperationException("Sản phẩm trong giỏ hàng không tồn tại.");
+                        }
+
+                        if (book.Status != BookStatus.ACTIVE)
+                        {
+                            throw new InvalidOperationException($"Sản phẩm '{book.Title}' hiện không còn mở bán.");
+                        }
+
+                        if (book.Shop == null || book.Shop.Condition != ShopCondition.OPEN)
+                        {
+                            throw new InvalidOperationException($"Cửa hàng cung cấp cuốn sách '{book.Title}' hiện chưa được duyệt hoặc đang đóng cửa.");
+                        }
+
+                        // Chống bán vượt tồn kho (Overselling Race Condition): Thực hiện trừ kho nguyên tử trên Database
+                        int rowsAffected = await _context.Database.ExecuteSqlInterpolatedAsync(
+                            $"UPDATE Books SET StockQuantity = StockQuantity - {item.Quantity}, Status = CASE WHEN StockQuantity - {item.Quantity} = 0 THEN 'EMPTY' ELSE Status END, UpdatedAt = {now} WHERE Id = {item.BookId} AND StockQuantity >= {item.Quantity} AND Status = 'ACTIVE'");
+
+                        if (rowsAffected == 0)
+                        {
+                            throw new InvalidOperationException($"Sản phẩm '{book.Title}' đã hết hàng hoặc không đủ số lượng trong kho.");
+                        }
                     }
 
-                    if (book.Status != BookStatus.ACTIVE)
-                    {
-                        throw new InvalidOperationException($"Sản phẩm '{book.Title}' hiện không còn mở bán.");
-                    }
+                    // Calculate total using current Book.Price
+                    var totalAmount = selectedCartList.Sum(cbd => cbd.Quantity * cbd.Book.Price);
 
-                    if (book.Shop == null || book.Shop.Condition == ShopCondition.LOCKED || book.Shop.Condition == ShopCondition.CLOSED)
+                    var order = new BookManagement.Repository.Entities.Order
                     {
-                        throw new InvalidOperationException($"Cửa hàng cung cấp cuốn sách '{book.Title}' hiện đang đóng cửa hoặc bị khóa.");
-                    }
+                        Id = Guid.NewGuid(),
+                        UserId = userId,
+                        TotalAmount = totalAmount,
+                        OrderStatus = OrderStatus.PENDING,
+                        ShippingAddress = request.ShippingAddress.Trim(),
+                        CreatedAt = DateTimeOffset.UtcNow
+                    };
 
-                    // Chống bán vượt tồn kho (Overselling Race Condition): Thực hiện trừ kho nguyên tử trên Database
-                    int rowsAffected = await _context.Database.ExecuteSqlInterpolatedAsync(
-                        $"UPDATE Books SET StockQuantity = StockQuantity - {item.Quantity}, Status = CASE WHEN StockQuantity - {item.Quantity} = 0 THEN 'EMPTY' ELSE Status END, UpdatedAt = {now} WHERE Id = {item.BookId} AND StockQuantity >= {item.Quantity} AND Status = 'ACTIVE'");
-
-                    if (rowsAffected == 0)
+                    var orderDetails = selectedCartList.Select(cbd => new BookManagement.Repository.Entities.OrderDetail
                     {
-                        throw new InvalidOperationException($"Sản phẩm '{book.Title}' đã hết hàng hoặc không đủ số lượng trong kho.");
-                    }
+                        Id = Guid.NewGuid(),
+                        OrderId = order.Id,
+                        BookId = cbd.BookId,
+                        Quantity = cbd.Quantity,
+                        UnitPrice = cbd.Book.Price,
+                        ReturnStatus = ReturnStatus.NONE
+                    }).ToList();
+
+                    // Gán Payment.Status = PENDING ban đầu cho TẤT CẢ các phương thức thanh toán
+                    var payment = new BookManagement.Repository.Entities.Payment
+                    {
+                        Id = Guid.NewGuid(),
+                        OrderId = order.Id,
+                        PaymentType = PaymentType.PAYMENT,
+                        Method = request.PaymentMethod,
+                        Status = PaymentStatus.PENDING,
+                        Amount = totalAmount,
+                        CreatedAt = DateTimeOffset.UtcNow
+                    };
+
+                    await _context.Orders.AddAsync(order);
+                    await _context.OrderDetails.AddRangeAsync(orderDetails);
+                    await _context.Payments.AddAsync(payment);
+
+                    // Automated Notification for Buyer
+                    var buyerNotification = new BookManagement.Repository.Entities.Notification
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = userId,
+                        Type = NotificationType.ORDER_UPDATE,
+                        ReferenceId = order.Id,
+                        Content = $"Bạn đã đặt đơn hàng #{order.Id} thành công. Tổng tiền: {totalAmount:N0} VNĐ.",
+                        CreatedAt = DateTimeOffset.UtcNow
+                    };
+                    await _context.Notifications.AddAsync(buyerNotification);
+
+                    // Clear ONLY selected items from cart after checkout
+                    _context.CartBookDetails.RemoveRange(selectedCartList);
+                    await _context.SaveChangesAsync();
+                    await tx.CommitAsync();
+
+                    var createdOrder = await _orderRepository.GetByIdAsync(order.Id);
+                    return MapToResponse(createdOrder ?? order);
                 }
-
-                // Calculate total using current Book.Price
-                var totalAmount = selectedCartList.Sum(cbd => cbd.Quantity * cbd.Book.Price);
-
-                var order = new BookManagement.Repository.Entities.Order
+                catch
                 {
-                    Id = Guid.NewGuid(),
-                    UserId = userId,
-                    TotalAmount = totalAmount,
-                    OrderStatus = OrderStatus.PENDING,
-                    ShippingAddress = request.ShippingAddress.Trim(),
-                    CreatedAt = DateTimeOffset.UtcNow
-                };
-
-                var orderDetails = selectedCartList.Select(cbd => new BookManagement.Repository.Entities.OrderDetail
-                {
-                    Id = Guid.NewGuid(),
-                    OrderId = order.Id,
-                    BookId = cbd.BookId,
-                    Quantity = cbd.Quantity,
-                    UnitPrice = cbd.Book.Price,
-                    ReturnStatus = ReturnStatus.NONE
-                }).ToList();
-
-                // Gán Payment.Status = PENDING ban đầu cho TẤT CẢ các phương thức thanh toán
-                var payment = new BookManagement.Repository.Entities.Payment
-                {
-                    Id = Guid.NewGuid(),
-                    OrderId = order.Id,
-                    PaymentType = PaymentType.PAYMENT,
-                    Method = request.PaymentMethod,
-                    Status = PaymentStatus.PENDING,
-                    Amount = totalAmount,
-                    CreatedAt = DateTimeOffset.UtcNow
-                };
-
-                await _context.Orders.AddAsync(order);
-                await _context.OrderDetails.AddRangeAsync(orderDetails);
-                await _context.Payments.AddAsync(payment);
-
-                // Automated Notification for Buyer
-                var buyerNotification = new BookManagement.Repository.Entities.Notification
-                {
-                    Id = Guid.NewGuid(),
-                    UserId = userId,
-                    Type = NotificationType.ORDER_UPDATE,
-                    ReferenceId = order.Id,
-                    Content = $"Bạn đã đặt đơn hàng #{order.Id} thành công. Tổng tiền: {totalAmount:N0} VNĐ.",
-                    CreatedAt = DateTimeOffset.UtcNow
-                };
-                await _context.Notifications.AddAsync(buyerNotification);
-
-                // Clear ONLY selected items from cart after checkout
-                _context.CartBookDetails.RemoveRange(selectedCartList);
-                await _context.SaveChangesAsync();
-                await tx.CommitAsync();
-
-                var createdOrder = await _orderRepository.GetByIdAsync(order.Id);
-                return MapToResponse(createdOrder ?? order);
-            }
-            catch
-            {
-                await tx.RollbackAsync();
-                throw;
-            }
+                    await tx.RollbackAsync();
+                    throw;
+                }
+            });
         }
 
         public async Task CancelOrderAsync(Guid userId, Guid orderId)
@@ -230,7 +234,7 @@ namespace BookManagement.Service.Order
                 throw new UnauthorizedAccessException("Bạn không có quyền gửi yêu cầu trả hàng cho đơn này.");
             }
 
-            if (orderDetail.Order.OrderStatus != OrderStatus.DELIVERED && orderDetail.Order.OrderStatus != OrderStatus.COMPLETED)
+            if (orderDetail.Order.OrderStatus != OrderStatus.DELIVERED)
             {
                 throw new InvalidOperationException("Chỉ có thể gửi yêu cầu trả hàng/hoàn tiền sau khi đơn hàng đã được giao thành công.");
             }

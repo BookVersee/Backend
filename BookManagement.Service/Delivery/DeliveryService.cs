@@ -40,8 +40,7 @@ public class DeliveryService
             CarrierName = dto.CarrierName,
             ShipFee = dto.ShipFee,
             Status = DeliveryStatus.PENDING,
-            EstimatedDelivery = dto.EstimatedDelivery,
-            CreatedAt = DateTimeOffset.UtcNow
+            EstimatedDelivery = dto.EstimatedDelivery
         };
 
         _db.Deliveries.Add(delivery);
@@ -123,7 +122,6 @@ public class DeliveryService
         }
 
         delivery.Status = targetStatus;
-        delivery.UpdatedAt = DateTimeOffset.UtcNow;
 
         var order = delivery.Order;
         if (order != null)
@@ -131,7 +129,7 @@ public class DeliveryService
             if (targetStatus == DeliveryStatus.DELIVERED)
             {
                 delivery.ActualDeliveredAt = DateTime.UtcNow;
-                order.OrderStatus = OrderStatus.COMPLETED; // Cập nhật đơn hàng thành COMPLETED khi giao thành công
+                order.OrderStatus = OrderStatus.DELIVERED; // Cập nhật đơn hàng thành DELIVERED khi giao thành công
 
                 // 3. DÒNG TIỀN COD TỰ ĐỘNG THU TIỀN MẶT & GHI TRANSACTION HISTORY
                 var codPayment = order.Payments.FirstOrDefault(p => p.Method == PaymentMethod.COD && p.Status == PaymentStatus.PENDING);
@@ -154,6 +152,18 @@ public class DeliveryService
 
                     _db.TransactionHistories.Add(codTransaction);
                 }
+
+                // Thông báo ORDER_UPDATE: Giao hàng thành công
+                _db.Notifications.Add(new BookManagement.Repository.Entities.Notification
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = order.UserId,
+                    Type = NotificationType.ORDER_UPDATE,
+                    ReferenceId = order.Id,
+                    Content = $"Đơn hàng #{order.Id} đã được giao thành công.",
+                    IsRead = false,
+                    CreatedAt = DateTimeOffset.UtcNow
+                });
             }
             else if (targetStatus == DeliveryStatus.RETURNED)
             {
@@ -180,11 +190,35 @@ public class DeliveryService
                             }
                         }
                     }
+
+                    // Thông báo ORDER_UPDATE: Giao thất bại bị trả hàng
+                    _db.Notifications.Add(new BookManagement.Repository.Entities.Notification
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = order.UserId,
+                        Type = NotificationType.ORDER_UPDATE,
+                        ReferenceId = order.Id,
+                        Content = $"Đơn hàng #{order.Id} giao không thành công và đã được hoàn trả về Cửa hàng.",
+                        IsRead = false,
+                        CreatedAt = DateTimeOffset.UtcNow
+                    });
                 }
             }
             else if (targetStatus == DeliveryStatus.TRANSIT)
             {
                 order.OrderStatus = OrderStatus.DELIVERING;
+
+                // Thông báo ORDER_UPDATE: Đơn hàng đang được giao
+                _db.Notifications.Add(new BookManagement.Repository.Entities.Notification
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = order.UserId,
+                    Type = NotificationType.ORDER_UPDATE,
+                    ReferenceId = order.Id,
+                    Content = $"Đơn hàng #{order.Id} đang trên đường giao tới bạn bởi {delivery.CarrierName ?? "Đơn vị vận chuyển"} (Mã vận đơn: {delivery.TrackingNumber ?? "N/A"}).",
+                    IsRead = false,
+                    CreatedAt = DateTimeOffset.UtcNow
+                });
             }
 
             order.UpdatedAt = DateTimeOffset.UtcNow;
@@ -210,7 +244,7 @@ public class DeliveryService
             q = q.Where(d => d.Status == filterStatus);
         }
 
-        var deliveries = await q.OrderByDescending(d => d.CreatedAt).ToListAsync();
+        var deliveries = await q.OrderByDescending(d => d.Id).ToListAsync();
 
         return deliveries.Select(delivery =>
         {

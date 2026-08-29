@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BookManagement.Api.Controllers
 {
-    [Authorize(Roles = "CUSTOMER")]
+    [Authorize(Roles = "CUSTOMER,SHOP")]
     [ApiController]
     [Route("api/cart")]
     public class CartController : ControllerBase

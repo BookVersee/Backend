@@ -20,7 +20,7 @@ namespace BookManagement.Repository.Entities
         public int? PublishedYear { get; set; }
         public BookStatus Status { get; set; } = BookStatus.ACTIVE;
         public float Rating { get; set; } = 0;
-        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
         public DateTimeOffset? UpdatedAt { get; set; }
 
         // Navigation Properties

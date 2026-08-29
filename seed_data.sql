@@ -14,6 +14,12 @@ END;
 GO
 
 -- 2. Thêm Người dùng mẫu (Users) - Mật khẩu chung: Password123!
+IF NOT EXISTS (SELECT 1 FROM Users WHERE Username = 'superadmin')
+BEGIN
+    INSERT INTO Users (Id, Username, Email, PasswordHash, FullName, Phone, Address, Role, Status, CreatedAt, IsDeleted) VALUES
+    (NEWID(), 'superadmin', 'superadmin@bookmanagement.com', '$2a$11$EjTnc3zQKJPdkXfPYn0vN.nboiLN2KE8ZzSvCUblR2WVhWQamN.pu', N'Super Admin Hệ Thống', '0999999999', N'Hà Nội, Việt Nam', 'SUPER_ADMIN', 'ACTIVE', SYSDATETIMEOFFSET(), 0);
+END;
+
 IF NOT EXISTS (SELECT 1 FROM Users WHERE Username = 'admin')
 BEGIN
     INSERT INTO Users (Id, Username, Email, PasswordHash, FullName, Phone, Address, Role, Status, CreatedAt, IsDeleted) VALUES
@@ -37,13 +43,13 @@ DECLARE @SO2Id UNIQUEIDENTIFIER = (SELECT Id FROM Users WHERE Username = 'shopow
 IF @SO1Id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Shops WHERE UserId = @SO1Id)
 BEGIN
     INSERT INTO Shops (Id, UserId, ShopName, Condition, Rating, CreatedAt, IsDeleted) VALUES
-    (NEWID(), @SO1Id, N'Nhà Sách Tri Thức Việt', 'ACTIVE', 4.8, SYSDATETIMEOFFSET(), 0);
+    (NEWID(), @SO1Id, N'Nhà Sách Tri Thức Việt', 'OPEN', 4.8, SYSDATETIMEOFFSET(), 0);
 END;
 
 IF @SO2Id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Shops WHERE UserId = @SO2Id)
 BEGIN
     INSERT INTO Shops (Id, UserId, ShopName, Condition, Rating, CreatedAt, IsDeleted) VALUES
-    (NEWID(), @SO2Id, N'Nhà Sách Nhã Nam Demo', 'ACTIVE', 4.9, SYSDATETIMEOFFSET(), 0);
+    (NEWID(), @SO2Id, N'Nhà Sách Nhã Nam Demo', 'OPEN', 4.9, SYSDATETIMEOFFSET(), 0);
 END;
 GO
 

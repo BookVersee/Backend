@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 using BookManagement.Repository.Entities.Enums;
@@ -185,6 +185,12 @@ public class BookResponseDto
 
     [JsonPropertyName("rating")]
     public float Rating { get; set; }
+
+    [JsonPropertyName("created_at")]
+    public DateTimeOffset CreatedAt { get; set; }
+
+    [JsonPropertyName("updated_at")]
+    public DateTimeOffset? UpdatedAt { get; set; }
 }
 
 // Flat feedback DTO - no circular references

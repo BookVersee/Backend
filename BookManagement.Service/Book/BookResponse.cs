@@ -23,6 +23,7 @@ namespace BookManagement.Service.Book
         public BookStatus Status { get; set; }
         public double? Rating { get; set; }
         public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset? UpdatedAt { get; set; }
     }
 
     public class ShopResponse

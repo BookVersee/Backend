@@ -33,7 +33,7 @@ namespace BookManagement.Api.Controllers
         }
 
         /// Chá»©c nÄƒng: Ä áº·t hÃ ng thanh toÃ¡n tá»« giá»  hÃ ng. Tráº£ vá» : ThÃ´ng tin Ä‘Æ¡n hÃ ng má»›i táº¡o.
-        [Authorize(Roles = "CUSTOMER")]
+        [Authorize(Roles = "CUSTOMER,SHOP")]
         [HttpPost("CreateOrder")]
         [Idempotent]
         public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest request)

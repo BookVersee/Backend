@@ -8,9 +8,15 @@ namespace BookManagement.Service.User
     {
         Task<UserResponse> GetProfileAsync(Guid userId);
         Task<UserResponse> UpdateProfileAsync(Guid userId, UpdateProfileRequest request);
-        Task ForgotPasswordAsync(ForgotPasswordRequest request);
-        Task ResetPasswordAsync(ResetPasswordRequest request);
-        Task VerifyEmailAsync(VerifyEmailRequest request);
+        
+        // TH1: Đổi / Khôi phục mật khẩu qua mã OTP gửi về Gmail (3 Bước)
+        Task SendPasswordOtpAsync(SendOtpRequest request);
+        Task VerifyPasswordOtpAsync(VerifyPasswordOtpRequest request);
+        Task ResetNewPasswordAsync(ResetNewPasswordRequest request);
+
+        // TH2: Đổi mật khẩu bằng Mật khẩu cũ khi đã đăng nhập
+        Task ChangePasswordAsync(Guid userId, ChangePasswordWithOldPasswordRequest request);
+
         Task<IEnumerable<TransactionResponse>> GetUserTransactionsAsync(Guid userId);
         Task<BookManagement.Service.Admin.ShopResponse> RegisterShopAsync(Guid userId, RegisterShopRequest request);
     }

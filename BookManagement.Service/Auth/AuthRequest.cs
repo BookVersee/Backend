@@ -31,4 +31,26 @@ namespace BookManagement.Service.Auth
     {
         public string RefreshToken { get; set; } = null!;
     }
+
+    public class GoogleLoginRequest
+    {
+        public string IdToken { get; set; } = null!;
+    }
+
+    public class ForgotPasswordRequest
+    {
+        public string Email { get; set; } = null!;
+    }
+
+    public class ResetPasswordWithOtpRequest
+    {
+        public string Email { get; set; } = null!;
+        public string NewPassword { get; set; } = null!;
+    }
+
+    public class VerifyResetOtpRequest
+    {
+        public string Email { get; set; } = null!;
+        public string OtpCode { get; set; } = null!;
+    }
 }

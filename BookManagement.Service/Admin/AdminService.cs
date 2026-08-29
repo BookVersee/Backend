@@ -128,11 +128,11 @@ public class AdminService : IAdminService
         {
             if (newStatus == UserStatus.LOCKED)
             {
-                user.Shop.Condition = ShopCondition.LOCKED;
+                user.Shop.Condition = ShopCondition.CLOSED;
             }
-            else if (newStatus == UserStatus.ACTIVE && user.Shop.Condition == ShopCondition.LOCKED)
+            else if (newStatus == UserStatus.ACTIVE && user.Shop.Condition == ShopCondition.CLOSED)
             {
-                user.Shop.Condition = ShopCondition.ACTIVE;
+                user.Shop.Condition = ShopCondition.OPEN;
             }
         }
 
@@ -214,6 +214,16 @@ public class AdminService : IAdminService
                 };
                 await _context.Notifications.AddAsync(buyerNotification);
             }
+
+            // Nếu Admin phán quyết Khách thắng (ApproveRefund = true), tính 1 lần vi phạm cho Shop
+            if (request.ApproveRefund && dispute.OrderDetail.Book != null && dispute.OrderDetail.Book.ShopId != Guid.Empty)
+            {
+                var shop = await _context.Shops.FirstOrDefaultAsync(s => s.Id == dispute.OrderDetail.Book.ShopId);
+                if (shop != null)
+                {
+                    await HandleShopViolationAsync(shop, "Bị Admin phán quyết thua khiếu nại trả hàng");
+                }
+            }
         }
 
         await _context.SaveChangesAsync();
@@ -277,7 +287,7 @@ public class AdminService : IAdminService
         var totalCount = await query.CountAsync();
 
         var items = await query
-            .OrderByDescending(b => b.CreatedAt)
+            .OrderBy(b => b.Title)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
@@ -298,7 +308,7 @@ public class AdminService : IAdminService
         var totalCount = await query.CountAsync();
 
         var items = await query
-            .OrderByDescending(b => b.CreatedAt)
+            .OrderBy(b => b.Title)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
@@ -359,7 +369,7 @@ public class AdminService : IAdminService
         if (shop == null)
             throw new KeyNotFoundException("Shop not found.");
 
-        shop.Condition = ShopCondition.ACTIVE;
+        shop.Condition = ShopCondition.OPEN;
         if (shop.User != null)
         {
             if (shop.User.Role != BookManagement.Repository.Entities.Enums.UserRole.ADMIN)
@@ -368,14 +378,14 @@ public class AdminService : IAdminService
             }
             shop.User.Status = UserStatus.ACTIVE;
 
-            // Automated notification to user instructing them to refresh token
+            // Automated notification to shop owner about shop reopening
             var notification = new BookManagement.Repository.Entities.Notification
             {
                 Id = Guid.NewGuid(),
                 UserId = shop.UserId,
                 Type = NotificationType.SYSTEM,
                 ReferenceId = shop.Id,
-                Content = $"Chúc mừng! Đơn đăng ký mở Cửa hàng '{shop.ShopName}' của bạn đã được Admin phê duyệt thành công. Vui lòng gọi API Refresh Token để nhận Access Token mới chứa quyền SHOP.",
+                Content = $"Cửa hàng '{shop.ShopName}' của bạn đã được Ban quản trị (Admin) mở khóa / kích hoạt hoạt động trở lại.",
                 CreatedAt = DateTimeOffset.UtcNow
             };
             await _context.Notifications.AddAsync(notification);
@@ -390,11 +400,22 @@ public class AdminService : IAdminService
         if (shop == null)
             throw new KeyNotFoundException("Shop not found.");
 
-        shop.Condition = ShopCondition.LOCKED;
+        shop.Condition = ShopCondition.CLOSED;
         if (shop.User != null)
         {
             shop.User.Status = UserStatus.LOCKED;
             await _sessionRepository.RevokeAllUserSessionsAsync(shop.UserId);
+
+            var notification = new BookManagement.Repository.Entities.Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = shop.UserId,
+                Type = NotificationType.SYSTEM,
+                ReferenceId = shop.Id,
+                Content = $"Cửa hàng '{shop.ShopName}' của bạn đã bị Ban quản trị (Admin) tạm khóa. Ghi chú: {request.Reason ?? "Vi phạm tiêu chuẩn cộng đồng"}.",
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            await _context.Notifications.AddAsync(notification);
         }
 
         await _context.SaveChangesAsync();
@@ -403,10 +424,10 @@ public class AdminService : IAdminService
     // ===== DASHBOARD & STATISTICS =====
     public async Task<DashboardStatisticsResponse> GetDashboardStatisticsAsync(string period = "month")
     {
-        var validStatuses = new[] { OrderStatus.PAID, OrderStatus.SHIPPING, OrderStatus.DELIVERING, OrderStatus.DELIVERED, OrderStatus.COMPLETED };
+        var validStatuses = new[] { OrderStatus.PAID, OrderStatus.SHIPPING, OrderStatus.DELIVERING, OrderStatus.DELIVERED };
         var totalOrders = await _context.Orders.CountAsync();
         var totalUsers = await _context.Users.CountAsync();
-        var activeShops = await _context.Shops.CountAsync(s => s.Condition == ShopCondition.ACTIVE);
+        var activeShops = await _context.Shops.CountAsync(s => s.Condition == ShopCondition.OPEN);
         var totalRevenue = await _context.Orders
             .Where(o => validStatuses.Contains(o.OrderStatus))
             .SumAsync(o => (decimal?)o.TotalAmount) ?? 0m;
@@ -424,7 +445,7 @@ public class AdminService : IAdminService
 
     public async Task<RevenueReportResponse> GetRevenueReportAsync(string period = "month")
     {
-        var validStatuses = new[] { OrderStatus.PAID, OrderStatus.SHIPPING, OrderStatus.DELIVERING, OrderStatus.DELIVERED, OrderStatus.COMPLETED };
+        var validStatuses = new[] { OrderStatus.PAID, OrderStatus.SHIPPING, OrderStatus.DELIVERING, OrderStatus.DELIVERED };
         var orders = await _context.Orders
             .AsNoTracking()
             .Where(o => validStatuses.Contains(o.OrderStatus))
@@ -481,7 +502,7 @@ public class AdminService : IAdminService
 
         var totalCount = await query.CountAsync();
         var items = await query
-            .OrderByDescending(d => d.CreatedAt)
+            .OrderByDescending(d => d.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
@@ -628,6 +649,9 @@ public class AdminService : IAdminService
     {
         var response = await _context.Responses
             .Include(r => r.Shop)
+            .Include(r => r.Feedback)
+                .ThenInclude(f => f.OrderDetail)
+                    .ThenInclude(od => od.Order)
             .FirstOrDefaultAsync(r => r.Id == responseId);
 
         if (response == null)
@@ -639,21 +663,92 @@ public class AdminService : IAdminService
         {
             _context.Responses.Remove(response);
 
-            if (response.Shop != null && response.Shop.UserId != Guid.Empty)
+            // 1. Tự động tính 1 vi phạm cho Shop và gửi thông báo theo 3 nấc (1/3, 2/3, 3/3 khóa 1 tháng)
+            if (response.Shop != null)
             {
-                var warningNotification = new BookManagement.Repository.Entities.Notification
+                await HandleShopViolationAsync(response.Shop, "Admin xóa phản hồi do vi phạm tiêu chuẩn cộng đồng");
+            }
+
+            // 2. Gửi thông báo SYSTEM cho Khách hàng đã viết Đánh giá ban đầu
+            var customerUserId = response.Feedback?.OrderDetail?.Order?.UserId;
+            if (customerUserId.HasValue && customerUserId.Value != Guid.Empty)
+            {
+                var customerNotification = new BookManagement.Repository.Entities.Notification
                 {
                     Id = Guid.NewGuid(),
-                    UserId = response.Shop.UserId,
+                    UserId = customerUserId.Value,
                     Type = NotificationType.SYSTEM,
-                    ReferenceId = response.Shop.Id,
-                    Content = $"Admin đã xóa Phản hồi của Shop trên đánh giá do vi phạm tiêu chuẩn cộng đồng. Ghi chú Admin: {adminNote ?? "Nội dung phản hồi không phù hợp"}.",
+                    ReferenceId = response.FeedbackId,
+                    Content = $"Ban quản trị (Admin) đã xử lý gỡ bỏ phản hồi của Cửa hàng trên bài đánh giá của bạn do vi phạm tiêu chuẩn cộng đồng.",
+                    IsRead = false,
                     CreatedAt = DateTimeOffset.UtcNow
                 };
-                await _context.Notifications.AddAsync(warningNotification);
+                await _context.Notifications.AddAsync(customerNotification);
             }
         }
 
         await _context.SaveChangesAsync();
+    }
+
+    private async Task HandleShopViolationAsync(BookManagement.Repository.Entities.Shop shop, string violationReason)
+    {
+        if (shop == null || shop.UserId == Guid.Empty) return;
+
+        shop.ViolationCount += 1;
+        shop.UpdatedAt = DateTimeOffset.UtcNow;
+
+        if (shop.ViolationCount == 1)
+        {
+            var warning1 = new BookManagement.Repository.Entities.Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = shop.UserId,
+                Type = NotificationType.SYSTEM,
+                ReferenceId = shop.Id,
+                Content = $"CẢNH BÁO VI PHẠM (1/3): Cửa hàng '{shop.ShopName}' của bạn vừa ghi nhận 1 lần vi phạm ({violationReason}). Nếu tái phạm đủ 3 lần, Cửa hàng sẽ bị hệ thống tự động tạm khóa 1 tháng!",
+                IsRead = false,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            await _context.Notifications.AddAsync(warning1);
+        }
+        else if (shop.ViolationCount == 2)
+        {
+            var warning2 = new BookManagement.Repository.Entities.Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = shop.UserId,
+                Type = NotificationType.SYSTEM,
+                ReferenceId = shop.Id,
+                Content = $"CẢNH BÁO VI PHẠM NGHIÊM TRỌNG (2/3): Cửa hàng '{shop.ShopName}' của bạn đã ghi nhận 2 lần vi phạm ({violationReason}). Thêm 1 lần vi phạm nữa, Cửa hàng sẽ bị hệ thống tự động tạm khóa 1 tháng!",
+                IsRead = false,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            await _context.Notifications.AddAsync(warning2);
+        }
+        else if (shop.ViolationCount >= 3)
+        {
+            shop.Condition = ShopCondition.CLOSED;
+            shop.LockedUntil = DateTimeOffset.UtcNow.AddMonths(1);
+
+            var shopUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == shop.UserId);
+            if (shopUser != null)
+            {
+                shopUser.Status = UserStatus.LOCKED;
+                shopUser.UpdatedAt = DateTimeOffset.UtcNow;
+                await _sessionRepository.RevokeAllUserSessionsAsync(shop.UserId);
+            }
+
+            var lockWarning = new BookManagement.Repository.Entities.Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = shop.UserId,
+                Type = NotificationType.SYSTEM,
+                ReferenceId = shop.Id,
+                Content = $"THÔNG BÁO TẠM KHÓA CỬA HÀNG (3/3): Cửa hàng '{shop.ShopName}' đã cán mốc 3 lần vi phạm tiêu chuẩn cộng đồng ({violationReason}). Hệ thống đã tự động tạm khóa Cửa hàng 1 tháng (Tạm dừng đến ngày {shop.LockedUntil.Value:dd/MM/yyyy HH:mm}).",
+                IsRead = false,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            await _context.Notifications.AddAsync(lockWarning);
+        }
     }
 }

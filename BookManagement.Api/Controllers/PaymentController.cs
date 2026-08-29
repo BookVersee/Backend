@@ -115,7 +115,7 @@ public class PaymentController : ControllerBase
     /// Quét và hủy đơn hàng quá hạn thanh toán thủ công hoặc qua Cron (Vấn đề 4)
     /// </summary>
     [HttpPost("ExpirePendingOrders")]
-    [Authorize(Roles = "ADMIN")]
+    [Authorize(Roles = "ADMIN,SUPER_ADMIN")]
     public async Task<IActionResult> ExpirePendingOrders([FromQuery] int expiryMinutes = 15)
     {
         int count = await _paymentService.ExpirePendingOrdersAsync(expiryMinutes);

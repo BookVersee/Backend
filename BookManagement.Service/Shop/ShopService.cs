@@ -33,7 +33,7 @@ public class ShopService
         {
             UserId = userId,
             ShopName = dto.ShopName,
-            Condition = ShopCondition.PENDING,
+            Condition = ShopCondition.OPEN,
             Rating = 0,
             CreatedAt = DateTimeOffset.UtcNow
         };
@@ -43,11 +43,13 @@ public class ShopService
         var user = await _db.Users.FindAsync(userId);
         if (user != null)
         {
+            user.Role = UserRole.SHOP;
             user.Address = dto.Address ?? user.Address;
             user.QrImageUrl = dto.QrImageUrl ?? user.QrImageUrl;
+            user.UpdatedAt = DateTimeOffset.UtcNow;
         }
 
-        var adminUsers = await _db.Users.Where(u => u.Role == UserRole.ADMIN).ToListAsync();
+        var adminUsers = await _db.Users.Where(u => u.Role == UserRole.ADMIN || u.Role == UserRole.SUPER_ADMIN).ToListAsync();
         foreach (var admin in adminUsers)
         {
             _db.Notifications.Add(new BookManagement.Repository.Entities.Notification
@@ -55,11 +57,23 @@ public class ShopService
                 Id = Guid.NewGuid(),
                 UserId = admin.Id,
                 Type = NotificationType.SYSTEM,
-                Content = $"Khách hàng {user?.FullName ?? user?.Username ?? "User"} vừa nộp đơn mở Cửa hàng '{shop.ShopName}'. Vui lòng phê duyệt!",
+                Content = $"Khách hàng {user?.FullName ?? user?.Username ?? "User"} đã đăng ký mở Cửa hàng '{shop.ShopName}' thành công (Trạng thái: Hoạt động).",
                 IsRead = false,
                 CreatedAt = DateTimeOffset.UtcNow
             });
         }
+
+        // Auto-notify New Shop Owner
+        _db.Notifications.Add(new BookManagement.Repository.Entities.Notification
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Type = NotificationType.SYSTEM,
+            ReferenceId = shop.Id,
+            Content = $"Chúc mừng! Cửa hàng '{shop.ShopName}' của bạn đã được đăng ký thành công và gian hàng đã đi vào hoạt động. Bạn có thể bắt đầu đăng bán sách ngay!",
+            IsRead = false,
+            CreatedAt = DateTimeOffset.UtcNow
+        });
 
         await _db.SaveChangesAsync();
 
@@ -136,11 +150,35 @@ public class ShopService
             ImageUrl = dto.ImageUrl,
             PublishedYear = dto.PublishedYear,
             Status = status,
-            Rating = 5.0f,
-            CreatedAt = DateTimeOffset.UtcNow
+            Rating = 5.0f
         };
 
         _db.Books.Add(book);
+
+        var shop = await _db.Shops.FirstOrDefaultAsync(s => s.Id == shopId);
+        var shopName = shop?.ShopName ?? "Cửa hàng";
+
+        // Gửi Thông báo PROMOTION (Sách mới về / Sản phẩm mới đăng bán) cho Khách hàng
+        var activeCustomers = await _db.Users
+            .Where(u => u.Role == UserRole.CUSTOMER && u.Status == UserStatus.ACTIVE)
+            .Take(100)
+            .ToListAsync();
+
+        foreach (var customer in activeCustomers)
+        {
+            _db.Notifications.Add(new BookManagement.Repository.Entities.Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = customer.Id,
+                Type = NotificationType.PROMOTION,
+                ReferenceId = book.Id,
+                Content = $"[Sách Mới Về] Sách mới '{book.Title}' vừa được cửa hàng '{shopName}' đăng bán với giá {book.Price:N0} VNĐ. Xem ngay!",
+                ImageUrl = book.ImageUrl,
+                IsRead = false,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+        }
+
         await _db.SaveChangesAsync();
 
         var categoryName = await _db.Categories
@@ -205,7 +243,7 @@ public class ShopService
 
         var totalItems = await q.CountAsync();
         var items = await q
-            .OrderByDescending(b => b.CreatedAt)
+            .OrderBy(b => b.Title)
             .Skip((query.PageIndex - 1) * query.PageSize)
             .Take(query.PageSize)
             .Select(b => new BookResponseDto
@@ -315,7 +353,9 @@ public class ShopService
         ImageUrl = book.ImageUrl,
         PublishedYear = book.PublishedYear,
         Status = book.Status.ToString(),
-        Rating = book.Rating
+        Rating = book.Rating,
+        CreatedAt = book.CreatedAt,
+        UpdatedAt = book.UpdatedAt
     };
 
     public async Task DeleteBookAsync(Guid shopId, Guid bookId)
@@ -366,58 +406,62 @@ public class ShopService
 
     public async Task UpdateOrderStatusAsync(Guid shopId, Guid orderId, UpdateOrderStatusDto dto)
     {
-        using var tx = await _db.Database.BeginTransactionAsync();
-
-        var order = await _db.Orders
-            .Include(o => o.OrderDetails)
-                .ThenInclude(od => od.Book)
-            .FirstOrDefaultAsync(o => o.Id == orderId && o.OrderDetails.Any(od => od.Book.ShopId == shopId));
-
-        if (order == null)
+        var strategy = _db.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
         {
-            throw new KeyNotFoundException("Order not found.");
-        }
+            using var tx = await _db.Database.BeginTransactionAsync();
 
-        var rawStatus = !string.IsNullOrEmpty(dto.OrderStatus) ? dto.OrderStatus : dto.NewStatus;
-        if (string.IsNullOrEmpty(rawStatus) || !Enum.TryParse<OrderStatus>(rawStatus, true, out var targetStatus))
-        {
-            throw new ArgumentException($"Invalid order status: {rawStatus}");
-        }
+            var order = await _db.Orders
+                .Include(o => o.OrderDetails)
+                    .ThenInclude(od => od.Book)
+                .FirstOrDefaultAsync(o => o.Id == orderId && o.OrderDetails.Any(od => od.Book.ShopId == shopId));
 
-        if (dto.Weight.HasValue && dto.Weight.Value > 0)
-        {
-            order.Weight = dto.Weight.Value;
-        }
-
-        if (!string.IsNullOrEmpty(dto.Note))
-        {
-            order.Note = dto.Note;
-        }
-
-        if (targetStatus == OrderStatus.CANCELLED)
-        {
-            if (order.OrderStatus != OrderStatus.CANCELLED)
+            if (order == null)
             {
-                foreach (var item in order.OrderDetails)
+                throw new KeyNotFoundException("Order not found.");
+            }
+
+            var rawStatus = !string.IsNullOrEmpty(dto.OrderStatus) ? dto.OrderStatus : dto.NewStatus;
+            if (string.IsNullOrEmpty(rawStatus) || !Enum.TryParse<OrderStatus>(rawStatus, true, out var targetStatus))
+            {
+                throw new ArgumentException($"Invalid order status: {rawStatus}");
+            }
+
+            if (dto.Weight.HasValue && dto.Weight.Value > 0)
+            {
+                order.Weight = dto.Weight.Value;
+            }
+
+            if (!string.IsNullOrEmpty(dto.Note))
+            {
+                order.Note = dto.Note;
+            }
+
+            if (targetStatus == OrderStatus.CANCELLED)
+            {
+                if (order.OrderStatus != OrderStatus.CANCELLED)
                 {
-                    var book = item.Book;
-                    if (book != null)
+                    foreach (var item in order.OrderDetails)
                     {
-                        book.StockQuantity += item.Quantity;
-                        if (book.Status == BookStatus.EMPTY && book.StockQuantity > 0)
+                        var book = item.Book;
+                        if (book != null)
                         {
-                            book.Status = BookStatus.ACTIVE;
+                            book.StockQuantity += item.Quantity;
+                            if (book.Status == BookStatus.EMPTY && book.StockQuantity > 0)
+                            {
+                                book.Status = BookStatus.ACTIVE;
+                            }
                         }
                     }
                 }
             }
-        }
 
-        order.OrderStatus = targetStatus;
-        order.UpdatedAt = DateTimeOffset.UtcNow;
+            order.OrderStatus = targetStatus;
+            order.UpdatedAt = DateTimeOffset.UtcNow;
 
-        await _db.SaveChangesAsync();
-        await tx.CommitAsync();
+            await _db.SaveChangesAsync();
+            await tx.CommitAsync();
+        });
     }
 
     public async Task<RevenueResponseDto> GetShopRevenueAsync(Guid shopId, DateTime? fromDate, DateTime? toDate, string? periodType)
@@ -425,7 +469,7 @@ public class ShopService
         var query = _db.OrderDetails
             .Include(od => od.Order)
             .Where(od => od.Book.ShopId == shopId
-                && (od.Order.OrderStatus == OrderStatus.DELIVERED || od.Order.OrderStatus == OrderStatus.COMPLETED)
+                && od.Order.OrderStatus == OrderStatus.DELIVERED
                 && od.ReturnStatus != ReturnStatus.REFUNDED);
 
         if (fromDate.HasValue)

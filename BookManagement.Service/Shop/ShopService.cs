@@ -365,58 +365,62 @@ public class ShopService
 
     public async Task UpdateOrderStatusAsync(Guid shopId, Guid orderId, UpdateOrderStatusDto dto)
     {
-        using var tx = await _db.Database.BeginTransactionAsync();
-
-        var order = await _db.Orders
-            .Include(o => o.OrderDetails)
-                .ThenInclude(od => od.Book)
-            .FirstOrDefaultAsync(o => o.Id == orderId && o.OrderDetails.Any(od => od.Book.ShopId == shopId));
-
-        if (order == null)
+        var strategy = _db.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
         {
-            throw new KeyNotFoundException("Order not found.");
-        }
+            using var tx = await _db.Database.BeginTransactionAsync();
 
-        var rawStatus = !string.IsNullOrEmpty(dto.OrderStatus) ? dto.OrderStatus : dto.NewStatus;
-        if (string.IsNullOrEmpty(rawStatus) || !Enum.TryParse<OrderStatus>(rawStatus, true, out var targetStatus))
-        {
-            throw new ArgumentException($"Invalid order status: {rawStatus}");
-        }
+            var order = await _db.Orders
+                .Include(o => o.OrderDetails)
+                    .ThenInclude(od => od.Book)
+                .FirstOrDefaultAsync(o => o.Id == orderId && o.OrderDetails.Any(od => od.Book.ShopId == shopId));
 
-        if (dto.Weight.HasValue && dto.Weight.Value > 0)
-        {
-            order.Weight = dto.Weight.Value;
-        }
-
-        if (!string.IsNullOrEmpty(dto.Note))
-        {
-            order.Note = dto.Note;
-        }
-
-        if (targetStatus == OrderStatus.CANCELLED)
-        {
-            if (order.OrderStatus != OrderStatus.CANCELLED)
+            if (order == null)
             {
-                foreach (var item in order.OrderDetails)
+                throw new KeyNotFoundException("Order not found.");
+            }
+
+            var rawStatus = !string.IsNullOrEmpty(dto.OrderStatus) ? dto.OrderStatus : dto.NewStatus;
+            if (string.IsNullOrEmpty(rawStatus) || !Enum.TryParse<OrderStatus>(rawStatus, true, out var targetStatus))
+            {
+                throw new ArgumentException($"Invalid order status: {rawStatus}");
+            }
+
+            if (dto.Weight.HasValue && dto.Weight.Value > 0)
+            {
+                order.Weight = dto.Weight.Value;
+            }
+
+            if (!string.IsNullOrEmpty(dto.Note))
+            {
+                order.Note = dto.Note;
+            }
+
+            if (targetStatus == OrderStatus.CANCELLED)
+            {
+                if (order.OrderStatus != OrderStatus.CANCELLED)
                 {
-                    var book = item.Book;
-                    if (book != null)
+                    foreach (var item in order.OrderDetails)
                     {
-                        book.StockQuantity += item.Quantity;
-                        if (book.Status == BookStatus.EMPTY && book.StockQuantity > 0)
+                        var book = item.Book;
+                        if (book != null)
                         {
-                            book.Status = BookStatus.ACTIVE;
+                            book.StockQuantity += item.Quantity;
+                            if (book.Status == BookStatus.EMPTY && book.StockQuantity > 0)
+                            {
+                                book.Status = BookStatus.ACTIVE;
+                            }
                         }
                     }
                 }
             }
-        }
 
-        order.OrderStatus = targetStatus;
-        order.UpdatedAt = DateTimeOffset.UtcNow;
+            order.OrderStatus = targetStatus;
+            order.UpdatedAt = DateTimeOffset.UtcNow;
 
-        await _db.SaveChangesAsync();
-        await tx.CommitAsync();
+            await _db.SaveChangesAsync();
+            await tx.CommitAsync();
+        });
     }
 
     public async Task<RevenueResponseDto> GetShopRevenueAsync(Guid shopId, DateTime? fromDate, DateTime? toDate, string? periodType)

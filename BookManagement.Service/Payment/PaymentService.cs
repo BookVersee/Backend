@@ -102,52 +102,56 @@ public class PaymentService
                 return (0, "Payment already confirmed");
             }
 
-            using var tx = await _db.Database.BeginTransactionAsync();
-            try
+            var strategy = _db.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
             {
-                if (req.ResultCode == 0)
+                using var tx = await _db.Database.BeginTransactionAsync();
+                try
                 {
-                    payment.Status = PaymentStatus.SUCCESS;
-                    payment.TransactionCode = transIdStr;
-                    payment.UpdatedAt = DateTimeOffset.UtcNow;
-
-                    var order = payment.Order;
-                    if (order != null)
+                    if (req.ResultCode == 0)
                     {
-                        order.OrderStatus = OrderStatus.PAID;
-                        order.UpdatedAt = DateTimeOffset.UtcNow;
+                        payment.Status = PaymentStatus.SUCCESS;
+                        payment.TransactionCode = transIdStr;
+                        payment.UpdatedAt = DateTimeOffset.UtcNow;
 
-                        var transaction = new TransactionHistory
+                        var order = payment.Order;
+                        if (order != null)
                         {
-                            UserId = order.UserId,
-                            ReferenceType = ReferenceType.ORDER_PAYMENT,
-                            ReferenceId = order.Id,
-                            TransactionType = TransactionType.IN,
-                            Amount = req.Amount > 0 ? (decimal)req.Amount : payment.Amount,
-                            TransactionCode = transIdStr,
-                            Description = $"MoMo Payment for Order #{order.Id}",
-                            CreatedAt = DateTimeOffset.UtcNow
-                        };
+                            order.OrderStatus = OrderStatus.PAID;
+                            order.UpdatedAt = DateTimeOffset.UtcNow;
 
-                        _db.TransactionHistories.Add(transaction);
+                            var transaction = new TransactionHistory
+                            {
+                                UserId = order.UserId,
+                                ReferenceType = ReferenceType.ORDER_PAYMENT,
+                                ReferenceId = order.Id,
+                                TransactionType = TransactionType.IN,
+                                Amount = req.Amount > 0 ? (decimal)req.Amount : payment.Amount,
+                                TransactionCode = transIdStr,
+                                Description = $"MoMo Payment for Order #{order.Id}",
+                                CreatedAt = DateTimeOffset.UtcNow
+                            };
+
+                            _db.TransactionHistories.Add(transaction);
+                        }
                     }
-                }
-                else
-                {
-                    payment.Status = PaymentStatus.FAILED;
-                    payment.TransactionCode = transIdStr;
-                    payment.UpdatedAt = DateTimeOffset.UtcNow;
-                }
+                    else
+                    {
+                        payment.Status = PaymentStatus.FAILED;
+                        payment.TransactionCode = transIdStr;
+                        payment.UpdatedAt = DateTimeOffset.UtcNow;
+                    }
 
-                await _db.SaveChangesAsync();
-                await tx.CommitAsync();
-                return (0, "Confirm Success");
-            }
-            catch
-            {
-                await tx.RollbackAsync();
-                throw;
-            }
+                    await _db.SaveChangesAsync();
+                    await tx.CommitAsync();
+                    return (0, "Confirm Success");
+                }
+                catch
+                {
+                    await tx.RollbackAsync();
+                    throw;
+                }
+            });
         }
         finally
         {
@@ -238,49 +242,53 @@ public class PaymentService
 
         if (refundSuccess)
         {
-            using var tx = await _db.Database.BeginTransactionAsync();
-            try
+            var strategy = _db.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
             {
-                var refundPayment = new PaymentEntity
+                using var tx = await _db.Database.BeginTransactionAsync();
+                try
                 {
-                    OrderId = dto.OrderId,
-                    ReturnRequestId = returnReq?.Id,
-                    PaymentType = PaymentType.REFUND,
-                    Method = PaymentMethod.ONLINE,
-                    Amount = refundAmount,
-                    Status = PaymentStatus.SUCCESS,
-                    TransactionCode = transNo,
-                    CreatedAt = DateTimeOffset.UtcNow
-                };
+                    var refundPayment = new PaymentEntity
+                    {
+                        OrderId = dto.OrderId,
+                        ReturnRequestId = returnReq?.Id,
+                        PaymentType = PaymentType.REFUND,
+                        Method = PaymentMethod.ONLINE,
+                        Amount = refundAmount,
+                        Status = PaymentStatus.SUCCESS,
+                        TransactionCode = transNo,
+                        CreatedAt = DateTimeOffset.UtcNow
+                    };
 
-                _db.Payments.Add(refundPayment);
+                    _db.Payments.Add(refundPayment);
 
-                if (returnReq != null)
-                {
-                    returnReq.OrderDetail.ReturnStatus = ReturnStatus.REFUNDED;
+                    if (returnReq != null)
+                    {
+                        returnReq.OrderDetail.ReturnStatus = ReturnStatus.REFUNDED;
+                    }
+
+                    var transaction = new TransactionHistory
+                    {
+                        UserId = order.UserId,
+                        ReferenceType = ReferenceType.REFUND,
+                        ReferenceId = returnReq?.Id ?? order.Id,
+                        TransactionType = TransactionType.OUT,
+                        Amount = refundAmount,
+                        TransactionCode = transNo,
+                        Description = dto.RefundReason ?? $"Refund for Order #{dto.OrderId}",
+                        CreatedAt = DateTimeOffset.UtcNow
+                    };
+
+                    _db.TransactionHistories.Add(transaction);
+                    await _db.SaveChangesAsync();
+                    await tx.CommitAsync();
                 }
-
-                var transaction = new TransactionHistory
+                catch
                 {
-                    UserId = order.UserId,
-                    ReferenceType = ReferenceType.REFUND,
-                    ReferenceId = returnReq?.Id ?? order.Id,
-                    TransactionType = TransactionType.OUT,
-                    Amount = refundAmount,
-                    TransactionCode = transNo,
-                    Description = dto.RefundReason ?? $"Refund for Order #{dto.OrderId}",
-                    CreatedAt = DateTimeOffset.UtcNow
-                };
-
-                _db.TransactionHistories.Add(transaction);
-                await _db.SaveChangesAsync();
-                await tx.CommitAsync();
-            }
-            catch
-            {
-                await tx.RollbackAsync();
-                throw;
-            }
+                    await tx.RollbackAsync();
+                    throw;
+                }
+            });
         }
         else
         {
@@ -323,45 +331,49 @@ public class PaymentService
 
             if (queryRes != null && queryRes.ResultCode == 0)
             {
-                using var tx = await _db.Database.BeginTransactionAsync();
-                try
+                var strategy = _db.Database.CreateExecutionStrategy();
+                return await strategy.ExecuteAsync(async () =>
                 {
-                    string transIdStr = queryRes.TransId.ToString();
-                    payment.Status = PaymentStatus.SUCCESS;
-                    payment.TransactionCode = transIdStr;
-                    payment.UpdatedAt = DateTimeOffset.UtcNow;
-
-                    order.OrderStatus = OrderStatus.PAID;
-                    order.UpdatedAt = DateTimeOffset.UtcNow;
-
-                    bool isTransRecorded = await _db.TransactionHistories
-                        .AnyAsync(t => t.TransactionCode == transIdStr && t.ReferenceType == ReferenceType.ORDER_PAYMENT);
-
-                    if (!isTransRecorded)
+                    using var tx = await _db.Database.BeginTransactionAsync();
+                    try
                     {
-                        var transaction = new TransactionHistory
-                        {
-                            UserId = order.UserId,
-                            ReferenceType = ReferenceType.ORDER_PAYMENT,
-                            ReferenceId = order.Id,
-                            TransactionType = TransactionType.IN,
-                            Amount = queryRes.Amount > 0 ? (decimal)queryRes.Amount : payment.Amount,
-                            TransactionCode = transIdStr,
-                            Description = $"MoMo Payment (Query Sync) for Order #{order.Id}",
-                            CreatedAt = DateTimeOffset.UtcNow
-                        };
-                        _db.TransactionHistories.Add(transaction);
-                    }
+                        string transIdStr = queryRes.TransId.ToString();
+                        payment.Status = PaymentStatus.SUCCESS;
+                        payment.TransactionCode = transIdStr;
+                        payment.UpdatedAt = DateTimeOffset.UtcNow;
 
-                    await _db.SaveChangesAsync();
-                    await tx.CommitAsync();
-                    return (true, "Đồng bộ giao dịch thành công: Đơn hàng đã được xác nhận thanh toán.", transIdStr);
-                }
-                catch
-                {
-                    await tx.RollbackAsync();
-                    throw;
-                }
+                        order.OrderStatus = OrderStatus.PAID;
+                        order.UpdatedAt = DateTimeOffset.UtcNow;
+
+                        bool isTransRecorded = await _db.TransactionHistories
+                            .AnyAsync(t => t.TransactionCode == transIdStr && t.ReferenceType == ReferenceType.ORDER_PAYMENT);
+
+                        if (!isTransRecorded)
+                        {
+                            var transaction = new TransactionHistory
+                            {
+                                UserId = order.UserId,
+                                ReferenceType = ReferenceType.ORDER_PAYMENT,
+                                ReferenceId = order.Id,
+                                TransactionType = TransactionType.IN,
+                                Amount = queryRes.Amount > 0 ? (decimal)queryRes.Amount : payment.Amount,
+                                TransactionCode = transIdStr,
+                                Description = $"MoMo Payment (Query Sync) for Order #{order.Id}",
+                                CreatedAt = DateTimeOffset.UtcNow
+                            };
+                            _db.TransactionHistories.Add(transaction);
+                        }
+
+                        await _db.SaveChangesAsync();
+                        await tx.CommitAsync();
+                        return (true, "Đồng bộ giao dịch thành công: Đơn hàng đã được xác nhận thanh toán.", transIdStr);
+                    }
+                    catch
+                    {
+                        await tx.RollbackAsync();
+                        throw;
+                    }
+                });
             }
 
             return (false, queryRes != null ? $"Giao dịch chưa thanh toán hoặc thất bại ({queryRes.Message})." : "Không thể tra cứu thông tin giao dịch từ MoMo.", null);
@@ -409,44 +421,48 @@ public class PaymentService
                 }
             }
 
-            using var tx = await _db.Database.BeginTransactionAsync();
-            try
+            var strategy = _db.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
             {
-                order.OrderStatus = OrderStatus.CANCELLED;
-                order.UpdatedAt = DateTimeOffset.UtcNow;
-
-                foreach (var payment in order.Payments.Where(p => p.Status == PaymentStatus.PENDING))
+                using var tx = await _db.Database.BeginTransactionAsync();
+                try
                 {
-                    payment.Status = PaymentStatus.FAILED;
-                    payment.UpdatedAt = DateTimeOffset.UtcNow;
+                    order.OrderStatus = OrderStatus.CANCELLED;
+                    order.UpdatedAt = DateTimeOffset.UtcNow;
+
+                    foreach (var payment in order.Payments.Where(p => p.Status == PaymentStatus.PENDING))
+                    {
+                        payment.Status = PaymentStatus.FAILED;
+                        payment.UpdatedAt = DateTimeOffset.UtcNow;
+                    }
+
+                    // Hoàn lại tồn kho cho từng sản phẩm
+                    foreach (var detail in order.OrderDetails)
+                    {
+                        await _db.Database.ExecuteSqlInterpolatedAsync(
+                            $"UPDATE Books SET StockQuantity = StockQuantity + {detail.Quantity}, Status = CASE WHEN Status = 'EMPTY' THEN 'ACTIVE' ELSE Status END, UpdatedAt = {DateTimeOffset.UtcNow} WHERE Id = {detail.BookId}");
+                    }
+
+                    var notification = new BookManagement.Repository.Entities.Notification
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = order.UserId,
+                        Type = NotificationType.ORDER_UPDATE,
+                        ReferenceId = order.Id,
+                        Content = $"Đơn hàng #{order.Id} đã tự động hủy do quá hạn thanh toán ({expiryMinutes} phút). Số lượng sản phẩm đã được hoàn trả về kho.",
+                        CreatedAt = DateTimeOffset.UtcNow
+                    };
+                    _db.Notifications.Add(notification);
+
+                    await _db.SaveChangesAsync();
+                    await tx.CommitAsync();
+                    cancelledCount++;
                 }
-
-                // Hoàn lại tồn kho cho từng sản phẩm
-                foreach (var detail in order.OrderDetails)
+                catch
                 {
-                    await _db.Database.ExecuteSqlInterpolatedAsync(
-                        $"UPDATE Books SET StockQuantity = StockQuantity + {detail.Quantity}, Status = CASE WHEN Status = 'EMPTY' THEN 'ACTIVE' ELSE Status END, UpdatedAt = {DateTimeOffset.UtcNow} WHERE Id = {detail.BookId}");
+                    await tx.RollbackAsync();
                 }
-
-                var notification = new BookManagement.Repository.Entities.Notification
-                {
-                    Id = Guid.NewGuid(),
-                    UserId = order.UserId,
-                    Type = NotificationType.ORDER_UPDATE,
-                    ReferenceId = order.Id,
-                    Content = $"Đơn hàng #{order.Id} đã tự động hủy do quá hạn thanh toán ({expiryMinutes} phút). Số lượng sản phẩm đã được hoàn trả về kho.",
-                    CreatedAt = DateTimeOffset.UtcNow
-                };
-                _db.Notifications.Add(notification);
-
-                await _db.SaveChangesAsync();
-                await tx.CommitAsync();
-                cancelledCount++;
-            }
-            catch
-            {
-                await tx.RollbackAsync();
-            }
+            });
         }
 
         return cancelledCount;

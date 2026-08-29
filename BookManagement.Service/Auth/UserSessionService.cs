@@ -319,14 +319,19 @@ namespace BookManagement.Service.Auth
                 throw new InvalidOperationException("Mã OTP không chính xác hoặc đã hết hạn (hiệu lực 5 phút).");
             }
 
+            // Xóa OTP đã sử dụng và lưu cờ xác thực thành công (hiệu lực 10 phút để người dùng đổi mật khẩu)
+            _memoryCache.Remove(cacheKey);
+            var verifiedKey = $"reset_verified_{user.Email.ToLower()}";
+            _memoryCache.Set(verifiedKey, true, TimeSpan.FromMinutes(10));
+
             return true;
         }
 
         public async Task ResetPasswordWithOtpAsync(ResetPasswordWithOtpRequest request)
         {
-            if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.OtpCode) || string.IsNullOrWhiteSpace(request.NewPassword))
+            if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.NewPassword))
             {
-                throw new ArgumentException("Email, mã OTP và mật khẩu mới không được để trống.");
+                throw new ArgumentException("Email và mật khẩu mới không được để trống.");
             }
 
             var user = await _userRepository.GetByUsernameOrEmailAsync(request.Email.Trim());
@@ -335,16 +340,16 @@ namespace BookManagement.Service.Auth
                 throw new KeyNotFoundException("Tài khoản với Email này không tồn tại.");
             }
 
-            var cacheKey = $"reset_otp_{user.Email.ToLower()}";
-            if (!_memoryCache.TryGetValue(cacheKey, out string? cachedOtp) || cachedOtp != request.OtpCode.Trim())
+            var verifiedKey = $"reset_verified_{user.Email.ToLower()}";
+            if (!_memoryCache.TryGetValue(verifiedKey, out bool isVerified) || !isVerified)
             {
-                throw new InvalidOperationException("Mã OTP không chính xác hoặc đã hết hạn (hiệu lực 5 phút).");
+                throw new InvalidOperationException("Phiên xác thực OTP không tồn tại hoặc đã hết hạn. Vui lòng thực hiện lại bước xác thực OTP.");
             }
 
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
             await _userRepository.UpdateAsync(user);
 
-            _memoryCache.Remove(cacheKey);
+            _memoryCache.Remove(verifiedKey);
         }
 
         private static UserResponse MapToUserResponse(UserEntity user) => new UserResponse

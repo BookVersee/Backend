@@ -182,7 +182,11 @@ namespace BookManagement.Service.Order
                     };
                     await _context.Notifications.AddAsync(buyerNotification);
 
-                    _context.CartBookDetails.RemoveRange(selectedCartList);
+                    foreach (var item in selectedCartList)
+                    {
+                        item.IsDeleted = true;
+                        item.UpdatedAt = DateTimeOffset.UtcNow;
+                    }
                     await _context.SaveChangesAsync();
                     await tx.CommitAsync();
 

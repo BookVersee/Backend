@@ -101,7 +101,9 @@ public class CategoryService : ICategoryService
             throw new InvalidOperationException("Không thể xóa danh mục đang có chứa sản phẩm sách. Vui lòng chuyển danh mục hoặc xóa sản phẩm trước.");
         }
 
-        _context.Categories.Remove(category);
+        category.Status = false;
+        category.IsDeleted = true;
+        category.UpdatedAt = DateTimeOffset.UtcNow;
         await _context.SaveChangesAsync();
     }
 

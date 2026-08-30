@@ -72,7 +72,7 @@ namespace BookManagement.Service.Cart
             }
 
             var existing = cart.CartBookDetails.FirstOrDefault(cbd => cbd.BookId == request.BookId);
-            int currentQtyInCart = existing?.Quantity ?? 0;
+            int currentQtyInCart = (existing != null && !existing.IsDeleted) ? existing.Quantity : 0;
             int totalTargetQty = currentQtyInCart + request.Quantity;
 
             if (totalTargetQty > book.StockQuantity)
@@ -84,6 +84,7 @@ namespace BookManagement.Service.Cart
             {
                 existing.Quantity = totalTargetQty;
                 existing.UnitPrice = book.Price;
+                existing.IsDeleted = false;
                 existing.UpdatedAt = DateTimeOffset.UtcNow;
             }
             else
@@ -95,6 +96,7 @@ namespace BookManagement.Service.Cart
                     BookId = book.Id,
                     Quantity = request.Quantity,
                     UnitPrice = book.Price,
+                    IsDeleted = false,
                     CreatedAt = DateTimeOffset.UtcNow
                 };
                 await _context.CartBookDetails.AddAsync(newItem);
@@ -109,12 +111,13 @@ namespace BookManagement.Service.Cart
         public async Task<CartResponse> UpdateCartItemAsync(Guid userId, Guid cartDetailId, UpdateItemRequest request)
         {
             var cart = await GetOrCreateCartEntityAsync(userId);
-            var item = cart.CartBookDetails.FirstOrDefault(cbd => cbd.Id == cartDetailId);
+            var item = cart.CartBookDetails.FirstOrDefault(cbd => cbd.Id == cartDetailId && !cbd.IsDeleted);
             if (item == null) throw new KeyNotFoundException("Cart item not found.");
 
             if (request.Quantity <= 0)
             {
-                _context.CartBookDetails.Remove(item);
+                item.IsDeleted = true;
+                item.UpdatedAt = DateTimeOffset.UtcNow;
             }
             else
             {
@@ -143,37 +146,43 @@ namespace BookManagement.Service.Cart
             return MapToResponse(updatedCart);
         }
 
-        /// Chức năng: Xóa 1 sản phẩm khỏi giỏ hàng
+        /// Chức năng: Xóa 1 sản phẩm khỏi giỏ hàng (Soft Delete)
         public async Task<CartResponse> RemoveFromCartAsync(Guid userId, Guid cartDetailId)
         {
             var cart = await GetOrCreateCartEntityAsync(userId);
-            var item = cart.CartBookDetails.FirstOrDefault(cbd => cbd.Id == cartDetailId);
+            var item = cart.CartBookDetails.FirstOrDefault(cbd => cbd.Id == cartDetailId && !cbd.IsDeleted);
             if (item == null) throw new KeyNotFoundException("Cart item not found in user cart.");
 
-            _context.CartBookDetails.Remove(item);
+            item.IsDeleted = true;
+            item.UpdatedAt = DateTimeOffset.UtcNow;
             await _context.SaveChangesAsync();
 
             var updatedCart = await GetOrCreateCartEntityAsync(userId);
             return MapToResponse(updatedCart);
         }
 
-        /// Chức năng: Làm trống toàn bộ giỏ hàng
+        /// Chức năng: Làm trống toàn bộ giỏ hàng (Soft Delete)
         public async Task ClearCartAsync(Guid userId)
         {
             var cart = await _context.Carts
                 .Include(c => c.CartBookDetails)
                 .FirstOrDefaultAsync(c => c.UserId == userId);
 
-            if (cart != null && cart.CartBookDetails.Any())
+            if (cart != null && cart.CartBookDetails.Any(cbd => !cbd.IsDeleted))
             {
-                _context.CartBookDetails.RemoveRange(cart.CartBookDetails);
+                foreach (var cbd in cart.CartBookDetails.Where(cbd => !cbd.IsDeleted))
+                {
+                    cbd.IsDeleted = true;
+                    cbd.UpdatedAt = DateTimeOffset.UtcNow;
+                }
                 await _context.SaveChangesAsync();
             }
         }
 
         private static CartResponse MapToResponse(BookManagement.Repository.Entities.Cart cart)
         {
-            var shopGroups = cart.CartBookDetails
+            var activeItems = cart.CartBookDetails.Where(cbd => !cbd.IsDeleted).ToList();
+            var shopGroups = activeItems
                 .GroupBy(cbd => cbd.Book?.ShopId ?? Guid.Empty)
                 .Select(g =>
                 {

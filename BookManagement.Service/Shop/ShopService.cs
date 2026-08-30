@@ -112,9 +112,24 @@ namespace BookManagement.Service.Shop
         {
             var shopId = await ResolveShopIdAsync(userIdOrShopId);
 
-            if (dto.Price <= 0)
+            if (string.IsNullOrWhiteSpace(dto.Title))
             {
-                throw new ArgumentException("Giá sản phẩm phải lớn hơn 0.");
+                throw new ArgumentException("Tựa đề sách không được để trống.");
+            }
+
+            if (string.IsNullOrWhiteSpace(dto.Author))
+            {
+                throw new ArgumentException("Tên tác giả không được để trống.");
+            }
+
+            if (dto.CategoryId == Guid.Empty || !await _db.Categories.AnyAsync(c => c.Id == dto.CategoryId))
+            {
+                throw new ArgumentException("Thể loại sách đã chọn không tồn tại trong hệ thống.");
+            }
+
+            if (dto.Price < 1000)
+            {
+                throw new ArgumentException("Giá sản phẩm phải từ 1.000 VNĐ trở lên.");
             }
 
             if (dto.StockQuantity < 0)
@@ -122,18 +137,27 @@ namespace BookManagement.Service.Shop
                 throw new ArgumentException("Số lượng tồn kho không được là số âm.");
             }
 
-            var categoryId = dto.CategoryId;
-            if (categoryId == Guid.Empty || !await _db.Categories.AnyAsync(c => c.Id == categoryId))
+            if (dto.PublishedYear > DateTime.UtcNow.Year + 1)
             {
-                var defaultCategory = await _db.Categories.FirstOrDefaultAsync();
-                if (defaultCategory != null) categoryId = defaultCategory.Id;
+                throw new ArgumentException($"Năm xuất bản không được lớn hơn {DateTime.UtcNow.Year + 1}.");
             }
 
-            var isbn = string.IsNullOrWhiteSpace(dto.Isbn) ? "978-" + Random.Shared.Next(1000, 9999) + "-" + Random.Shared.Next(1000, 9999) : dto.Isbn.Trim();
-            var existingIsbn = await _db.Books.AnyAsync(b => b.Isbn == isbn);
-            if (existingIsbn)
+            string isbn;
+            if (!string.IsNullOrWhiteSpace(dto.Isbn))
             {
-                isbn = isbn + "-" + Random.Shared.Next(100, 999);
+                isbn = dto.Isbn.Trim();
+                var existingIsbn = await _db.Books.AnyAsync(b => b.Isbn == isbn);
+                if (existingIsbn)
+                {
+                    throw new InvalidOperationException($"Mã ISBN '{isbn}' đã tồn tại trong hệ thống. Vui lòng nhập mã ISBN khác.");
+                }
+            }
+            else
+            {
+                do
+                {
+                    isbn = "978-" + Random.Shared.Next(1000, 9999) + "-" + Random.Shared.Next(1000, 9999);
+                } while (await _db.Books.AnyAsync(b => b.Isbn == isbn));
             }
 
             var status = dto.StockQuantity > 0 ? BookStatus.ACTIVE : BookStatus.EMPTY;
@@ -141,16 +165,16 @@ namespace BookManagement.Service.Shop
             var book = new BookEntity
             {
                 ShopId = shopId,
-                CategoryId = categoryId,
-                Title = dto.Title,
+                CategoryId = dto.CategoryId,
+                Title = dto.Title.Trim(),
                 Isbn = isbn,
-                Author = dto.Author,
-                Publisher = dto.Publisher,
+                Author = dto.Author.Trim(),
+                Publisher = dto.Publisher?.Trim(),
                 Price = dto.Price,
                 StockQuantity = dto.StockQuantity,
-                Description = dto.Description,
-                ImageUrl = dto.ImageUrl,
-                PublishedYear = dto.PublishedYear,
+                Description = dto.Description?.Trim(),
+                ImageUrl = dto.ImageUrl?.Trim(),
+                PublishedYear = dto.PublishedYear > 0 ? dto.PublishedYear : DateTime.UtcNow.Year,
                 Status = status,
                 Rating = 5.0f
             };

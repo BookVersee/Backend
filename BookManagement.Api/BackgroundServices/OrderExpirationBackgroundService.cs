@@ -29,12 +29,15 @@ namespace BookManagement.Api.BackgroundServices
         {
             _logger.LogInformation("OrderExpirationBackgroundService đã khởi động.");
 
+            // Đợi 5 giây đầu tiên để ứng dụng hoàn tất khởi tạo Database & DI Scope
+            await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
+
             while (!stoppingToken.IsCancellationRequested)
             {
                 try
                 {
                     using var scope = _serviceProvider.CreateScope();
-                    var paymentService = scope.ServiceProvider.GetRequiredService<PaymentService>();
+                    var paymentService = scope.ServiceProvider.GetRequiredService<IPaymentService>();
 
                     // Hủy các đơn hàng PENDING quá hạn 15 phút và hoàn lại kho
                     int expiredOrdersCount = await paymentService.ExpirePendingOrdersAsync(expiryMinutes: 15);

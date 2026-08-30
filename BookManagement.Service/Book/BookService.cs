@@ -2,25 +2,29 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using BookManagement.Repository.Abstractions;
+using BookManagement.Repository.Data;
 using BookManagement.Repository.Entities.Enums;
+using BookManagement.Service.Shop;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookManagement.Service.Book
 {
     public class BookService : IBookService
     {
-        private readonly IBookRepository _bookRepository;
+        private readonly AppDbContext _context;
 
-        public BookService(IBookRepository bookRepository)
+        public BookService(AppDbContext context)
         {
-            _bookRepository = bookRepository;
+            _context = context;
         }
 
-        public async Task<PagedResponse<BookResponse>> FindBooksAsync(FilterRequest filter)
+        public async Task<PagedResponse<BookResponse>> FindBooksAsync(BookQueryDto filter)
         {
-            var query = await _bookRepository.GetQueryableAsync();
-            query = query.Where(b => b.Status == BookStatus.ACTIVE && b.Shop != null && b.Shop.Condition == ShopCondition.OPEN);
+            var query = _context.Books
+                .Include(b => b.Shop)
+                .Include(b => b.Category)
+                .AsNoTracking()
+                .Where(b => b.Status == BookStatus.ACTIVE && b.Shop != null && b.Shop.Condition == ShopCondition.OPEN);
 
             if (!string.IsNullOrWhiteSpace(filter.Keyword))
             {
@@ -33,29 +37,8 @@ namespace BookManagement.Service.Book
             if (filter.CategoryId.HasValue)
                 query = query.Where(b => b.CategoryId == filter.CategoryId.Value);
 
-            if (filter.ShopId.HasValue)
-                query = query.Where(b => b.ShopId == filter.ShopId.Value);
-
-            if (filter.MinPrice.HasValue)
-                query = query.Where(b => b.Price >= filter.MinPrice.Value);
-
-            if (filter.MaxPrice.HasValue)
-                query = query.Where(b => b.Price <= filter.MaxPrice.Value);
-
-            if (!string.IsNullOrWhiteSpace(filter.Author))
-                query = query.Where(b => b.Author != null && b.Author.ToLower().Contains(filter.Author.Trim().ToLower()));
-
-            query = filter.SortBy?.ToLower() switch
-            {
-                "price_asc" => query.OrderBy(b => b.Price),
-                "price_desc" => query.OrderByDescending(b => b.Price),
-                "rating" => query.OrderByDescending(b => b.Rating),
-                "newest" => query.OrderBy(b => b.Title),
-                _ => query.OrderBy(b => b.Title)
-            };
-
             var totalCount = await query.CountAsync();
-            var page = filter.Page < 1 ? 1 : filter.Page;
+            var page = filter.PageIndex < 1 ? 1 : filter.PageIndex;
             var pageSize = filter.PageSize < 1 ? 10 : filter.PageSize;
             var items = await query.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
 
@@ -70,32 +53,41 @@ namespace BookManagement.Service.Book
 
         public async Task<BookResponse> GetBookDetailAsync(Guid bookId)
         {
-            var book = await _bookRepository.GetByIdAsync(bookId);
+            var book = await _context.Books
+                .Include(b => b.Shop)
+                .Include(b => b.Category)
+                .FirstOrDefaultAsync(b => b.Id == bookId);
+
             if (book == null) throw new KeyNotFoundException("Book not found.");
             return MapToResponse(book);
         }
 
-        public async Task<ShopResponse> GetShopProfileAsync(Guid shopId)
+        public async Task<ShopProfileDto> GetShopProfileAsync(Guid shopId)
         {
-            var shop = await _bookRepository.GetShopByIdAsync(shopId);
+            var shop = await _context.Shops
+                .Include(s => s.Books)
+                .FirstOrDefaultAsync(s => s.Id == shopId);
+
             if (shop == null) throw new KeyNotFoundException("Shop not found.");
-            return new ShopResponse
+            return new ShopProfileDto
             {
-                Id = shop.Id,
-                UserId = shop.UserId,
+                ShopId = shop.Id,
                 ShopName = shop.ShopName,
-                Condition = shop.Condition,
+                Condition = shop.Condition.ToString(),
                 Rating = shop.Rating,
-                OwnerName = shop.User?.FullName ?? shop.User?.Username,
-                Phone = shop.User?.Phone,
-                Address = shop.User?.Address,
+                TotalBooks = shop.Books.Count,
                 CreatedAt = shop.CreatedAt
             };
         }
 
         public async Task<IEnumerable<BookResponse>> GetBooksByShopAsync(Guid shopId)
         {
-            var books = await _bookRepository.GetBooksByShopIdAsync(shopId);
+            var books = await _context.Books
+                .Include(b => b.Category)
+                .Where(b => b.ShopId == shopId)
+                .AsNoTracking()
+                .ToListAsync();
+
             return books.Select(MapToResponse);
         }
 

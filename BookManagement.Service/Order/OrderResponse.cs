@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BookManagement.Repository.Entities.Enums;
+using BookManagement.Service.Delivery;
 
 namespace BookManagement.Service.Order
 {
@@ -41,16 +42,5 @@ namespace BookManagement.Service.Order
         public ReturnRequestStatus Status { get; set; }
         public decimal RefundAmount { get; set; }
         public DateTimeOffset CreatedAt { get; set; }
-    }
-
-    public class DeliveryResponse
-    {
-        public Guid Id { get; set; }
-        public string? TrackingNumber { get; set; }
-        public string? CarrierName { get; set; }
-        public decimal? ShipFee { get; set; }
-        public DeliveryStatus Status { get; set; }
-        public DateTime? EstimatedDelivery { get; set; }
-        public DateTime? ActualDeliveredAt { get; set; }
     }
 }

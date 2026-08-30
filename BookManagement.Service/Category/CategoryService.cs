@@ -1,6 +1,9 @@
-using BookManagement.Repository.Abstractions;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 using BookManagement.Repository.Data;
-using BookManagement.Service.Models;
+using BookManagement.Service.Common;
 using Microsoft.EntityFrameworkCore;
 using CategoryEntity = BookManagement.Repository.Entities.Category;
 
@@ -8,86 +11,91 @@ namespace BookManagement.Service.Category;
 
 public class CategoryService : ICategoryService
 {
-    private readonly ICategoryRepository _categoryRepository;
     private readonly AppDbContext _context;
 
-    public CategoryService(ICategoryRepository categoryRepository, AppDbContext context)
+    public CategoryService(AppDbContext context)
     {
-        _categoryRepository = categoryRepository;
         _context = context;
     }
 
     public async Task<CategoryResponse> GetCategoryAsync(Guid categoryId)
     {
-        var category = await _categoryRepository.GetByIdAsync(categoryId);
+        var category = await _context.Categories.AsNoTracking().FirstOrDefaultAsync(c => c.Id == categoryId);
 
         if (category == null)
-            throw new Exception("Category not found");
+            throw new KeyNotFoundException("Category not found");
 
         return MapToResponse(category);
     }
 
     public async Task<IEnumerable<CategoryResponse>> GetAllCategoriesAsync()
     {
-        var categories = await _categoryRepository.GetAllAsync();
+        var categories = await _context.Categories.AsNoTracking().OrderBy(c => c.CategoryName).ToListAsync();
         return categories.Select(MapToResponse).ToList();
     }
 
     public async Task<IEnumerable<CategoryResponse>> GetActiveCategoriesAsync()
     {
-        var categories = await _categoryRepository.GetActiveAsync();
+        var categories = await _context.Categories.AsNoTracking().Where(c => c.Status).OrderBy(c => c.CategoryName).ToListAsync();
         return categories.Select(MapToResponse).ToList();
     }
 
-    public async Task<CategoryResponse> CreateCategoryAsync(
-        CreateCategoryRequest request)
+    public async Task<CategoryResponse> CreateCategoryAsync(CreateCategoryRequest request)
     {
-        if (await _categoryRepository.ExistsByNameAsync(request.Name))
-            throw new Exception("Category name already exists");
+        var name = request.Name.Trim();
+        if (await _context.Categories.AnyAsync(c => c.CategoryName.ToLower() == name.ToLower()))
+            throw new InvalidOperationException("Category name already exists");
 
         var category = new CategoryEntity
         {
-            CategoryName = request.Name,
-            Description = request.Description,
-            Status = true
+            Id = Guid.NewGuid(),
+            CategoryName = name,
+            Description = request.Description?.Trim(),
+            Status = true,
+            CreatedAt = DateTimeOffset.UtcNow
         };
 
-        await _categoryRepository.AddAsync(category);
+        await _context.Categories.AddAsync(category);
+        await _context.SaveChangesAsync();
 
         return MapToResponse(category);
     }
 
-    public async Task<CategoryResponse> UpdateCategoryAsync(
-        Guid categoryId,
-        UpdateCategoryRequest request)
+    public async Task<CategoryResponse> UpdateCategoryAsync(Guid categoryId, UpdateCategoryRequest request)
     {
-        var category = await _categoryRepository.GetByIdAsync(categoryId);
+        var category = await _context.Categories.FirstOrDefaultAsync(c => c.Id == categoryId);
 
         if (category == null)
-            throw new Exception("Category not found");
+            throw new KeyNotFoundException("Category not found");
 
-        if (!string.IsNullOrEmpty(request.Name))
-            category.CategoryName = request.Name;
+        if (!string.IsNullOrWhiteSpace(request.Name))
+            category.CategoryName = request.Name.Trim();
 
-        if (!string.IsNullOrEmpty(request.Description))
-            category.Description = request.Description;
+        if (request.Description != null)
+            category.Description = request.Description.Trim();
 
         if (request.Status.HasValue)
             category.Status = request.Status.Value;
 
-        await _categoryRepository.UpdateAsync(category);
+        category.UpdatedAt = DateTimeOffset.UtcNow;
+        await _context.SaveChangesAsync();
 
         return MapToResponse(category);
     }
 
     public async Task DeleteCategoryAsync(Guid categoryId)
     {
+        var category = await _context.Categories.FirstOrDefaultAsync(c => c.Id == categoryId);
+        if (category == null) throw new KeyNotFoundException("Category not found.");
+
         var hasBooks = await _context.Books.AnyAsync(b => b.CategoryId == categoryId);
         if (hasBooks)
         {
             throw new InvalidOperationException("Không thể xóa danh mục đang có chứa sản phẩm sách. Vui lòng chuyển danh mục hoặc xóa sản phẩm trước.");
         }
-        await _categoryRepository.DeleteAsync(categoryId);
+
+        _context.Categories.Remove(category);
+        await _context.SaveChangesAsync();
     }
 
     private static CategoryResponse MapToResponse(CategoryEntity category)

@@ -1,5 +1,5 @@
 using System;
-using System.Text.Json.Serialization;
+using System.Collections.Generic;
 using BookManagement.Repository.Entities.Enums;
 
 namespace BookManagement.Service.Order
@@ -22,11 +22,25 @@ namespace BookManagement.Service.Order
 
     public class UpdateOrderStatusRequest
     {
-        [JsonPropertyName("new_status")]
         public string NewStatus { get; set; } = string.Empty;
-
-        [JsonPropertyName("reason")]
         public string? Reason { get; set; }
+    }
+
+    public class UpdateOrderStatusDto
+    {
+        public string? OrderStatus { get; set; }
+        public string? NewStatus { get; set; }
+        public decimal? Weight { get; set; }
+        public string? Note { get; set; }
+        public string? Reason { get; set; }
+    }
+
+    public class ProcessReturnRequestDto
+    {
+        public bool? IsApproved { get; set; }
+        public string? Status { get; set; }
+        public string? AdminNote { get; set; }
+        public string? RejectionReason { get; set; }
     }
 
     public class OrderQueryRequest

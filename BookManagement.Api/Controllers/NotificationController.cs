@@ -2,7 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
-using BookManagement.Service.Models;
+using BookManagement.Api.Extensions;
+using BookManagement.Service.Common;
 using BookManagement.Service.Notification;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -25,7 +26,7 @@ namespace BookManagement.Api.Controllers
         [HttpGet("GetNotifications")]
         public async Task<IActionResult> GetNotifications()
         {
-            var userId = GetCurrentUserId();
+            var userId = User.GetUserId();
             var notifications = await _notificationService.GetUserNotificationsAsync(userId);
             return Ok(ApiResponse<IEnumerable<NotificationResponse>>.SuccessResponse(notifications));
         }
@@ -34,16 +35,16 @@ namespace BookManagement.Api.Controllers
         [HttpGet("GetUnreadNotifications")]
         public async Task<IActionResult> GetUnreadNotifications()
         {
-            var userId = GetCurrentUserId();
+            var userId = User.GetUserId();
             var notifications = await _notificationService.GetUnreadNotificationsAsync(userId);
             return Ok(ApiResponse<IEnumerable<NotificationResponse>>.SuccessResponse(notifications));
         }
 
         /// Chức năng: Đánh dấu 1 thông báo là đã đọc. Trả về: Thông báo xác nhận đã xem.
         [HttpPut("MarkAsRead")]
-        public async Task<IActionResult> MarkAsRead([FromQuery] Guid id)
+        public async Task<IActionResult> MarkAsRead(Guid id)
         {
-            var userId = GetCurrentUserId();
+            var userId = User.GetUserId();
             var success = await _notificationService.MarkNotificationAsReadAsync(userId, id);
             if (!success)
             {
@@ -56,19 +57,9 @@ namespace BookManagement.Api.Controllers
         [HttpPut("MarkAllAsRead")]
         public async Task<IActionResult> MarkAllAsRead()
         {
-            var userId = GetCurrentUserId();
+            var userId = User.GetUserId();
             await _notificationService.MarkAllNotificationsAsReadAsync(userId);
             return Ok(ApiResponse<string>.SuccessResponse("All notifications marked as read."));
-        }
-
-        private Guid GetCurrentUserId()
-        {
-            var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(claim) || !Guid.TryParse(claim, out var userId))
-            {
-                throw new UnauthorizedAccessException("Invalid authentication claims.");
-            }
-            return userId;
         }
     }
 }

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using BookManagement.Service.Category;
-using BookManagement.Service.Models;
+using BookManagement.Service.Common;
 using Microsoft.AspNetCore.Mvc;
 
 namespace BookManagement.Api.Controllers
@@ -28,7 +28,7 @@ namespace BookManagement.Api.Controllers
 
         /// Chức năng: Xem chi tiết thông tin thể loại sách theo ID. Trả về: Dữ liệu chi tiết thể loại sách.
         [HttpGet("GetCategoryDetail")]
-        public async Task<IActionResult> GetCategoryDetail([FromQuery] Guid id)
+        public async Task<IActionResult> GetCategoryDetail(Guid id)
         {
             var category = await _categoryService.GetCategoryAsync(id);
             return Ok(ApiResponse<CategoryResponse>.SuccessResponse(category));

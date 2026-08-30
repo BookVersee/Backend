@@ -57,6 +57,7 @@ namespace BookManagement.Repository.Data
             // 1. User
             modelBuilder.Entity<User>(builder =>
             {
+                builder.ToTable("Users");
                 builder.HasKey(u => u.Id);
                 builder.Property(u => u.Username).IsRequired().HasMaxLength(50);
                 builder.Property(u => u.Email).IsRequired().HasMaxLength(100);
@@ -79,19 +80,12 @@ namespace BookManagement.Repository.Data
             // 2. Shop
             modelBuilder.Entity<Shop>(builder =>
             {
-                builder.HasKey(s => s.Id);
+                builder.ToTable("Shops");
                 builder.Property(s => s.ShopName).IsRequired().HasMaxLength(100);
 
                 builder.Property(s => s.Condition)
                     .HasConversion<string>()
                     .HasMaxLength(30);
-
-                builder.HasIndex(s => s.UserId).IsUnique();
-
-                builder.HasOne(s => s.User)
-                    .WithOne(u => u.Shop)
-                    .HasForeignKey<Shop>(s => s.UserId)
-                    .OnDelete(DeleteBehavior.Restrict);
             });
 
             // 3. Category

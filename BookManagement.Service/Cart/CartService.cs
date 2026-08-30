@@ -2,33 +2,59 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using BookManagement.Repository.Abstractions;
+using BookManagement.Repository.Data;
 using BookManagement.Repository.Entities;
 using BookManagement.Repository.Entities.Enums;
+using Microsoft.EntityFrameworkCore;
 
 namespace BookManagement.Service.Cart
 {
     public class CartService : ICartService
     {
-        private readonly ICartRepository _cartRepository;
-        private readonly IBookRepository _bookRepository;
+        private readonly AppDbContext _context;
 
-        public CartService(ICartRepository cartRepository, IBookRepository bookRepository)
+        public CartService(AppDbContext context)
         {
-            _cartRepository = cartRepository;
-            _bookRepository = bookRepository;
+            _context = context;
+        }
+
+        private async Task<BookManagement.Repository.Entities.Cart> GetOrCreateCartEntityAsync(Guid userId)
+        {
+            var cart = await _context.Carts
+                .Include(c => c.CartBookDetails)
+                    .ThenInclude(cbd => cbd.Book)
+                        .ThenInclude(b => b.Shop)
+                .FirstOrDefaultAsync(c => c.UserId == userId);
+
+            if (cart == null)
+            {
+                cart = new BookManagement.Repository.Entities.Cart
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = userId,
+                    CreatedAt = DateTimeOffset.UtcNow
+                };
+
+                await _context.Carts.AddAsync(cart);
+                await _context.SaveChangesAsync();
+            }
+
+            return cart;
         }
 
         public async Task<CartResponse> GetCartAsync(Guid userId)
         {
-            var cart = await _cartRepository.GetOrCreateCartAsync(userId);
+            var cart = await GetOrCreateCartEntityAsync(userId);
             return MapToResponse(cart);
         }
 
         public async Task<CartResponse> AddToCartAsync(Guid userId, AddItemRequest request)
         {
-            var cart = await _cartRepository.GetOrCreateCartAsync(userId);
-            var book = await _bookRepository.GetByIdAsync(request.BookId);
+            var cart = await GetOrCreateCartEntityAsync(userId);
+            var book = await _context.Books
+                .Include(b => b.Shop)
+                .FirstOrDefaultAsync(b => b.Id == request.BookId);
+
             if (book == null) throw new KeyNotFoundException("Sản phẩm sách không tồn tại.");
 
             if (book.Status != BookStatus.ACTIVE)
@@ -54,7 +80,7 @@ namespace BookManagement.Service.Cart
             {
                 existing.Quantity = totalTargetQty;
                 existing.UnitPrice = book.Price;
-                await _cartRepository.UpdateCartDetailAsync(existing);
+                existing.UpdatedAt = DateTimeOffset.UtcNow;
             }
             else
             {
@@ -64,28 +90,30 @@ namespace BookManagement.Service.Cart
                     CartId = cart.Id,
                     BookId = book.Id,
                     Quantity = request.Quantity,
-                    UnitPrice = book.Price
+                    UnitPrice = book.Price,
+                    CreatedAt = DateTimeOffset.UtcNow
                 };
-                await _cartRepository.AddCartDetailAsync(newItem);
+                await _context.CartBookDetails.AddAsync(newItem);
             }
 
-            var updatedCart = await _cartRepository.GetCartByUserIdAsync(userId);
-            return MapToResponse(updatedCart!);
+            await _context.SaveChangesAsync();
+            var updatedCart = await GetOrCreateCartEntityAsync(userId);
+            return MapToResponse(updatedCart);
         }
 
         public async Task<CartResponse> UpdateCartItemAsync(Guid userId, Guid cartDetailId, UpdateItemRequest request)
         {
-            var cart = await _cartRepository.GetCartByUserIdAsync(userId);
-            if (cart == null) throw new KeyNotFoundException("Cart not found.");
-
+            var cart = await GetOrCreateCartEntityAsync(userId);
             var item = cart.CartBookDetails.FirstOrDefault(cbd => cbd.Id == cartDetailId);
             if (item == null) throw new KeyNotFoundException("Cart item not found.");
 
             if (request.Quantity <= 0)
-                await _cartRepository.RemoveCartDetailAsync(cartDetailId);
+            {
+                _context.CartBookDetails.Remove(item);
+            }
             else
             {
-                var book = item.Book ?? await _bookRepository.GetByIdAsync(item.BookId);
+                var book = item.Book ?? await _context.Books.FirstOrDefaultAsync(b => b.Id == item.BookId);
                 if (book != null)
                 {
                     if (book.Status != BookStatus.ACTIVE)
@@ -97,34 +125,43 @@ namespace BookManagement.Service.Cart
                     {
                         throw new InvalidOperationException($"Sản phẩm '{book.Title}' chỉ còn {book.StockQuantity} cuốn trong kho (bạn yêu cầu {request.Quantity} cuốn).");
                     }
+
+                    item.UnitPrice = book.Price;
                 }
 
                 item.Quantity = request.Quantity;
-                if (book != null) item.UnitPrice = book.Price;
-                await _cartRepository.UpdateCartDetailAsync(item);
+                item.UpdatedAt = DateTimeOffset.UtcNow;
             }
 
-            var updatedCart = await _cartRepository.GetCartByUserIdAsync(userId);
-            return MapToResponse(updatedCart!);
+            await _context.SaveChangesAsync();
+            var updatedCart = await GetOrCreateCartEntityAsync(userId);
+            return MapToResponse(updatedCart);
         }
 
         public async Task<CartResponse> RemoveFromCartAsync(Guid userId, Guid cartDetailId)
         {
-            var cart = await _cartRepository.GetCartByUserIdAsync(userId);
-            if (cart == null) throw new KeyNotFoundException("Cart not found.");
-
+            var cart = await GetOrCreateCartEntityAsync(userId);
             var item = cart.CartBookDetails.FirstOrDefault(cbd => cbd.Id == cartDetailId);
             if (item == null) throw new KeyNotFoundException("Cart item not found in user cart.");
 
-            await _cartRepository.RemoveCartDetailAsync(cartDetailId);
-            var updatedCart = await _cartRepository.GetCartByUserIdAsync(userId);
-            return MapToResponse(updatedCart!);
+            _context.CartBookDetails.Remove(item);
+            await _context.SaveChangesAsync();
+
+            var updatedCart = await GetOrCreateCartEntityAsync(userId);
+            return MapToResponse(updatedCart);
         }
 
         public async Task ClearCartAsync(Guid userId)
         {
-            var cart = await _cartRepository.GetCartByUserIdAsync(userId);
-            if (cart != null) await _cartRepository.ClearCartAsync(cart.Id);
+            var cart = await _context.Carts
+                .Include(c => c.CartBookDetails)
+                .FirstOrDefaultAsync(c => c.UserId == userId);
+
+            if (cart != null && cart.CartBookDetails.Any())
+            {
+                _context.CartBookDetails.RemoveRange(cart.CartBookDetails);
+                await _context.SaveChangesAsync();
+            }
         }
 
         private static CartResponse MapToResponse(BookManagement.Repository.Entities.Cart cart)

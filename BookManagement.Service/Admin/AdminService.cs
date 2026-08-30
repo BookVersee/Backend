@@ -2,6 +2,12 @@ using BookManagement.Repository.Abstractions;
 using BookManagement.Repository.Data;
 using BookManagement.Repository.Entities;
 using BookManagement.Repository.Entities.Enums;
+using BookManagement.Service.Book;
+using BookManagement.Service.Common;
+using BookManagement.Service.Delivery;
+using BookManagement.Service.Order;
+using BookManagement.Service.Shop;
+using BookManagement.Service.User;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookManagement.Service.Admin;
@@ -9,29 +15,16 @@ namespace BookManagement.Service.Admin;
 public class AdminService : IAdminService
 {
     private readonly AppDbContext _context;
-    private readonly IUserRepository _userRepository;
-    private readonly IOrderRepository _orderRepository;
-    private readonly IUserSessionRepository _sessionRepository;
-    private readonly IBookRepository _bookRepository;
 
-    public AdminService(
-        AppDbContext context,
-        IUserRepository userRepository,
-        IOrderRepository orderRepository,
-        IUserSessionRepository sessionRepository,
-        IBookRepository bookRepository)
+    public AdminService(AppDbContext context)
     {
         _context = context;
-        _userRepository = userRepository;
-        _orderRepository = orderRepository;
-        _sessionRepository = sessionRepository;
-        _bookRepository = bookRepository;
     }
 
     // ===== USER MANAGEMENT =====
     public async Task<PagedResult<UserResponse>> GetUsersAsync(UserFilterRequest filter)
     {
-        var query = _context.Users.AsNoTracking().Include(u => u.Shop).AsQueryable();
+        var query = _context.Users.AsNoTracking().AsQueryable();
 
         if (filter.Role.HasValue)
             query = query.Where(u => u.Role == filter.Role.Value);
@@ -44,8 +37,7 @@ public class AdminService : IAdminService
             var kw = filter.Keyword.Trim().ToLower();
             query = query.Where(u => u.Username.ToLower().Contains(kw) ||
                                      u.Email.ToLower().Contains(kw) ||
-                                     (u.FullName != null && u.FullName.ToLower().Contains(kw)) ||
-                                     (u.Shop != null && u.Shop.ShopName.ToLower().Contains(kw)));
+                                     (u.FullName != null && u.FullName.ToLower().Contains(kw)));
         }
 
         var totalCount = await query.CountAsync();
@@ -68,14 +60,22 @@ public class AdminService : IAdminService
 
     public async Task<UserDetailResponse> GetUserDetailAsync(Guid id)
     {
-        var user = await _context.Users.AsNoTracking().Include(u => u.Shop).FirstOrDefaultAsync(u => u.Id == id)
-                   ?? await _context.Users.AsNoTracking().Include(u => u.Shop).FirstOrDefaultAsync(u => u.Shop != null && u.Shop.Id == id);
+        var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id);
 
         if (user == null)
             throw new KeyNotFoundException("User or Shop not found.");
 
-        var orders = await _orderRepository.GetOrdersByUserIdAsync(user.Id);
+        var orders = await _context.Orders
+            .Include(o => o.OrderDetails)
+                .ThenInclude(od => od.Book)
+            .Include(o => o.Deliveries)
+            .AsNoTracking()
+            .Where(o => o.UserId == user.Id)
+            .OrderByDescending(o => o.CreatedAt)
+            .ToListAsync();
         var transactions = await _context.TransactionHistories.AsNoTracking().Where(t => t.UserId == user.Id).ToListAsync();
+
+        var shop = user as BookManagement.Repository.Entities.Shop;
 
         return new UserDetailResponse
         {
@@ -87,9 +87,9 @@ public class AdminService : IAdminService
             Address = user.Address,
             Role = user.Role.ToString(),
             Status = user.Status.ToString(),
-            ShopId = user.Shop?.Id,
-            ShopName = user.Shop?.ShopName,
-            ShopStatus = user.Shop?.Condition.ToString(),
+            ShopId = shop?.Id,
+            ShopName = shop?.ShopName,
+            ShopStatus = shop?.Condition.ToString(),
             CreatedAt = user.CreatedAt,
             RecentOrders = orders.Select(o => new OrderSummaryResponse
             {
@@ -117,28 +117,29 @@ public class AdminService : IAdminService
 
     public async Task UpdateUserStatusAsync(Guid userId, string status)
     {
-        var user = await _context.Users.Include(u => u.Shop).FirstOrDefaultAsync(u => u.Id == userId);
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
         if (user == null)
             throw new KeyNotFoundException("User not found.");
 
         var newStatus = (UserStatus)Enum.Parse(typeof(UserStatus), status);
         user.Status = newStatus;
 
-        if (user.Shop != null)
+        if (user is BookManagement.Repository.Entities.Shop shop)
         {
             if (newStatus == UserStatus.LOCKED)
             {
-                user.Shop.Condition = ShopCondition.CLOSED;
+                shop.Condition = ShopCondition.CLOSED;
             }
-            else if (newStatus == UserStatus.ACTIVE && user.Shop.Condition == ShopCondition.CLOSED)
+            else if (newStatus == UserStatus.ACTIVE && shop.Condition == ShopCondition.CLOSED)
             {
-                user.Shop.Condition = ShopCondition.OPEN;
+                shop.Condition = ShopCondition.OPEN;
             }
         }
 
         if (user.Status == UserStatus.LOCKED)
         {
-            await _sessionRepository.RevokeAllUserSessionsAsync(userId);
+            var sessions = await _context.UserSessions.Where(us => us.UserId == userId && !us.IsRevoked).ToListAsync();
+            foreach (var s in sessions) s.IsRevoked = true;
         }
 
         await _context.SaveChangesAsync();
@@ -324,25 +325,16 @@ public class AdminService : IAdminService
 
     public async Task HideBookAsync(Guid bookId)
     {
-        var book = await _bookRepository.GetByIdAsync(bookId);
+        var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == bookId);
         if (book == null)
-            throw new Exception("Book not found");
+            throw new KeyNotFoundException("Book not found");
 
         book.Status = BookStatus.HIDDEN;
-        await _bookRepository.UpdateAsync(book);
+        book.UpdatedAt = DateTimeOffset.UtcNow;
+        await _context.SaveChangesAsync();
     }
 
     // ===== SHOP MANAGEMENT =====
-    public async Task<IEnumerable<ShopResponse>> GetPendingShopsAsync()
-    {
-        var shops = await _context.Shops
-            .AsNoTracking()
-            .Where(s => s.Condition == ShopCondition.PENDING)
-            .ToListAsync();
-
-        return shops.Select(MapToShopResponse);
-    }
-
     public async Task<PagedResult<ShopResponse>> GetAllShopsAsync(int page = 1, int pageSize = 10)
     {
         var query = _context.Shops.AsNoTracking();
@@ -363,60 +355,27 @@ public class AdminService : IAdminService
         };
     }
 
-    public async Task ApproveShopAsync(Guid shopId)
-    {
-        var shop = await _context.Shops.Include(s => s.User).FirstOrDefaultAsync(s => s.Id == shopId);
-        if (shop == null)
-            throw new KeyNotFoundException("Shop not found.");
-
-        shop.Condition = ShopCondition.OPEN;
-        if (shop.User != null)
-        {
-            if (shop.User.Role != BookManagement.Repository.Entities.Enums.UserRole.ADMIN)
-            {
-                shop.User.Role = BookManagement.Repository.Entities.Enums.UserRole.SHOP;
-            }
-            shop.User.Status = UserStatus.ACTIVE;
-
-            // Automated notification to shop owner about shop reopening
-            var notification = new BookManagement.Repository.Entities.Notification
-            {
-                Id = Guid.NewGuid(),
-                UserId = shop.UserId,
-                Type = NotificationType.SYSTEM,
-                ReferenceId = shop.Id,
-                Content = $"Cửa hàng '{shop.ShopName}' của bạn đã được Ban quản trị (Admin) mở khóa / kích hoạt hoạt động trở lại.",
-                CreatedAt = DateTimeOffset.UtcNow
-            };
-            await _context.Notifications.AddAsync(notification);
-        }
-
-        await _context.SaveChangesAsync();
-    }
-
     public async Task LockShopAsync(Guid shopId, LockShopRequest request)
     {
-        var shop = await _context.Shops.Include(s => s.User).FirstOrDefaultAsync(s => s.Id == shopId);
+        var shop = await _context.Shops.FirstOrDefaultAsync(s => s.Id == shopId);
         if (shop == null)
             throw new KeyNotFoundException("Shop not found.");
 
         shop.Condition = ShopCondition.CLOSED;
-        if (shop.User != null)
-        {
-            shop.User.Status = UserStatus.LOCKED;
-            await _sessionRepository.RevokeAllUserSessionsAsync(shop.UserId);
+        shop.Status = UserStatus.LOCKED;
+        var shopSessions = await _context.UserSessions.Where(us => us.UserId == shop.Id && !us.IsRevoked).ToListAsync();
+        foreach (var s in shopSessions) s.IsRevoked = true;
 
-            var notification = new BookManagement.Repository.Entities.Notification
-            {
-                Id = Guid.NewGuid(),
-                UserId = shop.UserId,
-                Type = NotificationType.SYSTEM,
-                ReferenceId = shop.Id,
-                Content = $"Cửa hàng '{shop.ShopName}' của bạn đã bị Ban quản trị (Admin) tạm khóa. Ghi chú: {request.Reason ?? "Vi phạm tiêu chuẩn cộng đồng"}.",
-                CreatedAt = DateTimeOffset.UtcNow
-            };
-            await _context.Notifications.AddAsync(notification);
-        }
+        var notification = new BookManagement.Repository.Entities.Notification
+        {
+            Id = Guid.NewGuid(),
+            UserId = shop.Id,
+            Type = NotificationType.SYSTEM,
+            ReferenceId = shop.Id,
+            Content = $"Cửa hàng '{shop.ShopName}' của bạn đã bị Ban quản trị (Admin) tạm khóa. Ghi chú: {request.Reason ?? "Vi phạm tiêu chuẩn cộng đồng"}.",
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        await _context.Notifications.AddAsync(notification);
 
         await _context.SaveChangesAsync();
     }
@@ -525,21 +484,21 @@ public class AdminService : IAdminService
         return MapToDeliveryResponse(delivery);
     }
 
-    private static UserResponse MapToUserResponse(BookManagement.Repository.Entities.User user) => new()
+    private static UserResponse MapToUserResponse(BookManagement.Repository.Entities.User user)
     {
-        Id = user.Id,
-        Username = user.Username,
-        Email = user.Email,
-        FullName = user.FullName,
-        Phone = user.Phone,
-        Address = user.Address,
-        Role = user.Role.ToString(),
-        Status = user.Status.ToString(),
-        ShopId = user.Shop?.Id,
-        ShopName = user.Shop?.ShopName,
-        ShopStatus = user.Shop?.Condition.ToString(),
-        CreatedAt = user.CreatedAt
-    };
+        return new UserResponse
+        {
+            Id = user.Id,
+            Username = user.Username,
+            Email = user.Email,
+            FullName = user.FullName,
+            Phone = user.Phone,
+            Address = user.Address,
+            Role = user.Role,
+            Status = user.Status,
+            CreatedAt = user.CreatedAt
+        };
+    }
 
     private static DisputeResponse MapToDisputeResponse(BookManagement.Repository.Entities.ReturnRequest rr) => new()
     {
@@ -560,8 +519,8 @@ public class AdminService : IAdminService
     {
         Id = order.Id,
         UserId = order.UserId,
+        OrderStatus = order.OrderStatus,
         TotalAmount = order.TotalAmount,
-        Status = order.OrderStatus.ToString(),
         ShippingAddress = order.ShippingAddress,
         CreatedAt = order.CreatedAt
     };
@@ -573,16 +532,16 @@ public class AdminService : IAdminService
         Author = book.Author,
         Price = book.Price,
         ImageUrl = book.ImageUrl,
-        Status = book.Status.ToString()
+        Status = book.Status
     };
 
     private static ShopResponse MapToShopResponse(BookManagement.Repository.Entities.Shop shop) => new()
     {
         Id = shop.Id,
-        UserId = shop.UserId,
+        UserId = shop.Id,
         ShopName = shop.ShopName,
-        Status = shop.Condition.ToString(),
-        Rating = (decimal)shop.Rating
+        Condition = shop.Condition,
+        Rating = shop.Rating
     };
 
     private static DeliveryResponse MapToDeliveryResponse(BookManagement.Repository.Entities.Delivery delivery) => new()
@@ -692,7 +651,7 @@ public class AdminService : IAdminService
 
     private async Task HandleShopViolationAsync(BookManagement.Repository.Entities.Shop shop, string violationReason)
     {
-        if (shop == null || shop.UserId == Guid.Empty) return;
+        if (shop == null || shop.Id == Guid.Empty) return;
 
         shop.ViolationCount += 1;
         shop.UpdatedAt = DateTimeOffset.UtcNow;
@@ -702,7 +661,7 @@ public class AdminService : IAdminService
             var warning1 = new BookManagement.Repository.Entities.Notification
             {
                 Id = Guid.NewGuid(),
-                UserId = shop.UserId,
+                UserId = shop.Id,
                 Type = NotificationType.SYSTEM,
                 ReferenceId = shop.Id,
                 Content = $"CẢNH BÁO VI PHẠM (1/3): Cửa hàng '{shop.ShopName}' của bạn vừa ghi nhận 1 lần vi phạm ({violationReason}). Nếu tái phạm đủ 3 lần, Cửa hàng sẽ bị hệ thống tự động tạm khóa 1 tháng!",
@@ -716,7 +675,7 @@ public class AdminService : IAdminService
             var warning2 = new BookManagement.Repository.Entities.Notification
             {
                 Id = Guid.NewGuid(),
-                UserId = shop.UserId,
+                UserId = shop.Id,
                 Type = NotificationType.SYSTEM,
                 ReferenceId = shop.Id,
                 Content = $"CẢNH BÁO VI PHẠM NGHIÊM TRỌNG (2/3): Cửa hàng '{shop.ShopName}' của bạn đã ghi nhận 2 lần vi phạm ({violationReason}). Thêm 1 lần vi phạm nữa, Cửa hàng sẽ bị hệ thống tự động tạm khóa 1 tháng!",
@@ -729,19 +688,15 @@ public class AdminService : IAdminService
         {
             shop.Condition = ShopCondition.CLOSED;
             shop.LockedUntil = DateTimeOffset.UtcNow.AddMonths(1);
-
-            var shopUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == shop.UserId);
-            if (shopUser != null)
-            {
-                shopUser.Status = UserStatus.LOCKED;
-                shopUser.UpdatedAt = DateTimeOffset.UtcNow;
-                await _sessionRepository.RevokeAllUserSessionsAsync(shop.UserId);
-            }
+            shop.Status = UserStatus.LOCKED;
+            shop.UpdatedAt = DateTimeOffset.UtcNow;
+            var lockedSessions = await _context.UserSessions.Where(us => us.UserId == shop.Id && !us.IsRevoked).ToListAsync();
+            foreach (var s in lockedSessions) s.IsRevoked = true;
 
             var lockWarning = new BookManagement.Repository.Entities.Notification
             {
                 Id = Guid.NewGuid(),
-                UserId = shop.UserId,
+                UserId = shop.Id,
                 Type = NotificationType.SYSTEM,
                 ReferenceId = shop.Id,
                 Content = $"THÔNG BÁO TẠM KHÓA CỬA HÀNG (3/3): Cửa hàng '{shop.ShopName}' đã cán mốc 3 lần vi phạm tiêu chuẩn cộng đồng ({violationReason}). Hệ thống đã tự động tạm khóa Cửa hàng 1 tháng (Tạm dừng đến ngày {shop.LockedUntil.Value:dd/MM/yyyy HH:mm}).",

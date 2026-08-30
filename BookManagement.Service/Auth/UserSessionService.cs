@@ -3,12 +3,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using BCrypt.Net;
-using BookManagement.Repository.Abstractions;
+using BookManagement.Repository.Data;
 using BookManagement.Repository.Entities;
 using BookManagement.Repository.Entities.Enums;
 using BookManagement.Service.Email;
 using BookManagement.Service.JwtService;
-using BookManagement.Service.Models;
+using BookManagement.Service.Common;
 using Google.Apis.Auth;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -19,27 +19,21 @@ namespace BookManagement.Service.Auth
 {
     public class UserSessionService : IUserSessionService
     {
-        private readonly IUserRepository _userRepository;
-        private readonly IUserSessionRepository _sessionRepository;
+        private readonly AppDbContext _context;
         private readonly ITokenService _tokenService;
-        private readonly BookManagement.Repository.Data.AppDbContext _context;
         private readonly GoogleAuthOptions _googleAuthOptions;
         private readonly IEmailService _emailService;
         private readonly IMemoryCache _memoryCache;
 
         public UserSessionService(
-            IUserRepository userRepository,
-            IUserSessionRepository sessionRepository,
+            AppDbContext context,
             ITokenService tokenService,
-            BookManagement.Repository.Data.AppDbContext context,
             IOptions<GoogleAuthOptions> googleAuthOptions,
             IEmailService emailService,
             IMemoryCache memoryCache)
         {
-            _userRepository = userRepository;
-            _sessionRepository = sessionRepository;
-            _tokenService = tokenService;
             _context = context;
+            _tokenService = tokenService;
             _googleAuthOptions = googleAuthOptions.Value;
             _emailService = emailService;
             _memoryCache = memoryCache;
@@ -47,26 +41,31 @@ namespace BookManagement.Service.Auth
 
         public async Task<TokenResponse> RegisterAsync(RegisterRequest request, string? ipAddress = null, string? deviceInfo = null)
         {
-            if (await _userRepository.ExistsByUsernameAsync(request.Username))
+            var username = request.Username.Trim();
+            var email = request.Email.Trim().ToLower();
+
+            if (await _context.Users.AnyAsync(u => u.Username == username))
                 throw new InvalidOperationException("Username is already taken.");
 
-            if (await _userRepository.ExistsByEmailAsync(request.Email))
+            if (await _context.Users.AnyAsync(u => u.Email == email))
                 throw new InvalidOperationException("Email is already registered.");
 
             var user = new UserEntity
             {
                 Id = Guid.NewGuid(),
-                Username = request.Username.Trim(),
-                Email = request.Email.Trim().ToLower(),
+                Username = username,
+                Email = email,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
                 FullName = request.FullName,
                 Phone = request.Phone,
                 Address = request.Address,
                 Role = UserRole.CUSTOMER,
-                Status = UserStatus.ACTIVE
+                Status = UserStatus.ACTIVE,
+                CreatedAt = DateTimeOffset.UtcNow
             };
 
-            await _userRepository.CreateAsync(user);
+            await _context.Users.AddAsync(user);
+            await _context.SaveChangesAsync();
 
             var accessToken = _tokenService.GenerateAccessToken(user);
             var sessionResponse = await CreateSessionAsync(user.Id, ipAddress ?? "Unknown", deviceInfo ?? "Unknown");
@@ -82,14 +81,16 @@ namespace BookManagement.Service.Auth
 
         public async Task<TokenResponse> LoginAsync(LoginRequest request, string? ipAddress = null, string? deviceInfo = null)
         {
-            var user = await _userRepository.GetByUsernameOrEmailAsync(request.UsernameOrEmail);
+            var input = request.UsernameOrEmail.Trim().ToLower();
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username.ToLower() == input || u.Email.ToLower() == input);
+
             bool isMatch = user != null && (BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash) || (request.Password == "123" && (user.Username.StartsWith("superadmin") || user.Username.StartsWith("admin") || user.Username.StartsWith("shop") || user.Username.StartsWith("shipper") || user.Username.StartsWith("customer"))));
-        if (user == null || !isMatch)
+            if (user == null || !isMatch)
                 throw new UnauthorizedAccessException("Invalid username/email or password.");
 
             if (user.Status == UserStatus.LOCKED)
             {
-                var shop = await _context.Shops.FirstOrDefaultAsync(s => s.UserId == user.Id);
+                var shop = await _context.Shops.FirstOrDefaultAsync(s => s.Id == user.Id);
                 if (shop != null && shop.LockedUntil.HasValue)
                 {
                     if (shop.LockedUntil.Value > DateTimeOffset.UtcNow)
@@ -138,10 +139,12 @@ namespace BookManagement.Service.Auth
                 IpAddress = ipAddress,
                 DeviceInfo = deviceInfo,
                 ExpiresAt = expiresAt,
-                IsRevoked = false
+                IsRevoked = false,
+                CreatedAt = DateTimeOffset.UtcNow
             };
 
-            await _sessionRepository.CreateAsync(session);
+            await _context.UserSessions.AddAsync(session);
+            await _context.SaveChangesAsync();
 
             return new UserSessionResponse
             {
@@ -157,22 +160,27 @@ namespace BookManagement.Service.Auth
 
         public async Task RevokeSessionAsync(string refreshToken)
         {
-            var session = await _sessionRepository.GetByRefreshTokenAsync(refreshToken);
+            var session = await _context.UserSessions.FirstOrDefaultAsync(us => us.RefreshToken == refreshToken);
             if (session != null && !session.IsRevoked)
             {
                 session.IsRevoked = true;
-                await _sessionRepository.UpdateAsync(session);
+                await _context.SaveChangesAsync();
             }
         }
 
         public async Task RevokeAllUserSessionsAsync(Guid userId)
         {
-            await _sessionRepository.RevokeAllUserSessionsAsync(userId);
+            var sessions = await _context.UserSessions.Where(us => us.UserId == userId && !us.IsRevoked).ToListAsync();
+            foreach (var session in sessions)
+            {
+                session.IsRevoked = true;
+            }
+            await _context.SaveChangesAsync();
         }
 
         public async Task<TokenResponse> ValidateAndRefreshTokenAsync(string refreshToken)
         {
-            var session = await _sessionRepository.GetByRefreshTokenAsync(refreshToken);
+            var session = await _context.UserSessions.Include(us => us.User).FirstOrDefaultAsync(us => us.RefreshToken == refreshToken);
             if (session == null || session.IsRevoked || session.ExpiresAt <= DateTime.UtcNow)
                 throw new UnauthorizedAccessException("Invalid or expired refresh token.");
 
@@ -182,7 +190,7 @@ namespace BookManagement.Service.Auth
 
             // Token Rotation: revoke old session, issue new pair
             session.IsRevoked = true;
-            await _sessionRepository.UpdateAsync(session);
+            await _context.SaveChangesAsync();
 
             var newAccessToken = _tokenService.GenerateAccessToken(user);
             var newSession = await CreateSessionAsync(user.Id, session.IpAddress ?? "Unknown", session.DeviceInfo ?? "Unknown");
@@ -198,22 +206,22 @@ namespace BookManagement.Service.Auth
 
         public async Task<IEnumerable<UserSessionResponse>> GetUserSessionsAsync(Guid userId)
         {
-            var sessions = await _sessionRepository.GetUserActiveSessionsAsync(userId);
-            var result = new List<UserSessionResponse>();
-            foreach (var s in sessions)
+            var sessions = await _context.UserSessions
+                .AsNoTracking()
+                .Where(us => us.UserId == userId && !us.IsRevoked && us.ExpiresAt > DateTime.UtcNow)
+                .OrderByDescending(us => us.CreatedAt)
+                .ToListAsync();
+
+            return sessions.Select(s => new UserSessionResponse
             {
-                result.Add(new UserSessionResponse
-                {
-                    Id = s.Id,
-                    RefreshToken = s.RefreshToken,
-                    IpAddress = s.IpAddress,
-                    DeviceInfo = s.DeviceInfo,
-                    ExpiresAt = s.ExpiresAt,
-                    IsRevoked = s.IsRevoked,
-                    CreatedAt = s.CreatedAt
-                });
-            }
-            return result;
+                Id = s.Id,
+                RefreshToken = s.RefreshToken,
+                IpAddress = s.IpAddress,
+                DeviceInfo = s.DeviceInfo,
+                ExpiresAt = s.ExpiresAt,
+                IsRevoked = s.IsRevoked,
+                CreatedAt = s.CreatedAt
+            });
         }
 
         public async Task<TokenResponse> GoogleLoginAsync(GoogleLoginRequest request, string? ipAddress = null, string? deviceInfo = null)
@@ -251,7 +259,7 @@ namespace BookManagement.Service.Auth
                 var baseUsername = email.Split('@')[0];
                 var username = baseUsername;
                 int count = 1;
-                while (await _userRepository.ExistsByUsernameAsync(username))
+                while (await _context.Users.AnyAsync(u => u.Username == username))
                 {
                     username = $"{baseUsername}_{count++}";
                 }
@@ -268,7 +276,8 @@ namespace BookManagement.Service.Auth
                     CreatedAt = DateTimeOffset.UtcNow
                 };
 
-                await _userRepository.CreateAsync(user);
+                await _context.Users.AddAsync(user);
+                await _context.SaveChangesAsync();
             }
 
             if (user.Status == UserStatus.LOCKED)
@@ -295,7 +304,8 @@ namespace BookManagement.Service.Auth
                 throw new ArgumentException("Email is required.");
             }
 
-            var user = await _userRepository.GetByUsernameOrEmailAsync(email.Trim());
+            var input = email.Trim().ToLower();
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username.ToLower() == input || u.Email.ToLower() == input);
             if (user == null)
             {
                 throw new KeyNotFoundException("Tài khoản với Email này không tồn tại trên hệ thống.");
@@ -326,7 +336,8 @@ namespace BookManagement.Service.Auth
                 throw new ArgumentException("Email và mã OTP không được để trống.");
             }
 
-            var user = await _userRepository.GetByUsernameOrEmailAsync(request.Email.Trim());
+            var input = request.Email.Trim().ToLower();
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username.ToLower() == input || u.Email.ToLower() == input);
             if (user == null)
             {
                 throw new KeyNotFoundException("Tài khoản với Email này không tồn tại.");
@@ -353,7 +364,8 @@ namespace BookManagement.Service.Auth
                 throw new ArgumentException("Email và mật khẩu mới không được để trống.");
             }
 
-            var user = await _userRepository.GetByUsernameOrEmailAsync(request.Email.Trim());
+            var input = request.Email.Trim().ToLower();
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username.ToLower() == input || u.Email.ToLower() == input);
             if (user == null)
             {
                 throw new KeyNotFoundException("Tài khoản với Email này không tồn tại.");
@@ -366,7 +378,8 @@ namespace BookManagement.Service.Auth
             }
 
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
-            await _userRepository.UpdateAsync(user);
+            user.UpdatedAt = DateTimeOffset.UtcNow;
+            await _context.SaveChangesAsync();
 
             _memoryCache.Remove(verifiedKey);
         }
@@ -385,4 +398,3 @@ namespace BookManagement.Service.Auth
         };
     }
 }
-

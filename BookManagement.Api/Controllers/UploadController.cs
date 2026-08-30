@@ -1,7 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using BookManagement.Service.Cloudinary;
-using BookManagement.Service.Models;
+using BookManagement.Service.Common;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -70,7 +70,7 @@ public class UploadController : ControllerBase
     /// </summary>
     /// <param name="publicId">PublicId của ảnh trên Cloudinary</param>
     [HttpDelete("image")]
-    public async Task<IActionResult> DeleteImage([FromQuery] string publicId)
+    public async Task<IActionResult> DeleteImage(string publicId)
     {
         if (string.IsNullOrWhiteSpace(publicId))
         {

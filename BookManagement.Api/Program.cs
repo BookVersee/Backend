@@ -1,21 +1,28 @@
 using BookManagement.Api.BackgroundServices;
+using BookManagement.Api.Controllers;
 using BookManagement.Api.Extensions;
+using BookManagement.Api.Filters;
 using BookManagement.Api.Hubs;
 using BookManagement.Api.Middlewares;
 using BookManagement.Repository.Data;
-using BookManagement.Repository.Abstractions;
-using BookManagement.Repository.Repositories;
 using BookManagement.Service.Admin;
 using BookManagement.Service.Auth;
 using BookManagement.Service.Book;
 using BookManagement.Service.Cart;
 using BookManagement.Service.Category;
+using BookManagement.Service.Chat;
+using BookManagement.Service.Cloudinary;
+using BookManagement.Service.Delivery;
+using BookManagement.Service.Email;
 using BookManagement.Service.Feedback;
+using BookManagement.Service.Idempotency;
 using BookManagement.Service.JwtService;
 using BookManagement.Service.Notification;
 using BookManagement.Service.Order;
+using BookManagement.Service.Payment;
+using BookManagement.Service.Shipping;
+using BookManagement.Service.Shop;
 using BookManagement.Service.User;
-using BookManagement.Service.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -39,47 +46,50 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(connectionString, sqlServerOptions => sqlServerOptions.EnableRetryOnFailure()));
 
-// 3. Add Custom Extensions (JWT & Swagger & Application Services)
+// 2. Add Custom Extensions (JWT & Swagger)
 builder.Services.AddJwtServices(builder.Configuration);
 builder.Services.AddSwaggerServices();
-builder.Services.AddApplicationServices();
 
-// Email & Google Auth Services DI Registrations
-builder.Services.Configure<BookManagement.Service.Models.EmailOptions>(builder.Configuration.GetSection("EmailOptions"));
-builder.Services.Configure<BookManagement.Service.Models.GoogleAuthOptions>(builder.Configuration.GetSection("GoogleAuth"));
-builder.Services.AddScoped<BookManagement.Service.Email.IEmailService, BookManagement.Service.Email.EmailService>();
+// 3. Configuration Options Registrations
+builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("EmailOptions"));
+builder.Services.Configure<GoogleAuthOptions>(builder.Configuration.GetSection("GoogleAuth"));
+builder.Services.Configure<CloudinarySettings>(builder.Configuration.GetSection("CloudinarySettings"));
 
-// Cloudinary Service & DI Registrations
-builder.Services.Configure<BookManagement.Service.Cloudinary.CloudinarySettings>(builder.Configuration.GetSection("CloudinarySettings"));
-builder.Services.AddScoped<BookManagement.Service.Cloudinary.ICloudinaryService, BookManagement.Service.Cloudinary.CloudinaryService>();
-
-builder.Services.AddScoped<IUserRepository, UserRepository>();
-builder.Services.AddScoped<IUserSessionRepository, UserSessionRepository>();
-builder.Services.AddScoped<ITokenService, TokenService>();
-builder.Services.AddScoped<IUserSessionService, UserSessionService>();
+// 4. Domain & Infrastructure Services DI Registrations
 builder.Services.AddScoped<IUserService, UserService>();
-
-builder.Services.AddScoped<IBookRepository, BookRepository>();
-builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
+builder.Services.AddScoped<IUserSessionService, UserSessionService>();
+builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IBookService, BookService>();
 builder.Services.AddScoped<ICategoryService, CategoryService>();
-
-builder.Services.AddScoped<ICartRepository, CartRepository>();
 builder.Services.AddScoped<ICartService, CartService>();
-
-builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IOrderService, OrderService>();
-
-builder.Services.AddScoped<IFeedbackRepository, FeedbackRepository>();
 builder.Services.AddScoped<IFeedbackService, FeedbackService>();
-
-builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
-
 builder.Services.AddScoped<IAdminService, AdminService>();
 
+builder.Services.AddScoped<IShopService, ShopService>();
+builder.Services.AddScoped<ShopService>();
+builder.Services.AddScoped<IDeliveryService, DeliveryService>();
+builder.Services.AddScoped<DeliveryService>();
+builder.Services.AddScoped<IShippingService, ShippingService>();
+builder.Services.AddScoped<ShippingService>();
+builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<PaymentService>();
+builder.Services.AddScoped<IChatService, ChatService>();
+builder.Services.AddScoped<ChatService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<EmailService>();
+builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();
+builder.Services.AddScoped<CloudinaryService>();
+builder.Services.AddSingleton<IIdempotencyService, IdempotencyService>();
+
+builder.Services.AddHttpClient<MomoService>();
+builder.Services.AddHttpClient<GhnService>();
+
+// 6. Real-Time SignalR Notifiers & Middlewares
+builder.Services.AddScoped<IChatRealtimeNotifier, ChatRealtimeNotifier>();
 builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
-builder.Services.AddHostedService<OrderExpirationBackgroundService>();
+// builder.Services.AddHostedService<OrderExpirationBackgroundService>(); // Tắt chạy ngầm theo yêu cầu người dùng
 
 builder.Services.AddCors(options =>
 {
@@ -134,7 +144,6 @@ using (var scope = app.Services.CreateScope())
             else
             {
                 // Auto-sync schema changes for existing database
-                // Step 1: Add TransactionCode column if not exists
                 dbContext.Database.ExecuteSqlRaw(@"
                     IF NOT EXISTS (
                         SELECT 1 FROM sys.columns 
@@ -145,7 +154,6 @@ using (var scope = app.Services.CreateScope())
                         ALTER TABLE [Payments] ADD [TransactionCode] NVARCHAR(100) NULL;
                     END");
 
-                // Step 2: Create Index for Payments using dynamic SQL (deferred compilation)
                 dbContext.Database.ExecuteSqlRaw(@"
                     IF NOT EXISTS (
                         SELECT 1 FROM sys.indexes 
@@ -156,7 +164,6 @@ using (var scope = app.Services.CreateScope())
                         EXEC('CREATE UNIQUE NONCLUSTERED INDEX [IX_Payments_TransactionCode] ON [Payments]([TransactionCode]) WHERE [TransactionCode] IS NOT NULL;');
                     END");
 
-                // Step 3: Create Index for TransactionHistories using dynamic SQL (deferred compilation)
                 dbContext.Database.ExecuteSqlRaw(@"
                     IF NOT EXISTS (
                         SELECT 1 FROM sys.indexes 

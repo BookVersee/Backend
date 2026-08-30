@@ -20,7 +20,6 @@ namespace BookManagement.Repository.Entities
         public DateTimeOffset? UpdatedAt { get; set; }
 
         // Navigation Properties
-        public Shop? Shop { get; set; }
         public Cart? Cart { get; set; }
         public ICollection<Order> Orders { get; set; } = new List<Order>();
         public ICollection<Notification> Notifications { get; set; } = new List<Notification>();

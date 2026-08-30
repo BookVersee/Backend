@@ -3,8 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using BCrypt.Net;
-using BookManagement.Repository.Abstractions;
 using BookManagement.Repository.Data;
+using BookManagement.Repository.Entities;
+using BookManagement.Repository.Entities.Enums;
 using BookManagement.Service.Email;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -14,35 +15,29 @@ namespace BookManagement.Service.User
     public class UserService : IUserService
     {
         private readonly AppDbContext _context;
-        private readonly IUserRepository _userRepository;
-        private readonly INotificationRepository _notificationRepository;
         private readonly IEmailService _emailService;
         private readonly IMemoryCache _cache;
 
         public UserService(
             AppDbContext context,
-            IUserRepository userRepository,
-            INotificationRepository notificationRepository,
             IEmailService emailService,
             IMemoryCache cache)
         {
             _context = context;
-            _userRepository = userRepository;
-            _notificationRepository = notificationRepository;
             _emailService = emailService;
             _cache = cache;
         }
 
         public async Task<UserResponse> GetProfileAsync(Guid userId)
         {
-            var user = await _userRepository.GetByIdAsync(userId);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
             if (user == null) throw new KeyNotFoundException("User not found.");
             return MapToResponse(user);
         }
 
         public async Task<UserResponse> UpdateProfileAsync(Guid userId, UpdateProfileRequest request)
         {
-            var user = await _userRepository.GetByIdAsync(userId);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
             if (user == null) throw new KeyNotFoundException("User not found.");
 
             if (!string.IsNullOrWhiteSpace(request.FullName)) user.FullName = request.FullName.Trim();
@@ -50,19 +45,22 @@ namespace BookManagement.Service.User
             if (!string.IsNullOrWhiteSpace(request.Address)) user.Address = request.Address.Trim();
             if (!string.IsNullOrWhiteSpace(request.Email) && request.Email != user.Email)
             {
-                if (await _userRepository.ExistsByEmailAsync(request.Email))
+                var emailExists = await _context.Users.AnyAsync(u => u.Email == request.Email);
+                if (emailExists)
                     throw new InvalidOperationException("Email is already in use.");
                 user.Email = request.Email.Trim().ToLower();
             }
 
-            await _userRepository.UpdateAsync(user);
+            user.UpdatedAt = DateTimeOffset.UtcNow;
+            await _context.SaveChangesAsync();
             return MapToResponse(user);
         }
 
         // TH1 - Bước 1: Gửi mã OTP khôi phục / đổi mật khẩu qua Gmail
         public async Task SendPasswordOtpAsync(SendOtpRequest request)
         {
-            var user = await _userRepository.GetByUsernameOrEmailAsync(request.Email);
+            var emailOrUsername = request.Email.Trim().ToLower();
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username.ToLower() == emailOrUsername || u.Email.ToLower() == emailOrUsername);
             if (user == null) throw new KeyNotFoundException("Không tìm thấy tài khoản với Email này.");
 
             var otp = Random.Shared.Next(100000, 999999).ToString();
@@ -88,7 +86,8 @@ namespace BookManagement.Service.User
         // TH1 - Bước 2: Xác thực mã OTP (Nếu đúng mới cho phép sang bước nhập mật khẩu mới)
         public async Task VerifyPasswordOtpAsync(VerifyPasswordOtpRequest request)
         {
-            var user = await _userRepository.GetByUsernameOrEmailAsync(request.Email);
+            var emailOrUsername = request.Email.Trim().ToLower();
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username.ToLower() == emailOrUsername || u.Email.ToLower() == emailOrUsername);
             if (user == null) throw new KeyNotFoundException("Không tìm thấy tài khoản với Email này.");
 
             var cacheKey = $"reset_otp_{user.Email.ToLower()}";
@@ -105,7 +104,8 @@ namespace BookManagement.Service.User
         // TH1 - Bước 3: Đặt mật khẩu mới (Chỉ cần Email và Mật khẩu mới, không cần nhập lại OTP)
         public async Task ResetNewPasswordAsync(ResetNewPasswordRequest request)
         {
-            var user = await _userRepository.GetByUsernameOrEmailAsync(request.Email);
+            var emailOrUsername = request.Email.Trim().ToLower();
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Username.ToLower() == emailOrUsername || u.Email.ToLower() == emailOrUsername);
             if (user == null) throw new KeyNotFoundException("Không tìm thấy tài khoản.");
 
             var verifiedCacheKey = $"verified_reset_{user.Email.ToLower()}";
@@ -116,14 +116,15 @@ namespace BookManagement.Service.User
             }
 
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+            user.UpdatedAt = DateTimeOffset.UtcNow;
             _cache.Remove(verifiedCacheKey); // Xóa trạng thái xác thực sau khi đổi mật khẩu thành công
-            await _userRepository.UpdateAsync(user);
+            await _context.SaveChangesAsync();
         }
 
         // TH2: Thay đổi mật khẩu khi nhớ Mật khẩu cũ (Yêu cầu đăng nhập)
         public async Task ChangePasswordAsync(Guid userId, ChangePasswordWithOldPasswordRequest request)
         {
-            var user = await _userRepository.GetByIdAsync(userId);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
             if (user == null) throw new KeyNotFoundException("Tài khoản không tồn tại.");
 
             // Kiểm tra mật khẩu cũ
@@ -133,7 +134,8 @@ namespace BookManagement.Service.User
             }
 
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
-            await _userRepository.UpdateAsync(user);
+            user.UpdatedAt = DateTimeOffset.UtcNow;
+            await _context.SaveChangesAsync();
         }
 
         public async Task<IEnumerable<TransactionResponse>> GetUserTransactionsAsync(Guid userId)
@@ -158,17 +160,17 @@ namespace BookManagement.Service.User
             });
         }
 
-        public async Task<BookManagement.Service.Admin.ShopResponse> RegisterShopAsync(Guid userId, RegisterShopRequest request)
+        public async Task<BookManagement.Service.Shop.ShopResponse> RegisterShopAsync(Guid userId, RegisterShopRequest request)
         {
-            var user = await _userRepository.GetByIdAsync(userId);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
             if (user == null) throw new KeyNotFoundException("User not found.");
 
-            if (user.Role != BookManagement.Repository.Entities.Enums.UserRole.CUSTOMER)
+            if (user.Role != UserRole.CUSTOMER)
             {
                 throw new InvalidOperationException("Only Customer accounts are allowed to register to become a shop.");
             }
 
-            var existingShop = await _context.Shops.FirstOrDefaultAsync(s => s.UserId == userId);
+            var existingShop = await _context.Shops.FirstOrDefaultAsync(s => s.Id == userId);
             if (existingShop != null)
             {
                 throw new InvalidOperationException("Account already has a shop or a pending shop registration application.");
@@ -176,28 +178,27 @@ namespace BookManagement.Service.User
 
             var shop = new BookManagement.Repository.Entities.Shop
             {
-                Id = Guid.NewGuid(),
-                UserId = userId,
+                Id = userId,
                 ShopName = request.ShopName.Trim(),
-                Condition = BookManagement.Repository.Entities.Enums.ShopCondition.OPEN,
+                Condition = ShopCondition.OPEN,
                 Rating = 0
             };
 
-            user.Role = BookManagement.Repository.Entities.Enums.UserRole.SHOP;
+            user.Role = UserRole.SHOP;
             user.UpdatedAt = DateTimeOffset.UtcNow;
 
             await _context.Shops.AddAsync(shop);
             await _context.SaveChangesAsync();
 
             // Auto-notify Admin & Super Admin accounts about new shop activation
-            var adminUsers = await _context.Users.Where(u => u.Role == BookManagement.Repository.Entities.Enums.UserRole.ADMIN || u.Role == BookManagement.Repository.Entities.Enums.UserRole.SUPER_ADMIN).ToListAsync();
+            var adminUsers = await _context.Users.Where(u => u.Role == UserRole.ADMIN || u.Role == UserRole.SUPER_ADMIN).ToListAsync();
             foreach (var admin in adminUsers)
             {
-                await _notificationRepository.CreateNotificationAsync(new BookManagement.Repository.Entities.Notification
+                await _context.Notifications.AddAsync(new BookManagement.Repository.Entities.Notification
                 {
                     Id = Guid.NewGuid(),
                     UserId = admin.Id,
-                    Type = BookManagement.Repository.Entities.Enums.NotificationType.SYSTEM,
+                    Type = NotificationType.SYSTEM,
                     Content = $"Khách hàng {user.FullName ?? user.Username} đã đăng ký mở Cửa hàng '{shop.ShopName}' thành công (Trạng thái: Hoạt động).",
                     IsRead = false,
                     CreatedAt = DateTimeOffset.UtcNow
@@ -205,24 +206,26 @@ namespace BookManagement.Service.User
             }
 
             // Auto-notify New Shop Owner
-            await _notificationRepository.CreateNotificationAsync(new BookManagement.Repository.Entities.Notification
+            await _context.Notifications.AddAsync(new BookManagement.Repository.Entities.Notification
             {
                 Id = Guid.NewGuid(),
                 UserId = userId,
-                Type = BookManagement.Repository.Entities.Enums.NotificationType.SYSTEM,
+                Type = NotificationType.SYSTEM,
                 ReferenceId = shop.Id,
                 Content = $"Chúc mừng! Cửa hàng '{shop.ShopName}' của bạn đã được đăng ký thành công và gian hàng đã đi vào hoạt động. Bạn có thể bắt đầu đăng bán sách ngay!",
                 IsRead = false,
                 CreatedAt = DateTimeOffset.UtcNow
             });
 
-            return new BookManagement.Service.Admin.ShopResponse
+            await _context.SaveChangesAsync();
+
+            return new BookManagement.Service.Shop.ShopResponse
             {
                 Id = shop.Id,
-                UserId = shop.UserId,
+                UserId = shop.Id,
                 ShopName = shop.ShopName,
-                Status = shop.Condition.ToString(),
-                Rating = (decimal)shop.Rating
+                Condition = shop.Condition,
+                Rating = shop.Rating
             };
         }
 

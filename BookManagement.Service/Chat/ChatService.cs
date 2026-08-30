@@ -2,166 +2,219 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using BookManagement.Service.Dtos;
 using BookManagement.Repository.Data;
 using BookManagement.Repository.Entities;
 using ChatEntity = BookManagement.Repository.Entities.Chat;
 using Microsoft.EntityFrameworkCore;
 
-namespace BookManagement.Service.Chat;
-
-public class ChatService
+namespace BookManagement.Service.Chat
 {
-    private readonly AppDbContext _db;
-
-    public ChatService(AppDbContext db)
+    public class ChatService : IChatService
     {
-        _db = db;
-    }
+        private readonly AppDbContext _db;
+        private readonly IChatRealtimeNotifier? _realtimeNotifier;
 
-    public async Task<List<ChatThreadDto>> GetUserChatThreadsAsync(Guid userId)
-    {
-        var chats = await _db.Chats
-            .Include(c => c.Shop)
-            .Include(c => c.Messages)
-            .Where(c => c.UserId == userId)
-            .ToListAsync();
-
-        return chats.Select(c =>
+        public ChatService(AppDbContext db, IChatRealtimeNotifier? realtimeNotifier = null)
         {
-            var lastMsg = c.Messages.OrderByDescending(m => m.CreatedAt).FirstOrDefault();
-            int unread = c.Messages.Count(m => !m.IsRead && m.SenderId != userId);
-
-            return new ChatThreadDto
-            {
-                ChatId = c.Id,
-                UserId = c.UserId,
-                UserName = c.Shop != null ? c.Shop.ShopName : "Shop",
-                ShopId = c.ShopId,
-                LastMessage = lastMsg?.Content,
-                UnreadCount = unread,
-                UpdatedAt = c.UpdatedAt ?? c.CreatedAt
-            };
-        }).OrderByDescending(t => t.UpdatedAt).ToList();
-    }
-
-    public async Task<List<ChatThreadDto>> GetShopChatThreadsAsync(Guid shopId)
-    {
-        var chats = await _db.Chats
-            .Include(c => c.User)
-            .Include(c => c.Messages)
-            .Where(c => c.ShopId == shopId)
-            .ToListAsync();
-
-        return chats.Select(c =>
-        {
-            var lastMsg = c.Messages.OrderByDescending(m => m.CreatedAt).FirstOrDefault();
-            int unread = c.Messages.Count(m => !m.IsRead && m.SenderId == c.UserId);
-
-            return new ChatThreadDto
-            {
-                ChatId = c.Id,
-                UserId = c.UserId,
-                UserName = c.User != null ? (c.User.FullName ?? c.User.Username) : "User",
-                ShopId = c.ShopId,
-                LastMessage = lastMsg?.Content,
-                UnreadCount = unread,
-                UpdatedAt = c.UpdatedAt ?? c.CreatedAt
-            };
-        }).OrderByDescending(t => t.UpdatedAt).ToList();
-    }
-
-    public async Task<List<MessageDto>> GetChatMessagesAsync(Guid chatId, Guid requesterId)
-    {
-        var chat = await _db.Chats
-            .Include(c => c.Shop)
-            .FirstOrDefaultAsync(c => c.Id == chatId);
-
-        if (chat == null)
-        {
-            throw new KeyNotFoundException("Chat thread not found.");
+            _db = db;
+            _realtimeNotifier = realtimeNotifier;
         }
 
-        var isCustomer = chat.UserId == requesterId;
-        var isShopOwner = chat.Shop != null && chat.Shop.UserId == requesterId;
-
-        if (!isCustomer && !isShopOwner)
+        public async Task<List<ChatThreadDto>> GetUserChatThreadsAsync(Guid userId)
         {
-            throw new UnauthorizedAccessException("You are not authorized to view messages in this chat thread.");
+            var chats = await _db.Chats
+                .Include(c => c.Shop)
+                .Include(c => c.Messages)
+                .Where(c => c.UserId == userId)
+                .ToListAsync();
+
+            return chats.Select(c =>
+            {
+                var lastMsg = c.Messages.OrderByDescending(m => m.CreatedAt).FirstOrDefault();
+                int unread = c.Messages.Count(m => !m.IsRead && m.SenderId != userId);
+
+                return new ChatThreadDto
+                {
+                    ChatId = c.Id,
+                    UserId = c.UserId,
+                    UserName = c.Shop != null ? c.Shop.ShopName : "Shop",
+                    ShopId = c.ShopId,
+                    LastMessage = lastMsg?.Content,
+                    UnreadCount = unread,
+                    UpdatedAt = c.UpdatedAt ?? c.CreatedAt
+                };
+            }).OrderByDescending(t => t.UpdatedAt).ToList();
         }
 
-        var messages = await _db.Messages
-            .Where(m => m.ChatId == chatId)
-            .OrderBy(m => m.CreatedAt)
-            .Select(m => new MessageDto
-            {
-                MessageId = m.Id,
-                ChatId = m.ChatId,
-                SenderId = m.SenderId,
-                Content = m.Content ?? string.Empty,
-                ImageUrl = m.ImageUrl,
-                IsRead = m.IsRead,
-                CreatedAt = m.CreatedAt
-            })
-            .ToListAsync();
-
-        // Mark unread messages as read
-        var unreadMsgs = await _db.Messages
-            .Where(m => m.ChatId == chatId && !m.IsRead && m.SenderId != requesterId)
-            .ToListAsync();
-
-        if (unreadMsgs.Any())
+        public async Task<List<ChatThreadDto>> GetShopChatThreadsAsync(Guid shopId)
         {
-            foreach (var msg in unreadMsgs)
+            var chats = await _db.Chats
+                .Include(c => c.User)
+                .Include(c => c.Messages)
+                .Where(c => c.ShopId == shopId)
+                .ToListAsync();
+
+            return chats.Select(c =>
             {
-                msg.IsRead = true;
+                var lastMsg = c.Messages.OrderByDescending(m => m.CreatedAt).FirstOrDefault();
+                int unread = c.Messages.Count(m => !m.IsRead && m.SenderId == c.UserId);
+
+                return new ChatThreadDto
+                {
+                    ChatId = c.Id,
+                    UserId = c.UserId,
+                    UserName = c.User != null ? (c.User.FullName ?? c.User.Username) : "User",
+                    ShopId = c.ShopId,
+                    LastMessage = lastMsg?.Content,
+                    UnreadCount = unread,
+                    UpdatedAt = c.UpdatedAt ?? c.CreatedAt
+                };
+            }).OrderByDescending(t => t.UpdatedAt).ToList();
+        }
+
+        public async Task<List<MessageDto>> GetChatMessagesAsync(Guid chatId, Guid requesterId)
+        {
+            var chat = await _db.Chats
+                .Include(c => c.Shop)
+                .FirstOrDefaultAsync(c => c.Id == chatId);
+
+            if (chat == null)
+            {
+                throw new KeyNotFoundException("Chat thread not found.");
             }
-            await _db.SaveChangesAsync();
+
+            var isCustomer = chat.UserId == requesterId;
+            var isShopOwner = chat.Shop != null && chat.Shop.Id == requesterId;
+
+            if (!isCustomer && !isShopOwner)
+            {
+                throw new UnauthorizedAccessException("You are not authorized to view messages in this chat thread.");
+            }
+
+            var messages = await _db.Messages
+                .Where(m => m.ChatId == chatId)
+                .OrderBy(m => m.CreatedAt)
+                .Select(m => new MessageDto
+                {
+                    MessageId = m.Id,
+                    ChatId = m.ChatId,
+                    SenderId = m.SenderId,
+                    Content = m.Content ?? string.Empty,
+                    ImageUrl = m.ImageUrl,
+                    IsRead = m.IsRead,
+                    CreatedAt = m.CreatedAt
+                })
+                .ToListAsync();
+
+            // Mark unread messages as read
+            var unreadMsgs = await _db.Messages
+                .Where(m => m.ChatId == chatId && !m.IsRead && m.SenderId != requesterId)
+                .ToListAsync();
+
+            if (unreadMsgs.Any())
+            {
+                foreach (var msg in unreadMsgs)
+                {
+                    msg.IsRead = true;
+                }
+                await _db.SaveChangesAsync();
+            }
+
+            return messages;
         }
 
-        return messages;
-    }
-
-    public async Task<MessageDto> SendMessageAsync(Guid userId, Guid shopId, string content, string? imageUrl, Guid senderId)
-    {
-        var chat = await _db.Chats.FirstOrDefaultAsync(c => c.UserId == userId && c.ShopId == shopId);
-        if (chat == null)
+        public async Task<MessageDto> SendMessageAsync(Guid senderId, SendMessageDto dto)
         {
-            chat = new ChatEntity
+            Guid targetUserId = senderId;
+            Guid targetShopId = dto.ShopId ?? Guid.Empty;
+
+            if (dto.ChatId.HasValue && dto.ChatId.Value != Guid.Empty)
+            {
+                var existingChat = await _db.Chats.FirstOrDefaultAsync(c => c.Id == dto.ChatId.Value);
+                if (existingChat != null)
+                {
+                    targetUserId = existingChat.UserId;
+                    targetShopId = existingChat.ShopId;
+                }
+            }
+            else if (dto.ShopId.HasValue && dto.ShopId.Value != Guid.Empty)
+            {
+                var senderShop = await _db.Shops.FirstOrDefaultAsync(s => s.Id == senderId);
+                if (senderShop != null && senderShop.Id == dto.ShopId.Value && dto.UserId.HasValue)
+                {
+                    // Shop is replying to a customer
+                    targetUserId = dto.UserId.Value;
+                    targetShopId = senderShop.Id;
+                }
+                else
+                {
+                    // Customer is sending to shop
+                    targetUserId = senderId;
+                    targetShopId = dto.ShopId.Value;
+                }
+            }
+
+            if (targetShopId == Guid.Empty)
+            {
+                throw new ArgumentException("ShopId or ChatId is required.");
+            }
+
+            var chat = await _db.Chats.FirstOrDefaultAsync(c => c.UserId == targetUserId && c.ShopId == targetShopId);
+            if (chat == null)
+            {
+                chat = new ChatEntity
+                {
+                    UserId = targetUserId,
+                    ShopId = targetShopId,
+                    CreatedAt = DateTimeOffset.UtcNow
+                };
+                _db.Chats.Add(chat);
+                await _db.SaveChangesAsync();
+            }
+
+            var message = new Message
+            {
+                ChatId = chat.Id,
+                SenderId = senderId,
+                Content = dto.Content,
+                ImageUrl = dto.ImageUrl,
+                IsRead = false,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+
+            _db.Messages.Add(message);
+            chat.UpdatedAt = DateTimeOffset.UtcNow;
+
+            await _db.SaveChangesAsync();
+
+            var messageDto = new MessageDto
+            {
+                MessageId = message.Id,
+                ChatId = message.ChatId,
+                SenderId = message.SenderId,
+                Content = message.Content,
+                ImageUrl = message.ImageUrl,
+                IsRead = message.IsRead,
+                CreatedAt = message.CreatedAt
+            };
+
+            if (_realtimeNotifier != null)
+            {
+                await _realtimeNotifier.BroadcastMessageAsync(chat.Id, messageDto);
+            }
+
+            return messageDto;
+        }
+
+        public async Task<MessageDto> SendMessageAsync(Guid userId, Guid shopId, string content, string? imageUrl, Guid senderId)
+        {
+            return await SendMessageAsync(senderId, new SendMessageDto
             {
                 UserId = userId,
                 ShopId = shopId,
-                CreatedAt = DateTimeOffset.UtcNow
-            };
-            _db.Chats.Add(chat);
-            await _db.SaveChangesAsync();
+                Content = content,
+                ImageUrl = imageUrl
+            });
         }
-
-        var message = new Message
-        {
-            ChatId = chat.Id,
-            SenderId = senderId,
-            Content = content,
-            ImageUrl = imageUrl,
-            IsRead = false,
-            CreatedAt = DateTimeOffset.UtcNow
-        };
-
-        _db.Messages.Add(message);
-        chat.UpdatedAt = DateTimeOffset.UtcNow;
-
-        await _db.SaveChangesAsync();
-
-        return new MessageDto
-        {
-            MessageId = message.Id,
-            ChatId = message.ChatId,
-            SenderId = message.SenderId,
-            Content = message.Content,
-            ImageUrl = message.ImageUrl,
-            IsRead = message.IsRead,
-            CreatedAt = message.CreatedAt
-        };
     }
 }
-

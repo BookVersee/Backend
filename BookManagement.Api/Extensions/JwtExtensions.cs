@@ -1,6 +1,6 @@
 using System.Security.Claims;
 using System.Text;
-using BookManagement.Service.Models;
+using BookManagement.Service.JwtService;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;

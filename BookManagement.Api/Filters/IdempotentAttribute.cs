@@ -2,13 +2,21 @@ using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using BookManagement.Service.Idempotency;
-using BookManagement.Service.Models;
+using BookManagement.Service.Common;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace BookManagement.Api.Filters
 {
+    /// <summary>
+    /// Action Filter Attribute Chống trùng lặp dữ liệu & Chống Spam Request (Idempotency Key Filter).
+    /// Chức năng chính:
+    /// - Kiểm tra Header "Idempotency-Key" trong Request được gửi lên.
+    /// - Nếu cùng 1 Key được bấm nhiều lần liên tiếp (ví dụ: bấm nút Đặt hàng / Thanh toán 2 lần), Filter sẽ chặn các Request sau và trả về kết quả đã lưu trữ trước đó.
+    /// - Ngăn ngừa tình trạng tạo đơn hàng trùng hoặc trừ tiền 2 lần.
+    /// Vị trí: Presentation Layer (BookManagement.Api/Filters).
+    /// </summary>
     [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
     public class IdempotentAttribute : Attribute, IAsyncActionFilter
     {
@@ -30,7 +38,6 @@ namespace BookManagement.Api.Filters
                 idempotencyKeyHeader = xHeaderValues[0];
             }
 
-            // Nếu không có header Idempotency-Key thì tiếp tục xử lý bình thường
             if (string.IsNullOrWhiteSpace(idempotencyKeyHeader))
             {
                 await next();
@@ -39,7 +46,6 @@ namespace BookManagement.Api.Filters
 
             var idempotencyService = httpContext.RequestServices.GetRequiredService<IIdempotencyService>();
 
-            // Định danh duy nhất theo User (hoặc IP nếu ẩn danh) + Path + Key
             var userId = httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier) 
                          ?? httpContext.User.FindFirstValue("sub") 
                          ?? httpContext.Connection.RemoteIpAddress?.ToString() 

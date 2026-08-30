@@ -2,15 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
-using BookManagement.Api.Hubs;
-using BookManagement.Repository.Data;
+using BookManagement.Api.Extensions;
 using BookManagement.Service.Chat;
-using BookManagement.Service.Dtos;
-using BookManagement.Service.Models;
+using BookManagement.Service.Common;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.SignalR;
-using Microsoft.EntityFrameworkCore;
 
 namespace BookManagement.Api.Controllers;
 
@@ -19,21 +15,11 @@ namespace BookManagement.Api.Controllers;
 [Authorize]
 public class ChatController : ControllerBase
 {
-    private readonly ChatService _chatService;
-    private readonly IHubContext<ChatHub> _hubContext;
-    private readonly AppDbContext _db;
+    private readonly IChatService _chatService;
 
-    public ChatController(ChatService chatService, IHubContext<ChatHub> hubContext, AppDbContext db)
+    public ChatController(IChatService chatService)
     {
         _chatService = chatService;
-        _hubContext = hubContext;
-        _db = db;
-    }
-
-    private Guid GetUserId()
-    {
-        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-        return Guid.TryParse(userIdStr, out var id) ? id : Guid.Empty;
     }
 
     /// <summary>
@@ -42,7 +28,7 @@ public class ChatController : ControllerBase
     [HttpGet("GetUserConversations")]
     public async Task<IActionResult> GetUserConversations()
     {
-        var userId = GetUserId();
+        var userId = User.GetUserId();
         var conversations = await _chatService.GetUserChatThreadsAsync(userId);
         return Ok(ApiResponse.SuccessResponse(conversations));
     }
@@ -51,21 +37,9 @@ public class ChatController : ControllerBase
     /// Test Case 2.2: Shop xem danh sách khách hàng đang chat
     /// </summary>
     [HttpGet("GetShopConversations")]
-    public async Task<IActionResult> GetShopConversations([FromQuery] Guid? shopId)
+    public async Task<IActionResult> GetShopConversations(Guid shopId)
     {
-        var userId = GetUserId();
-        var userShop = await _db.Shops.FirstOrDefaultAsync(s => s.UserId == userId);
-        if (userShop == null)
-        {
-            return NotFound(ApiResponse.ErrorResponse("Shop not found for this user."));
-        }
-
-        if (shopId.HasValue && shopId.Value != Guid.Empty && shopId.Value != userShop.Id)
-        {
-            return StatusCode(StatusCodes.Status403Forbidden, ApiResponse.ErrorResponse("You can only access conversations for your own shop."));
-        }
-
-        var conversations = await _chatService.GetShopChatThreadsAsync(userShop.Id);
+        var conversations = await _chatService.GetShopChatThreadsAsync(shopId);
         return Ok(ApiResponse.SuccessResponse(conversations));
     }
 
@@ -73,9 +47,9 @@ public class ChatController : ControllerBase
     /// Test Case 2.3: Xem lịch sử tin nhắn trong phòng chat
     /// </summary>
     [HttpGet("GetConversationMessages")]
-    public async Task<IActionResult> GetConversationMessages([FromQuery] Guid chatId)
+    public async Task<IActionResult> GetConversationMessages(Guid chatId)
     {
-        var userId = GetUserId();
+        var userId = User.GetUserId();
         var messages = await _chatService.GetChatMessagesAsync(chatId, userId);
         return Ok(ApiResponse.SuccessResponse(messages));
     }
@@ -84,49 +58,10 @@ public class ChatController : ControllerBase
     /// Test Case 2.4: Gửi tin nhắn mới & Broadcast Real-Time
     /// </summary>
     [HttpPost("SendMessage")]
-    public async Task<IActionResult> SendMessage([FromBody] SendMessageDto dto)
+    public async Task<IActionResult> SendMessage(SendMessageDto dto)
     {
-        var senderId = GetUserId();
-        Guid targetUserId = senderId;
-        Guid targetShopId = dto.ShopId ?? Guid.Empty;
-
-        if (dto.ChatId.HasValue && dto.ChatId.Value != Guid.Empty)
-        {
-            var chat = await _db.Chats.FirstOrDefaultAsync(c => c.Id == dto.ChatId.Value);
-            if (chat != null)
-            {
-                targetUserId = chat.UserId;
-                targetShopId = chat.ShopId;
-            }
-        }
-        else if (dto.ShopId.HasValue && dto.ShopId.Value != Guid.Empty)
-        {
-            var senderShop = await _db.Shops.FirstOrDefaultAsync(s => s.UserId == senderId);
-            if (senderShop != null && senderShop.Id == dto.ShopId.Value && dto.UserId.HasValue)
-            {
-                // Shop is replying to a customer
-                targetUserId = dto.UserId.Value;
-                targetShopId = senderShop.Id;
-            }
-            else
-            {
-                // Customer is sending to shop
-                targetUserId = senderId;
-                targetShopId = dto.ShopId.Value;
-            }
-        }
-
-        if (targetShopId == Guid.Empty)
-        {
-            return BadRequest(ApiResponse.ErrorResponse("ShopId or ChatId is required."));
-        }
-
-        var messageDto = await _chatService.SendMessageAsync(targetUserId, targetShopId, dto.Content, dto.ImageUrl, senderId);
-
-        // Broadcast real-time message via SignalR room only
-        string roomName = $"chat_{messageDto.ChatId}";
-        await _hubContext.Clients.Group(roomName).SendAsync("ReceiveMessage", messageDto);
-
+        var senderId = User.GetUserId();
+        var messageDto = await _chatService.SendMessageAsync(senderId, dto);
         return Ok(ApiResponse.SuccessResponse(messageDto, "Message sent successfully"));
     }
 }

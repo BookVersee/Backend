@@ -26,4 +26,36 @@ namespace BookManagement.Service.Feedback
         public string? ImageUrl { get; set; }
         public DateTimeOffset CreatedAt { get; set; }
     }
+
+    public class FeedbackResponseDataDto
+    {
+        public Guid ResponseId { get; set; }
+        public string Content { get; set; } = string.Empty;
+        public string? ImageUrl { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+    }
+
+    public class FeedbackDto
+    {
+        public Guid FeedbackId { get; set; }
+        public Guid OrderDetailId { get; set; }
+        public Guid ShopId { get; set; }
+        public int Rating { get; set; }
+        public string Content { get; set; } = string.Empty;
+        public string Type { get; set; } = string.Empty;
+        public string? ImageUrl { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+        public string? BookTitle { get; set; }
+        public FeedbackResponseDataDto? Response { get; set; }
+    }
+
+    public class ResponseCreatedDto
+    {
+        public Guid ResponseId { get; set; }
+        public Guid FeedbackId { get; set; }
+        public Guid ShopId { get; set; }
+        public string Content { get; set; } = string.Empty;
+        public string? ImageUrl { get; set; }
+        public DateTimeOffset CreatedAt { get; set; }
+    }
 }

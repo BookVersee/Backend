@@ -18,6 +18,6 @@ namespace BookManagement.Service.User
         Task ChangePasswordAsync(Guid userId, ChangePasswordWithOldPasswordRequest request);
 
         Task<IEnumerable<TransactionResponse>> GetUserTransactionsAsync(Guid userId);
-        Task<BookManagement.Service.Admin.ShopResponse> RegisterShopAsync(Guid userId, RegisterShopRequest request);
+        Task<BookManagement.Service.Shop.ShopResponse> RegisterShopAsync(Guid userId, RegisterShopRequest request);
     }
 }

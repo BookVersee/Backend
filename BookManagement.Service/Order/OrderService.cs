@@ -2,22 +2,32 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using BookManagement.Repository.Abstractions;
 using BookManagement.Repository.Data;
 using BookManagement.Repository.Entities.Enums;
+using BookManagement.Service.Delivery;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookManagement.Service.Order
 {
     public class OrderService : IOrderService
     {
-        private readonly IOrderRepository _orderRepository;
         private readonly AppDbContext _context;
 
-        public OrderService(IOrderRepository orderRepository, AppDbContext context)
+        public OrderService(AppDbContext context)
         {
-            _orderRepository = orderRepository;
             _context = context;
+        }
+
+        private IQueryable<BookManagement.Repository.Entities.Order> GetFullOrderQuery()
+        {
+            return _context.Orders
+                .Include(o => o.User)
+                .Include(o => o.OrderDetails)
+                    .ThenInclude(od => od.Book)
+                .Include(o => o.OrderDetails)
+                    .ThenInclude(od => od.ReturnRequest)
+                .Include(o => o.Deliveries)
+                .AsNoTracking();
         }
 
         public async Task<IEnumerable<OrderResponse>> GetUserOrdersAsync(Guid userId, OrderStatus? status = null)
@@ -25,20 +35,33 @@ namespace BookManagement.Service.Order
             var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
             var isShop = user != null && user.Role == UserRole.SHOP;
 
-            var orders = isShop
-                ? await _orderRepository.GetOrdersByShopUserIdAsync(userId, status)
-                : await _orderRepository.GetOrdersByUserIdAsync(userId, status);
+            var query = GetFullOrderQuery();
 
+            if (isShop)
+            {
+                query = query.Where(o => o.OrderDetails.Any(od => od.Book != null && od.Book.ShopId == userId));
+            }
+            else
+            {
+                query = query.Where(o => o.UserId == userId);
+            }
+
+            if (status.HasValue)
+            {
+                query = query.Where(o => o.OrderStatus == status.Value);
+            }
+
+            var orders = await query.OrderByDescending(o => o.CreatedAt).ToListAsync();
             return orders.Select(MapToResponse);
         }
 
         public async Task<OrderResponse> GetOrderDetailAsync(Guid userId, Guid orderId)
         {
-            var order = await _orderRepository.GetByIdAsync(orderId);
+            var order = await GetFullOrderQuery().FirstOrDefaultAsync(o => o.Id == orderId);
             if (order == null) throw new KeyNotFoundException("Order not found.");
 
             var isBuyer = order.UserId == userId;
-            var isSeller = order.OrderDetails.Any(od => od.Book?.Shop?.UserId == userId);
+            var isSeller = order.OrderDetails.Any(od => od.Book?.ShopId == userId);
 
             if (!isBuyer && !isSeller)
             {
@@ -165,7 +188,7 @@ namespace BookManagement.Service.Order
                     await _context.SaveChangesAsync();
                     await tx.CommitAsync();
 
-                    var createdOrder = await _orderRepository.GetByIdAsync(order.Id);
+                    var createdOrder = await GetFullOrderQuery().FirstOrDefaultAsync(o => o.Id == order.Id);
                     return MapToResponse(createdOrder ?? order);
                 }
                 catch
@@ -252,12 +275,13 @@ namespace BookManagement.Service.Order
                 DetailedReason = input.DetailedReason,
                 ImageUrl = input.ImageUrl,
                 Status = ReturnRequestStatus.PENDING,
-                RefundAmount = input.RefundAmount > 0 ? input.RefundAmount : (orderDetail.UnitPrice * orderDetail.Quantity)
+                RefundAmount = input.RefundAmount > 0 ? input.RefundAmount : (orderDetail.UnitPrice * orderDetail.Quantity),
+                CreatedAt = DateTimeOffset.UtcNow
             };
 
             orderDetail.ReturnStatus = ReturnStatus.REQUESTED;
 
-            await _orderRepository.CreateReturnRequestAsync(returnRequest);
+            await _context.ReturnRequests.AddAsync(returnRequest);
 
             // Notification for Buyer
             var buyerNotification = new BookManagement.Repository.Entities.Notification
@@ -272,7 +296,7 @@ namespace BookManagement.Service.Order
             await _context.Notifications.AddAsync(buyerNotification);
 
             // Notification for Shop Owner
-            var shopUserId = orderDetail.Book?.Shop?.UserId;
+            var shopUserId = orderDetail.Book?.ShopId;
             if (shopUserId.HasValue && shopUserId.Value != Guid.Empty)
             {
                 var shopNotification = new BookManagement.Repository.Entities.Notification
@@ -372,10 +396,11 @@ namespace BookManagement.Service.Order
             Deliveries = order.Deliveries.Select(d => new DeliveryResponse
             {
                 Id = d.Id,
+                OrderId = d.OrderId,
                 TrackingNumber = d.TrackingNumber,
                 CarrierName = d.CarrierName,
                 ShipFee = d.ShipFee,
-                Status = d.Status,
+                Status = d.Status.ToString(),
                 EstimatedDelivery = d.EstimatedDelivery,
                 ActualDeliveredAt = d.ActualDeliveredAt
             }).ToList()

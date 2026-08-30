@@ -1,10 +1,11 @@
 using System;
+using BookManagement.Api.Filters;
+using BookManagement.Api.Extensions;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
-using BookManagement.Api.Filters;
 using BookManagement.Repository.Entities.Enums;
-using BookManagement.Service.Models;
+using BookManagement.Service.Common;
 using BookManagement.Service.Order;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -23,71 +24,60 @@ namespace BookManagement.Api.Controllers
             _orderService = orderService;
         }
 
-        /// Chá»©c nÄƒng: Láº¥y danh sÃ¡ch lá»‹ch sá»­ Ä‘Æ¡n hÃ ng. Tráº£ vá» : Danh sÃ¡ch Ä‘Æ¡n hÃ ng theo tráº¡ng thÃ¡i.
+        /// Chức năng: Lấy danh sách lịch sử đơn hàng. Trả về: Danh sách đơn hàng theo trạng thái.
         [HttpGet("GetUserOrders")]
-        public async Task<IActionResult> GetUserOrders([FromQuery] OrderStatus? status)
+        public async Task<IActionResult> GetUserOrders(OrderStatus? status)
         {
-            var userId = GetCurrentUserId();
+            var userId = User.GetUserId();
             var orders = await _orderService.GetUserOrdersAsync(userId, status);
             return Ok(ApiResponse<IEnumerable<OrderResponse>>.SuccessResponse(orders));
         }
 
-        /// Chá»©c nÄƒng: Ä áº·t hÃ ng thanh toÃ¡n tá»« giá»  hÃ ng. Tráº£ vá» : ThÃ´ng tin Ä‘Æ¡n hÃ ng má»›i táº¡o.
+        /// Chức năng: Đặt hàng thanh toán từ giỏ hàng. Trả về: Thông tin đơn hàng mới tạo.
         [Authorize(Roles = "CUSTOMER,SHOP")]
         [HttpPost("CreateOrder")]
         [Idempotent]
-        public async Task<IActionResult> CreateOrder([FromBody] CreateOrderRequest request)
+        public async Task<IActionResult> CreateOrder(CreateOrderRequest request)
         {
-            var userId = GetCurrentUserId();
+            var userId = User.GetUserId();
             var order = await _orderService.CreateOrderAsync(userId, request);
             return Ok(ApiResponse<OrderResponse>.SuccessResponse(order, "Order created successfully."));
         }
 
-        /// Chá»©c nÄƒng: Xem thÃ´ng tin chi tiáº¿t Ä‘Æ¡n hÃ ng. Tráº£ vá»: Dá»¯ liá»‡u chi tiáº¿t sáº£n pháº©m vÃ  thanh toÃ¡n cá»§a Ä‘Æ¡n hÃ ng.
+        /// Chức năng: Xem thông tin chi tiết đơn hàng. Trả về: Dữ liệu chi tiết sản phẩm và thanh toán của đơn hàng.
         [HttpGet("GetOrderDetail")]
-        public async Task<IActionResult> GetOrderDetail([FromQuery] Guid id)
+        public async Task<IActionResult> GetOrderDetail(Guid id)
         {
-            var userId = GetCurrentUserId();
+            var userId = User.GetUserId();
             var order = await _orderService.GetOrderDetailAsync(userId, id);
             return Ok(ApiResponse<OrderResponse>.SuccessResponse(order));
         }
 
-        /// Chá»©c nÄƒng: Há»§y Ä‘Æ¡n hÃ ng Ä‘ang chá» xá»­ lÃ½. Tráº£ vá»: ThÃ´ng bÃ¡o xÃ¡c nháº­n há»§y Ä‘Æ¡n thÃ nh cÃ´ng.
+        /// Chức năng: Hủy đơn hàng đang chờ xử lý. Trả về: Thông báo xác nhận hủy đơn thành công.
         [HttpPost("CancelOrder")]
-        public async Task<IActionResult> CancelOrder([FromQuery] Guid id)
+        public async Task<IActionResult> CancelOrder(Guid id)
         {
-            var userId = GetCurrentUserId();
+            var userId = User.GetUserId();
             await _orderService.CancelOrderAsync(userId, id);
             return Ok(ApiResponse<string>.SuccessResponse("Order cancelled successfully."));
         }
 
-        /// Chá»©c nÄƒng: Gá»­i yÃªu cáº§u khiáº¿u náº¡i tráº£ hÃ ng / hoÃ n tiá»n. Tráº£ vá»: Dá»¯ liá»‡u Ä‘Æ¡n yÃªu cáº§u tráº£ hÃ ng.
+        /// Chức năng: Gửi yêu cầu khiếu nại trả hàng / hoàn tiền. Trả về: Dữ liệu đơn yêu cầu trả hàng.
         [HttpPost("SendRequestReturn")]
-        public async Task<IActionResult> SendRequestReturn([FromQuery] Guid orderDetailId, [FromBody] CreateReturnRequest input)
+        public async Task<IActionResult> SendRequestReturn(Guid orderDetailId, CreateReturnRequest input)
         {
-            var userId = GetCurrentUserId();
+            var userId = User.GetUserId();
             var returnRequest = await _orderService.CreateReturnRequestAsync(userId, orderDetailId, input);
             return Ok(ApiResponse<ReturnRequestResponse>.SuccessResponse(returnRequest, "Return request submitted."));
         }
 
-        /// Chá»©c nÄƒng: Gá»­i khiáº¿u náº¡i lÃªn Admin khi yÃªu cáº§u tráº£ hÃ ng bá»‹ Shop tá»« chá»‘i.
+        /// Chức năng: Gửi khiếu nại lên Admin khi yêu cầu trả hàng bị Shop từ chối.
         [HttpPost("EscalateDispute")]
-        public async Task<IActionResult> EscalateDispute([FromQuery] Guid returnRequestId, [FromQuery] string? reason)
+        public async Task<IActionResult> EscalateDispute(Guid returnRequestId, string? reason)
         {
-            var userId = GetCurrentUserId();
+            var userId = User.GetUserId();
             await _orderService.EscalateReturnRequestAsync(userId, returnRequestId, reason);
-            return Ok(ApiResponse<string>.SuccessResponse("Khiáº¿u náº¡i cá»§a báº¡n Ä‘Ã£ Ä‘Æ°á»£c gá»­i tá»›i Admin xá»­ lÃ½.", "Escalation submitted."));
-        }
-
-        private Guid GetCurrentUserId()
-        {
-            var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(claim) || !Guid.TryParse(claim, out var userId))
-            {
-                throw new UnauthorizedAccessException("Invalid authentication claims.");
-            }
-            return userId;
+            return Ok(ApiResponse<string>.SuccessResponse("Khiếu nại của bạn đã được gửi tới Admin xử lý.", "Escalation submitted."));
         }
     }
 }
-

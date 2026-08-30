@@ -1,8 +1,9 @@
 using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
-using BookManagement.Service.Dtos;
-using BookManagement.Service.Models;
+using BookManagement.Api.Extensions;
+using BookManagement.Service.Common;
+using BookManagement.Service.Delivery;
 using BookManagement.Service.Shipping;
 using BookManagement.Service.Shop;
 using Microsoft.AspNetCore.Authorization;
@@ -14,19 +15,11 @@ namespace BookManagement.Api.Controllers;
 [Route("api/shipping")]
 public class ShippingController : ControllerBase
 {
-    private readonly ShippingService _shippingService;
-    private readonly ShopService _shopService;
+    private readonly IShippingService _shippingService;
 
-    public ShippingController(ShippingService shippingService, ShopService shopService)
+    public ShippingController(IShippingService shippingService)
     {
         _shippingService = shippingService;
-        _shopService = shopService;
-    }
-
-    private Guid GetUserId()
-    {
-        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-        return Guid.TryParse(userIdStr, out var id) ? id : Guid.Empty;
     }
 
     /// <summary>
@@ -34,11 +27,10 @@ public class ShippingController : ControllerBase
     /// </summary>
     [HttpPost("CreateGhnOrder")]
     [Authorize(Roles = "SHOP,ADMIN,SUPER_ADMIN")]
-    public async Task<IActionResult> CreateGhnOrder([FromBody] CreateGhnOrderDto dto)
+    public async Task<IActionResult> CreateGhnOrder(CreateGhnOrderDto dto)
     {
-        var userId = GetUserId();
-        var profile = await _shopService.GetShopProfileAsync(userId);
-        var result = await _shippingService.CreateGhnOrderAsync(profile.ShopId, dto);
+        var userId = User.GetUserId();
+        var result = await _shippingService.CreateGhnOrderAsync(userId, dto);
         return Ok(ApiResponse.SuccessResponse(result, "GHN shipping order created successfully"));
     }
 
@@ -47,7 +39,7 @@ public class ShippingController : ControllerBase
     /// </summary>
     [HttpPost("GhnWebhook")]
     [AllowAnonymous]
-    public async Task<IActionResult> GhnWebhook([FromBody] GhnWebhookPayload payload)
+    public async Task<IActionResult> GhnWebhook(GhnWebhookPayload payload)
     {
         await _shippingService.ProcessGhnWebhookAsync(payload);
         return Ok(new { message = "Webhook processed successfully." });

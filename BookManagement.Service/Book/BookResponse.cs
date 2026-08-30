@@ -26,17 +26,25 @@ namespace BookManagement.Service.Book
         public DateTimeOffset? UpdatedAt { get; set; }
     }
 
-    public class ShopResponse
+    public class BookResponseDto
     {
-        public Guid Id { get; set; }
-        public Guid UserId { get; set; }
-        public string ShopName { get; set; } = null!;
-        public ShopCondition Condition { get; set; }
-        public double? Rating { get; set; }
-        public string? OwnerName { get; set; }
-        public string? Phone { get; set; }
-        public string? Address { get; set; }
+        public Guid BookId { get; set; }
+        public Guid ShopId { get; set; }
+        public Guid CategoryId { get; set; }
+        public string? CategoryName { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string Isbn { get; set; } = string.Empty;
+        public string Author { get; set; } = string.Empty;
+        public string Publisher { get; set; } = string.Empty;
+        public decimal Price { get; set; }
+        public int StockQuantity { get; set; }
+        public string? Description { get; set; }
+        public string? ImageUrl { get; set; }
+        public int? PublishedYear { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public float Rating { get; set; }
         public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset? UpdatedAt { get; set; }
     }
 
     public class PagedResponse<T>

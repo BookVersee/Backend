@@ -2,7 +2,6 @@ using System;
 using System.Net;
 using System.Net.Mail;
 using System.Threading.Tasks;
-using BookManagement.Service.Models;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 

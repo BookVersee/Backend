@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-using BookManagement.Service.Dtos;
+using BookManagement.Service.Shop;
 using BookManagement.Repository.Data;
 using BookManagement.Repository.Entities;
 using BookManagement.Repository.Entities.Enums;
@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookManagement.Service.Delivery;
 
-public class DeliveryService
+public class DeliveryService : IDeliveryService
 {
     private readonly AppDbContext _db;
 

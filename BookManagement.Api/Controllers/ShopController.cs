@@ -2,8 +2,10 @@ using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using BookManagement.Repository.Entities.Enums;
-using BookManagement.Service.Dtos;
-using BookManagement.Service.Models;
+using BookManagement.Service.Common;
+using BookManagement.Service.Book;
+using BookManagement.Service.Feedback;
+using BookManagement.Service.Order;
 using BookManagement.Service.Shop;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,9 +17,9 @@ namespace BookManagement.Api.Controllers;
 [Authorize]
 public class ShopController : ControllerBase
 {
-    private readonly ShopService _shopService;
+    private readonly IShopService _shopService;
 
-    public ShopController(ShopService shopService)
+    public ShopController(IShopService shopService)
     {
         _shopService = shopService;
     }
@@ -44,11 +46,10 @@ public class ShopController : ControllerBase
     /// </summary>
     [HttpPost("CreateShopBook")]
     [Authorize(Roles = "SHOP")]
-    public async Task<IActionResult> CreateBook([FromBody] CreateBookRequestDto dto)
+    public async Task<IActionResult> CreateBook(CreateBookRequestDto dto)
     {
         var userId = GetUserId();
-        var profile = await _shopService.GetShopProfileAsync(userId);
-        var result = await _shopService.CreateBookAsync(profile.ShopId, dto);
+        var result = await _shopService.CreateBookAsync(userId, dto);
         return Ok(ApiResponse.SuccessResponse(result, "Book created successfully"));
     }
 
@@ -57,25 +58,10 @@ public class ShopController : ControllerBase
     /// </summary>
     [HttpGet("GetShopInventory")]
     [Authorize(Roles = "SHOP")]
-    public async Task<IActionResult> GetShopInventory(
-        [FromQuery] string? searchTerm,
-        [FromQuery] string? keyword,
-        [FromQuery] Guid? categoryId,
-        [FromQuery] BookStatus? status,
-        [FromQuery] int pageIndex = 1,
-        [FromQuery] int pageSize = 10)
+    public async Task<IActionResult> GetShopInventory(BookQueryDto query)
     {
         var userId = GetUserId();
-        var profile = await _shopService.GetShopProfileAsync(userId);
-        var query = new BookQueryDto
-        {
-            Keyword = searchTerm ?? keyword,
-            CategoryId = categoryId,
-            Status = status,
-            PageIndex = pageIndex > 0 ? pageIndex : 1,
-            PageSize = pageSize > 0 ? pageSize : 10
-        };
-        var result = await _shopService.GetShopBooksAsync(profile.ShopId, query);
+        var result = await _shopService.GetShopBooksAsync(userId, query);
         return Ok(ApiResponse.SuccessResponse(result));
     }
 
@@ -84,17 +70,10 @@ public class ShopController : ControllerBase
     /// </summary>
     [HttpPost("UpdateShopBook")]
     [Authorize(Roles = "SHOP")]
-    public async Task<IActionResult> UpdateShopBook(
-        [FromQuery] Guid bookId,
-        [FromBody] UpdateBookRequestDto dto)
+    public async Task<IActionResult> UpdateShopBook(Guid bookId, UpdateBookRequestDto dto)
     {
-        if (bookId == Guid.Empty)
-        {
-            return BadRequest(ApiResponse.ErrorResponse("bookId is required."));
-        }
         var userId = GetUserId();
-        var profile = await _shopService.GetShopProfileAsync(userId);
-        var result = await _shopService.UpdateBookAsync(profile.ShopId, bookId, dto);
+        var result = await _shopService.UpdateBookAsync(userId, bookId, dto);
         return Ok(ApiResponse.SuccessResponse(result, "Book updated successfully"));
     }
 
@@ -103,15 +82,10 @@ public class ShopController : ControllerBase
     /// </summary>
     [HttpPost("DeleteShopBook")]
     [Authorize(Roles = "SHOP")]
-    public async Task<IActionResult> DeleteShopBook([FromQuery] Guid bookId)
+    public async Task<IActionResult> DeleteShopBook(Guid bookId)
     {
-        if (bookId == Guid.Empty)
-        {
-            return BadRequest(ApiResponse.ErrorResponse("bookId is required."));
-        }
         var userId = GetUserId();
-        var profile = await _shopService.GetShopProfileAsync(userId);
-        await _shopService.DeleteBookAsync(profile.ShopId, bookId);
+        await _shopService.DeleteBookAsync(userId, bookId);
         return Ok(ApiResponse.SuccessResponse(null, "Book status updated to HIDDEN successfully"));
     }
 
@@ -120,15 +94,10 @@ public class ShopController : ControllerBase
     /// </summary>
     [HttpGet("GetShopOrderDetail")]
     [Authorize(Roles = "SHOP")]
-    public async Task<IActionResult> GetShopOrderDetail([FromQuery] Guid orderId)
+    public async Task<IActionResult> GetShopOrderDetail(Guid orderId)
     {
-        if (orderId == Guid.Empty)
-        {
-            return BadRequest(ApiResponse.ErrorResponse("orderId is required."));
-        }
         var userId = GetUserId();
-        var profile = await _shopService.GetShopProfileAsync(userId);
-        var result = await _shopService.GetShopOrderDetailAsync(profile.ShopId, orderId);
+        var result = await _shopService.GetShopOrderDetailAsync(userId, orderId);
         return Ok(ApiResponse.SuccessResponse(result));
     }
 
@@ -137,17 +106,10 @@ public class ShopController : ControllerBase
     /// </summary>
     [HttpPost("UpdateOrderStatus")]
     [Authorize(Roles = "SHOP")]
-    public async Task<IActionResult> UpdateOrderStatus(
-        [FromQuery] Guid orderId,
-        [FromBody] UpdateOrderStatusDto dto)
+    public async Task<IActionResult> UpdateOrderStatus(Guid orderId, UpdateOrderStatusDto dto)
     {
-        if (orderId == Guid.Empty)
-        {
-            return BadRequest(ApiResponse.ErrorResponse("orderId is required."));
-        }
         var userId = GetUserId();
-        var profile = await _shopService.GetShopProfileAsync(userId);
-        await _shopService.UpdateOrderStatusAsync(profile.ShopId, orderId, dto);
+        await _shopService.UpdateOrderStatusAsync(userId, orderId, dto);
         return Ok(ApiResponse.SuccessResponse(null, "Order status updated successfully"));
     }
 
@@ -156,14 +118,10 @@ public class ShopController : ControllerBase
     /// </summary>
     [HttpGet("GetRevenueStatistics")]
     [Authorize(Roles = "SHOP")]
-    public async Task<IActionResult> GetRevenueStatistics(
-        [FromQuery] DateTime? fromDate,
-        [FromQuery] DateTime? toDate,
-        [FromQuery] string? periodType)
+    public async Task<IActionResult> GetRevenueStatistics(RevenueQueryRequest query)
     {
         var userId = GetUserId();
-        var profile = await _shopService.GetShopProfileAsync(userId);
-        var result = await _shopService.GetShopRevenueAsync(profile.ShopId, fromDate, toDate, periodType);
+        var result = await _shopService.GetShopRevenueAsync(userId, query);
         return Ok(ApiResponse.SuccessResponse(result));
     }
 
@@ -172,31 +130,20 @@ public class ShopController : ControllerBase
     /// </summary>
     [HttpGet("GetShopFeedbacks")]
     [Authorize(Roles = "SHOP")]
-    public async Task<IActionResult> GetShopFeedbacks(
-        [FromQuery] int? rating,
-        [FromQuery] bool? hasResponse,
-        [FromQuery] int pageIndex = 1,
-        [FromQuery] int pageSize = 10)
+    public async Task<IActionResult> GetShopFeedbacks(ShopFeedbackQueryRequest query)
     {
         var userId = GetUserId();
-        var profile = await _shopService.GetShopProfileAsync(userId);
-        var result = await _shopService.GetShopFeedbacksAsync(profile.ShopId, rating, hasResponse, pageIndex, pageSize);
+        var result = await _shopService.GetShopFeedbacksAsync(userId, query);
         return Ok(ApiResponse.SuccessResponse(result));
     }
 
     [HttpPost("ReplyFeedback")]
     [Authorize(Roles = "SHOP")]
-    public async Task<IActionResult> ReplyFeedback(
-        [FromQuery] Guid feedbackId,
-        [FromBody] FeedbackResponseRequestDto dto)
+    public async Task<IActionResult> ReplyFeedback(Guid feedbackId, FeedbackResponseRequestDto dto)
     {
-        if (feedbackId == Guid.Empty)
-        {
-            return BadRequest(ApiResponse.ErrorResponse("feedbackId is required."));
-        }
         var userId = GetUserId();
-        var profile = await _shopService.GetShopProfileAsync(userId);
-        var result = await _shopService.CreateFeedbackResponseAsync(profile.ShopId, feedbackId, dto);
+        var targetFeedbackId = dto.FeedbackId ?? feedbackId;
+        var result = await _shopService.CreateFeedbackResponseAsync(userId, targetFeedbackId, dto);
         return Ok(ApiResponse.SuccessResponse(result, "Feedback response created successfully"));
     }
 
@@ -205,17 +152,10 @@ public class ShopController : ControllerBase
     /// </summary>
     [HttpPost("ProcessReturnRequest")]
     [Authorize(Roles = "SHOP")]
-    public async Task<IActionResult> ProcessReturnRequest(
-        [FromQuery] Guid returnRequestId,
-        [FromBody] ProcessReturnRequestDto dto)
+    public async Task<IActionResult> ProcessReturnRequest(Guid returnRequestId, ProcessReturnRequestDto dto)
     {
-        if (returnRequestId == Guid.Empty)
-        {
-            return BadRequest(ApiResponse.ErrorResponse("returnRequestId is required."));
-        }
         var userId = GetUserId();
-        var profile = await _shopService.GetShopProfileAsync(userId);
-        await _shopService.ProcessReturnRequestAsync(profile.ShopId, returnRequestId, dto);
+        await _shopService.ProcessReturnRequestAsync(userId, returnRequestId, dto);
         return Ok(ApiResponse.SuccessResponse(null, "Return request processed successfully"));
     }
 }

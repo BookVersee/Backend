@@ -1,8 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using BookManagement.Service.Delivery;
-using BookManagement.Service.Dtos;
-using BookManagement.Service.Models;
+using BookManagement.Service.Common;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -24,7 +23,7 @@ public class DeliveryController : ControllerBase
     /// </summary>
     [HttpPost("CreateDelivery")]
     [Authorize(Roles = "SHOP,ADMIN,SUPER_ADMIN,DELIVER,SHIPPER")]
-    public async Task<IActionResult> CreateDelivery([FromBody] CreateDeliveryDto dto)
+    public async Task<IActionResult> CreateDelivery(CreateDeliveryDto dto)
     {
         var result = await _deliveryService.CreateDeliveryAsync(dto);
         return Ok(ApiResponse.SuccessResponse(result, "Delivery created successfully"));
@@ -35,7 +34,7 @@ public class DeliveryController : ControllerBase
     /// </summary>
     [HttpGet("GetDeliveryOrders")]
     [Authorize(Roles = "SHIPPER,DELIVER,ADMIN,SUPER_ADMIN,SHOP")]
-    public async Task<IActionResult> GetDeliveryOrders([FromQuery] string? status)
+    public async Task<IActionResult> GetDeliveryOrders(string? status)
     {
         var result = await _deliveryService.GetDeliveryOrdersAsync(status);
         return Ok(ApiResponse.SuccessResponse(result));
@@ -46,9 +45,7 @@ public class DeliveryController : ControllerBase
     /// </summary>
     [HttpPost("UpdateDeliveryStatus")]
     [Authorize(Roles = "SHIPPER,DELIVER,ADMIN,SUPER_ADMIN,SHOP")]
-    public async Task<IActionResult> UpdateDeliveryStatus(
-        [FromQuery] Guid deliveryId,
-        [FromBody] UpdateDeliveryStatusDto dto)
+    public async Task<IActionResult> UpdateDeliveryStatus(Guid deliveryId, UpdateDeliveryStatusDto dto)
     {
         if (deliveryId == Guid.Empty)
         {

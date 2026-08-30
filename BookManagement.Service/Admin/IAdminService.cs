@@ -1,3 +1,13 @@
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using BookManagement.Service.Book;
+using BookManagement.Service.Common;
+using BookManagement.Service.Delivery;
+using BookManagement.Service.Order;
+using BookManagement.Service.Shop;
+using BookManagement.Service.User;
+
 namespace BookManagement.Service.Admin;
 
 public interface IAdminService
@@ -22,10 +32,8 @@ public interface IAdminService
     Task<PagedResult<BookResponse>> GetBooksByStatusAsync(string status, int page = 1, int pageSize = 10);
     Task HideBookAsync(Guid bookId);
 
-    // Shop Management & Approval
-    Task<IEnumerable<ShopResponse>> GetPendingShopsAsync();
+    // Shop Management
     Task<PagedResult<ShopResponse>> GetAllShopsAsync(int page = 1, int pageSize = 10);
-    Task ApproveShopAsync(Guid shopId);
     Task LockShopAsync(Guid shopId, LockShopRequest request);
 
     // Dashboard & Statistics
@@ -41,4 +49,3 @@ public interface IAdminService
     Task<IEnumerable<ReportedResponseDto>> GetReportedResponsesAsync();
     Task ModerateShopResponseAsync(Guid responseId, bool isDelete, string? adminNote);
 }
-

@@ -2,8 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using BookManagement.Api.Extensions;
 using BookManagement.Service.Auth;
-using BookManagement.Service.Models;
+using BookManagement.Service.Common;
 using BookManagement.Service.User;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -29,7 +30,7 @@ namespace BookManagement.Api.Controllers
         [HttpGet("GetProfile")]
         public async Task<IActionResult> GetProfile()
         {
-            var userId = GetCurrentUserId();
+            var userId = User.GetUserId();
             var profile = await _userService.GetProfileAsync(userId);
             return Ok(ApiResponse<UserResponse>.SuccessResponse(profile));
         }
@@ -37,9 +38,9 @@ namespace BookManagement.Api.Controllers
         /// Chức năng: Cập nhật thông tin cá nhân người dùng. Trả về: Dữ liệu hồ sơ mới nhất.
         [Authorize]
         [HttpPut("UpdateProfile")]
-        public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
+        public async Task<IActionResult> UpdateProfile(UpdateProfileRequest request)
         {
-            var userId = GetCurrentUserId();
+            var userId = User.GetUserId();
             var updated = await _userService.UpdateProfileAsync(userId, request);
             return Ok(ApiResponse<UserResponse>.SuccessResponse(updated, "Profile updated successfully."));
         }
@@ -47,7 +48,7 @@ namespace BookManagement.Api.Controllers
         /// TH1 - Bước 1: Gửi mã OTP xác thực đổi/khôi phục mật khẩu qua Gmail.
         [Authorize]
         [HttpPost("SendPasswordOtp")]
-        public async Task<IActionResult> SendPasswordOtp([FromBody] SendOtpRequest request)
+        public async Task<IActionResult> SendPasswordOtp(SendOtpRequest request)
         {
             await _userService.SendPasswordOtpAsync(request);
             return Ok(ApiResponse<string>.SuccessResponse("Mã OTP đã được gửi về Gmail của bạn. Vui lòng kiểm tra hộp thư."));
@@ -56,7 +57,7 @@ namespace BookManagement.Api.Controllers
         /// TH1 - Bước 2: Xác thực mã OTP trước khi nhập mật khẩu mới (Nếu đúng mới cho đổi, sai thì báo lỗi).
         [Authorize]
         [HttpPost("VerifyPasswordOtp")]
-        public async Task<IActionResult> VerifyPasswordOtp([FromBody] VerifyPasswordOtpRequest request)
+        public async Task<IActionResult> VerifyPasswordOtp(VerifyPasswordOtpRequest request)
         {
             await _userService.VerifyPasswordOtpAsync(request);
             return Ok(ApiResponse<string>.SuccessResponse("Xác thực OTP thành công! Vui lòng chuyển sang bước nhập mật khẩu mới."));
@@ -65,7 +66,7 @@ namespace BookManagement.Api.Controllers
         /// TH1 - Bước 3: Đặt mật khẩu mới (Chỉ cần Email và Mật khẩu mới, không cần ghi lại OTP).
         [Authorize]
         [HttpPost("ResetNewPassword")]
-        public async Task<IActionResult> ResetNewPassword([FromBody] ResetNewPasswordRequest request)
+        public async Task<IActionResult> ResetNewPassword(ResetNewPasswordRequest request)
         {
             await _userService.ResetNewPasswordAsync(request);
             return Ok(ApiResponse<string>.SuccessResponse("Đặt mật khẩu mới thành công!"));
@@ -74,9 +75,9 @@ namespace BookManagement.Api.Controllers
         /// TH2: Thay đổi mật khẩu khi đã đăng nhập (Bằng Mật khẩu cũ + Mật khẩu mới).
         [Authorize]
         [HttpPut("ChangePassword")]
-        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordWithOldPasswordRequest request)
+        public async Task<IActionResult> ChangePassword(ChangePasswordWithOldPasswordRequest request)
         {
-            var userId = GetCurrentUserId();
+            var userId = User.GetUserId();
             await _userService.ChangePasswordAsync(userId, request);
             return Ok(ApiResponse<string>.SuccessResponse("Đổi mật khẩu thành công!"));
         }
@@ -86,7 +87,7 @@ namespace BookManagement.Api.Controllers
         [HttpGet("GetTransactions")]
         public async Task<IActionResult> GetTransactions()
         {
-            var userId = GetCurrentUserId();
+            var userId = User.GetUserId();
             var transactions = await _userService.GetUserTransactionsAsync(userId);
             return Ok(ApiResponse<IEnumerable<TransactionResponse>>.SuccessResponse(transactions));
         }
@@ -94,24 +95,24 @@ namespace BookManagement.Api.Controllers
         /// Chức năng: Đăng ký mở Cửa hàng bán sách mới. Trả về: Thông tin cửa hàng vừa đăng ký ở trạng thái PENDING.
         [Authorize]
         [HttpPost("RegisterShop")]
-        public async Task<IActionResult> RegisterShop([FromBody] RegisterShopRequest request)
+        public async Task<IActionResult> RegisterShop(RegisterShopRequest request)
         {
-            var userId = GetCurrentUserId();
+            var userId = User.GetUserId();
             var shop = await _userService.RegisterShopAsync(userId, request);
-            return Ok(ApiResponse<BookManagement.Service.Admin.ShopResponse>.SuccessResponse(shop, "Shop registration submitted for Admin review."));
+            return Ok(ApiResponse<BookManagement.Service.Shop.ShopResponse>.SuccessResponse(shop, "Shop registration submitted for Admin review."));
         }
 
         /// Chức năng: Đăng xuất khỏi tài khoản trên thiết bị hiện tại.
         [Authorize]
         [HttpPost("Logout")]
-        public async Task<IActionResult> Logout([FromBody] RevokeTokenRequest? request)
+        public async Task<IActionResult> Logout(RevokeTokenRequest? request)
         {
             if (!string.IsNullOrEmpty(request?.RefreshToken))
             {
                 await _sessionService.RevokeSessionAsync(request.RefreshToken);
             }
 
-            var userId = GetCurrentUserId();
+            var userId = User.GetUserId();
             await _sessionService.RevokeAllUserSessionsAsync(userId);
             return Ok(ApiResponse<string>.SuccessResponse("Đăng xuất thành công."));
         }
@@ -121,7 +122,7 @@ namespace BookManagement.Api.Controllers
         [HttpPost("RevokeAllSessions")]
         public async Task<IActionResult> RevokeAllSessions()
         {
-            var userId = GetCurrentUserId();
+            var userId = User.GetUserId();
             await _sessionService.RevokeAllUserSessionsAsync(userId);
             return Ok(ApiResponse<string>.SuccessResponse("Đã đăng xuất khỏi tất cả các thiết bị thành công."));
         }
@@ -131,19 +132,9 @@ namespace BookManagement.Api.Controllers
         [HttpGet("GetActiveSessions")]
         public async Task<IActionResult> GetActiveSessions()
         {
-            var userId = GetCurrentUserId();
+            var userId = User.GetUserId();
             var sessions = await _sessionService.GetUserSessionsAsync(userId);
             return Ok(ApiResponse<IEnumerable<UserSessionResponse>>.SuccessResponse(sessions, "Lấy danh sách thiết bị đang hoạt động thành công."));
-        }
-
-        private Guid GetCurrentUserId()
-        {
-            var claim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(claim) || !Guid.TryParse(claim, out var userId))
-            {
-                throw new UnauthorizedAccessException("Invalid authentication claims.");
-            }
-            return userId;
         }
     }
 }

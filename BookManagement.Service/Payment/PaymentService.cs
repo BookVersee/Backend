@@ -5,7 +5,6 @@ using System.Threading.Tasks;
 using BookManagement.Repository.Data;
 using BookManagement.Repository.Entities;
 using BookManagement.Repository.Entities.Enums;
-using BookManagement.Service.Dtos;
 using Microsoft.EntityFrameworkCore;
 using System.Collections.Concurrent;
 using System.Threading;
@@ -13,7 +12,7 @@ using PaymentEntity = BookManagement.Repository.Entities.Payment;
 
 namespace BookManagement.Service.Payment;
 
-public class PaymentService
+public class PaymentService : IPaymentService
 {
     private readonly AppDbContext _db;
     private readonly MomoService _momoService;
@@ -392,11 +391,10 @@ public class PaymentService
         var cutoffTime = DateTimeOffset.UtcNow.AddMinutes(-expiryMinutes);
 
         var expiredOrders = await _db.Orders
+            .Where(o => o.OrderStatus == OrderStatus.PENDING && o.CreatedAt <= cutoffTime)
             .Include(o => o.OrderDetails)
                 .ThenInclude(od => od.Book)
             .Include(o => o.Payments)
-            .AsSplitQuery()
-            .Where(o => o.OrderStatus == OrderStatus.PENDING && o.CreatedAt <= cutoffTime)
             .ToListAsync();
 
         int cancelledCount = 0;

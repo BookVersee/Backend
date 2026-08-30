@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
-using BookManagement.Service.Dtos;
+using BookManagement.Service.Delivery;
 using BookManagement.Repository.Data;
 using BookManagement.Repository.Entities;
 using DeliveryEntity = BookManagement.Repository.Entities.Delivery;
@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookManagement.Service.Shipping;
 
-public class ShippingService
+public class ShippingService : IShippingService
 {
     private readonly AppDbContext _db;
     private readonly GhnService _ghnService;

@@ -268,6 +268,9 @@ namespace BookManagement.Service.User
                 throw new InvalidOperationException("Tài khoản đã được ngưng hoạt động trước đó.");
             }
 
+            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            user.Email = $"{user.Email}_deleted_{timestamp}";
+            user.Username = $"{user.Username}_deleted_{timestamp}";
             user.Status = UserStatus.INACTIVE;
             user.UpdatedAt = DateTimeOffset.UtcNow;
 

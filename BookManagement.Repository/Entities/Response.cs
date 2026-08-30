@@ -9,7 +9,6 @@ namespace BookManagement.Repository.Entities
         public Guid ShopId { get; set; }
         public string Content { get; set; } = null!;
         public string? ImageUrl { get; set; }
-        public bool IsDeleted { get; set; } = false;
         public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
         public DateTimeOffset? UpdatedAt { get; set; }
 

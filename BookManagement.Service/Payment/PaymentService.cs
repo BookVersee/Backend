@@ -225,7 +225,7 @@ public class PaymentService : IPaymentService
             throw new InvalidOperationException($"Tổng số tiền hoàn ({alreadyRefundedAmount + refundAmount:N0} đ) vượt quá tổng giá trị đơn hàng ({order.TotalAmount:N0} đ).");
         }
 
-        string transNo = dto.TransactionNo ?? ("MOMO_REF_" + DateTime.UtcNow.Ticks);
+        string transNo = dto.TransactionNo ?? $"MOMO_REF_{DateTime.UtcNow.Ticks}_{Guid.NewGuid():N}"[..60];
         if (!string.IsNullOrEmpty(dto.TransactionNo))
         {
             bool isTransCodeDuplicate = await _db.TransactionHistories

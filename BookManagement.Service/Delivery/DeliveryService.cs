@@ -140,6 +140,7 @@ public class DeliveryService : IDeliveryService
                     codPayment.Status = PaymentStatus.SUCCESS;
                     codPayment.UpdatedAt = DateTimeOffset.UtcNow;
 
+                    var tracking = !string.IsNullOrEmpty(delivery.TrackingNumber) ? delivery.TrackingNumber : delivery.Id.ToString("N")[..8];
                     var codTransaction = new TransactionHistory
                     {
                         UserId = order.UserId,
@@ -147,7 +148,7 @@ public class DeliveryService : IDeliveryService
                         ReferenceId = order.Id,
                         TransactionType = TransactionType.IN,
                         Amount = codPayment.Amount,
-                        TransactionCode = $"COD_{delivery.TrackingNumber}_{DateTime.UtcNow.Ticks.ToString().Substring(0, 6)}",
+                        TransactionCode = $"COD_{tracking}_{Guid.NewGuid():N}"[..60],
                         Description = $"COD Cash collection for Order #{order.Id}",
                         CreatedAt = DateTimeOffset.UtcNow
                     };

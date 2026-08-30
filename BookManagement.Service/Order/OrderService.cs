@@ -41,7 +41,16 @@ namespace BookManagement.Service.Order
 
             if (isShop)
             {
-                query = query.Where(o => o.OrderDetails.Any(od => od.Book != null && od.Book.ShopId == userId));
+                var shopIds = await _context.Database
+                    .SqlQueryRaw<Guid>("SELECT Id FROM Shops WHERE UserId = {0} OR Id = {0}", userId)
+                    .ToListAsync();
+
+                if (!shopIds.Contains(userId))
+                {
+                    shopIds.Add(userId);
+                }
+
+                query = query.Where(o => o.OrderDetails.Any(od => od.Book != null && shopIds.Contains(od.Book.ShopId)));
             }
             else
             {
@@ -63,8 +72,17 @@ namespace BookManagement.Service.Order
             var order = await GetFullOrderQuery().FirstOrDefaultAsync(o => o.Id == orderId);
             if (order == null) throw new KeyNotFoundException("Order not found.");
 
+            var shopIds = await _context.Database
+                .SqlQueryRaw<Guid>("SELECT Id FROM Shops WHERE UserId = {0} OR Id = {0}", userId)
+                .ToListAsync();
+
+            if (!shopIds.Contains(userId))
+            {
+                shopIds.Add(userId);
+            }
+
             var isBuyer = order.UserId == userId;
-            var isSeller = order.OrderDetails.Any(od => od.Book?.ShopId == userId);
+            var isSeller = order.OrderDetails.Any(od => od.Book != null && shopIds.Contains(od.Book.ShopId));
 
             if (!isBuyer && !isSeller)
             {

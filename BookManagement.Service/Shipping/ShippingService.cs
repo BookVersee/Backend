@@ -36,7 +36,16 @@ public class ShippingService : IShippingService
             throw new KeyNotFoundException("Order not found.");
         }
 
-        if (shopId != Guid.Empty && !order.OrderDetails.Any(od => od.Book != null && od.Book.ShopId == shopId))
+        var shopIds = await _db.Database
+            .SqlQueryRaw<Guid>("SELECT Id FROM Shops WHERE UserId = {0} OR Id = {0}", shopId)
+            .ToListAsync();
+        if (!shopIds.Any() && shopId != Guid.Empty)
+        {
+            throw new KeyNotFoundException("Shop not found.");
+        }
+
+        var resolvedShopId = shopIds.FirstOrDefault();
+        if (shopId != Guid.Empty && !order.OrderDetails.Any(od => od.Book != null && (od.Book.ShopId == resolvedShopId || od.Book.ShopId == shopId)))
         {
             throw new UnauthorizedAccessException("Shop does not have permission to create shipping order for this order.");
         }
@@ -46,11 +55,8 @@ public class ShippingService : IShippingService
             throw new InvalidOperationException($"Delivery already exists for Order #{order.Id}.");
         }
 
-        var shop = await _db.Shops.FirstOrDefaultAsync(s => s.Id == shopId);
-        if (shop == null)
-        {
-            throw new KeyNotFoundException("Shop not found.");
-        }
+        var shop = await _db.Shops.FirstOrDefaultAsync(s => s.Id == resolvedShopId || s.Id == shopId)
+                   ?? new BookManagement.Repository.Entities.Shop { Id = resolvedShopId, ShopName = "Shop BookVerse" };
 
         var (orderCode, totalFee) = await _ghnService.CreateShippingOrderAsync(shop, order);
 

@@ -27,12 +27,14 @@ namespace BookManagement.Service.Shop
 
         private async Task<Guid> ResolveShopIdAsync(Guid userIdOrShopId)
         {
-            var shop = await _db.Shops.FirstOrDefaultAsync(s => s.Id == userIdOrShopId);
-            if (shop == null)
+            var shopIds = await _db.Database
+                .SqlQueryRaw<Guid>("SELECT Id FROM Shops WHERE UserId = {0} OR Id = {0}", userIdOrShopId)
+                .ToListAsync();
+            if (!shopIds.Any())
             {
                 throw new KeyNotFoundException("Shop not found for the specified user or shop id.");
             }
-            return shop.Id;
+            return shopIds.First();
         }
 
         /// Chức năng: Đăng ký tạo thông tin Cửa hàng bán sách mới

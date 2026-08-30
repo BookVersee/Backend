@@ -26,7 +26,7 @@ public class ShippingController : ControllerBase
     /// Chức năng: Tạo vận đơn giao hàng qua đơn vị Giao Hàng Nhanh (GHN)
     [HttpPost("CreateGhnOrder")]
     [Authorize(Roles = "SHOP,ADMIN,SUPER_ADMIN")]
-    public async Task<IActionResult> CreateGhnOrder(CreateGhnOrderDto dto)
+    public async Task<IActionResult> CreateGhnOrder([FromBody] CreateGhnOrderDto dto)
     {
         var (userId, role) = User.GetUserInfo();
         var result = await _shippingService.CreateGhnOrderAsync(userId, dto);
@@ -36,7 +36,7 @@ public class ShippingController : ControllerBase
     /// Chức năng: Webhook tiếp nhận tự động cập nhật trạng thái vận đơn từ GHN
     [HttpPost("GhnWebhook")]
     [AllowAnonymous]
-    public async Task<IActionResult> GhnWebhook(GhnWebhookPayload payload)
+    public async Task<IActionResult> GhnWebhook([FromBody] GhnWebhookPayload payload)
     {
         await _shippingService.ProcessGhnWebhookAsync(payload);
         return Ok(new { message = "Webhook processed successfully." });

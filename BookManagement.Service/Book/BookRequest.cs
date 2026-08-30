@@ -34,6 +34,14 @@ namespace BookManagement.Service.Book
         public BookStatus Status { get; set; }
     }
 
+    public class BookImageInputDto
+    {
+        public string ImageUrl { get; set; } = string.Empty;
+        public string? PublicId { get; set; }
+        public bool IsCover { get; set; } = false;
+        public int DisplayOrder { get; set; } = 0;
+    }
+
     public class CreateBookRequestDto
     {
         [Required(ErrorMessage = "Thể loại sách không được để trống.")]
@@ -62,7 +70,14 @@ namespace BookManagement.Service.Book
         [StringLength(4000, ErrorMessage = "Mô tả không được vượt quá 4000 ký tự.")]
         public string? Description { get; set; }
 
+        /// Ảnh bìa chính
         public string? ImageUrl { get; set; }
+
+        /// Danh sách đường dẫn các ảnh (Ảnh bìa + Trang đọc thử / góc chụp)
+        public List<string>? ImageUrls { get; set; }
+
+        /// Danh sách đối tượng ảnh chi tiết (nếu có kèm PublicId / IsCover / DisplayOrder)
+        public List<BookImageInputDto>? Images { get; set; }
 
         [Range(1000, 2100, ErrorMessage = "Năm xuất bản không hợp lệ (từ 1000 đến 2100).")]
         public int PublishedYear { get; set; }
@@ -85,6 +100,12 @@ namespace BookManagement.Service.Book
         public string? Description { get; set; }
 
         public string? ImageUrl { get; set; }
+
+        /// Danh sách đường dẫn các ảnh cập nhật
+        public List<string>? ImageUrls { get; set; }
+
+        /// Danh sách đối tượng ảnh chi tiết cập nhật
+        public List<BookImageInputDto>? Images { get; set; }
 
         [Range(1000, 2100, ErrorMessage = "Năm xuất bản không hợp lệ.")]
         public int PublishedYear { get; set; }

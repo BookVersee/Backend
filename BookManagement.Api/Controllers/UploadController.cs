@@ -1,6 +1,5 @@
-using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
-using BookManagement.Api.Extensions;
 using BookManagement.Service.Cloudinary;
 using BookManagement.Service.Common;
 using Microsoft.AspNetCore.Authorization;
@@ -9,10 +8,15 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BookManagement.Api.Controllers;
 
-public class UploadImageRequest
+public class UploadMultipleImagesRequest
 {
-    public IFormFile File { get; set; } = null!;
-    public string? Folder { get; set; } = "bookverse/uploads";
+    public List<IFormFile> Files { get; set; } = new List<IFormFile>();
+    public string? Folder { get; set; } = "bookverse/books";
+}
+
+public class DeleteMultipleImagesRequest
+{
+    public List<string> PublicIds { get; set; } = new List<string>();
 }
 
 /// Vị trí: Api Controller - Tiếp nhận HTTP Request từ Frontend, kiểm tra đầu vào và trả về ApiResponse.
@@ -28,59 +32,20 @@ public class UploadController : ControllerBase
         _cloudinaryService = cloudinaryService;
     }
 
-    /// Chức năng: Upload hình ảnh tập tin lên Cloudinary
-    [HttpPost("image")]
+    /// Chức năng: Upload hàng loạt hình ảnh song song lên Cloudinary (Hỗ trợ 1 hoặc nhiều ảnh)
+    [HttpPost("images")]
     [Consumes("multipart/form-data")]
-    public async Task<IActionResult> UploadImage([FromForm] UploadImageRequest request)
+    public async Task<IActionResult> UploadImages([FromForm] UploadMultipleImagesRequest request)
     {
-        var (userId, role) = User.GetUserInfo();
-        var file = request.File;
-        var folder = request.Folder;
-
-        if (file == null || file.Length == 0)
-        {
-            return BadRequest(ApiResponse.ErrorResponse("Vui lòng chọn file hình ảnh hợp lệ."));
-        }
-
-        var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp", ".gif" };
-        var extension = System.IO.Path.GetExtension(file.FileName).ToLowerInvariant();
-        if (!Array.Exists(allowedExtensions, ext => ext == extension))
-        {
-            return BadRequest(ApiResponse.ErrorResponse("Định dạng file không hỗ trợ. Chỉ chấp nhận JPG, JPEG, PNG, WEBP, GIF."));
-        }
-
-        if (file.Length > 10 * 1024 * 1024)
-        {
-            return BadRequest(ApiResponse.ErrorResponse("Dung lượng file tối đa là 10MB."));
-        }
-
-        var (url, publicId) = await _cloudinaryService.UploadImageAsync(file, string.IsNullOrWhiteSpace(folder) ? "bookverse/uploads" : folder);
-
-        return Ok(ApiResponse.SuccessResponse(new
-        {
-            url = url,
-            public_id = publicId,
-            file_name = file.FileName,
-            size = file.Length
-        }, "Upload ảnh lên Cloudinary thành công!"));
+        var result = await _cloudinaryService.UploadImagesAsync(request.Files, request.Folder);
+        return Ok(ApiResponse<List<ImageUploadDto>>.SuccessResponse(result, $"Đã upload thành công {result.Count} hình ảnh lên Cloudinary!"));
     }
 
-    /// Chức năng: Xóa tệp hình ảnh lưu trữ trên Cloudinary
-    [HttpDelete("image")]
-    public async Task<IActionResult> DeleteImage(string publicId)
+    /// Chức năng: Xóa hàng loạt tệp hình ảnh trên Cloudinary (Hỗ trợ 1 hoặc nhiều PublicId)
+    [HttpDelete("images")]
+    public async Task<IActionResult> DeleteImages([FromBody] DeleteMultipleImagesRequest request)
     {
-        var (userId, role) = User.GetUserInfo();
-        if (string.IsNullOrWhiteSpace(publicId))
-        {
-            return BadRequest(ApiResponse.ErrorResponse("PublicId không được để trống."));
-        }
-
-        var isDeleted = await _cloudinaryService.DeleteImageAsync(publicId);
-        if (!isDeleted)
-        {
-            return BadRequest(ApiResponse.ErrorResponse("Không tìm thấy hoặc không thể xóa ảnh trên Cloudinary."));
-        }
-
-        return Ok(ApiResponse.SuccessResponse(new { public_id = publicId }, "Xóa ảnh trên Cloudinary thành công!"));
+        var deletedCount = await _cloudinaryService.DeleteImagesAsync(request.PublicIds);
+        return Ok(ApiResponse<object>.SuccessResponse(new { deletedCount }, $"Đã xóa thành công {deletedCount} ảnh khỏi Cloudinary."));
     }
 }

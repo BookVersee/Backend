@@ -28,5 +28,6 @@ namespace BookManagement.Repository.Entities
         public Category Category { get; set; } = null!;
         public ICollection<CartBookDetail> CartBookDetails { get; set; } = new List<CartBookDetail>();
         public ICollection<OrderDetail> OrderDetails { get; set; } = new List<OrderDetail>();
+        public ICollection<BookImage> Images { get; set; } = new List<BookImage>();
     }
 }

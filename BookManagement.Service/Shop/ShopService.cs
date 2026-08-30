@@ -164,6 +164,7 @@ namespace BookManagement.Service.Shop
 
             var book = new BookEntity
             {
+                Id = Guid.NewGuid(),
                 ShopId = shopId,
                 CategoryId = dto.CategoryId,
                 Title = dto.Title.Trim(),
@@ -180,6 +181,64 @@ namespace BookManagement.Service.Shop
             };
 
             _db.Books.Add(book);
+
+            var imagesToInsert = new List<BookImage>();
+            int imgOrder = 0;
+
+            if (dto.Images != null && dto.Images.Count > 0)
+            {
+                foreach (var img in dto.Images.Where(i => !string.IsNullOrWhiteSpace(i.ImageUrl)))
+                {
+                    imagesToInsert.Add(new BookImage
+                    {
+                        Id = Guid.NewGuid(),
+                        BookId = book.Id,
+                        ImageUrl = img.ImageUrl.Trim(),
+                        PublicId = img.PublicId?.Trim(),
+                        IsCover = img.IsCover || imgOrder == 0,
+                        DisplayOrder = img.DisplayOrder > 0 ? img.DisplayOrder : imgOrder++,
+                        CreatedAt = DateTimeOffset.UtcNow
+                    });
+                }
+            }
+            else if (dto.ImageUrls != null && dto.ImageUrls.Count > 0)
+            {
+                foreach (var url in dto.ImageUrls.Where(u => !string.IsNullOrWhiteSpace(u)))
+                {
+                    imagesToInsert.Add(new BookImage
+                    {
+                        Id = Guid.NewGuid(),
+                        BookId = book.Id,
+                        ImageUrl = url.Trim(),
+                        IsCover = imgOrder == 0,
+                        DisplayOrder = imgOrder++,
+                        CreatedAt = DateTimeOffset.UtcNow
+                    });
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(dto.ImageUrl))
+            {
+                imagesToInsert.Add(new BookImage
+                {
+                    Id = Guid.NewGuid(),
+                    BookId = book.Id,
+                    ImageUrl = dto.ImageUrl.Trim(),
+                    IsCover = true,
+                    DisplayOrder = 0,
+                    CreatedAt = DateTimeOffset.UtcNow
+                });
+            }
+
+            if (imagesToInsert.Count > 0)
+            {
+                if (string.IsNullOrWhiteSpace(book.ImageUrl))
+                {
+                    var coverImg = imagesToInsert.FirstOrDefault(i => i.IsCover) ?? imagesToInsert[0];
+                    book.ImageUrl = coverImg.ImageUrl;
+                }
+                _db.BookImages.AddRange(imagesToInsert);
+                book.Images = imagesToInsert;
+            }
 
             var shop = await _db.Shops.FirstOrDefaultAsync(s => s.Id == shopId);
             var shopName = shop?.ShopName ?? "Cửa hàng";
@@ -219,33 +278,16 @@ namespace BookManagement.Service.Shop
         {
             var shopId = await ResolveShopIdAsync(userIdOrShopId);
             var book = await _db.Books
-                .Where(b => b.Id == bookId && b.ShopId == shopId)
-                .Select(b => new BookResponseDto
-                {
-                    BookId = b.Id,
-                    ShopId = b.ShopId,
-                    CategoryId = b.CategoryId,
-                    CategoryName = b.Category != null ? b.Category.CategoryName : null,
-                    Title = b.Title,
-                    Isbn = b.Isbn ?? string.Empty,
-                    Author = b.Author ?? string.Empty,
-                    Publisher = b.Publisher ?? string.Empty,
-                    Price = b.Price,
-                    StockQuantity = b.StockQuantity,
-                    Description = b.Description,
-                    ImageUrl = b.ImageUrl,
-                    PublishedYear = b.PublishedYear,
-                    Status = b.Status.ToString(),
-                    Rating = b.Rating
-                })
-                .FirstOrDefaultAsync();
+                .Include(b => b.Category)
+                .Include(b => b.Images)
+                .FirstOrDefaultAsync(b => b.Id == bookId && b.ShopId == shopId);
 
             if (book == null)
             {
                 throw new KeyNotFoundException("Book not found or unauthorized access.");
             }
 
-            return book;
+            return MapToBookDto(book, book.Category?.CategoryName);
         }
 
         /// Chức năng: Lấy danh sách sản phẩm kho sách của Cửa hàng phân trang
@@ -291,7 +333,17 @@ namespace BookManagement.Service.Shop
                     ImageUrl = b.ImageUrl,
                     PublishedYear = b.PublishedYear,
                     Status = b.Status.ToString(),
-                    Rating = b.Rating
+                    Rating = b.Rating,
+                    Images = b.Images.OrderBy(i => i.DisplayOrder).Select(i => new BookImageDto
+                    {
+                        Id = i.Id,
+                        ImageUrl = i.ImageUrl,
+                        PublicId = i.PublicId,
+                        IsCover = i.IsCover,
+                        DisplayOrder = i.DisplayOrder
+                    }).ToList(),
+                    CreatedAt = b.CreatedAt,
+                    UpdatedAt = b.UpdatedAt
                 })
                 .ToListAsync();
 
@@ -308,7 +360,9 @@ namespace BookManagement.Service.Shop
         public async Task<BookResponseDto> UpdateBookAsync(Guid userIdOrShopId, Guid bookId, UpdateBookRequestDto dto)
         {
             var shopId = await ResolveShopIdAsync(userIdOrShopId);
-            var book = await _db.Books.FirstOrDefaultAsync(b => b.Id == bookId && b.ShopId == shopId);
+            var book = await _db.Books
+                .Include(b => b.Images)
+                .FirstOrDefaultAsync(b => b.Id == bookId && b.ShopId == shopId);
             if (book == null)
             {
                 throw new KeyNotFoundException("Book not found or unauthorized access.");
@@ -358,6 +412,51 @@ namespace BookManagement.Service.Shop
                 book.Status = parsedStatus;
             }
 
+            // Cập nhật danh sách ảnh nếu có
+            if (dto.Images != null && dto.Images.Count > 0)
+            {
+                _db.BookImages.RemoveRange(book.Images);
+                var newImages = dto.Images.Where(i => !string.IsNullOrWhiteSpace(i.ImageUrl)).Select((img, idx) => new BookImage
+                {
+                    Id = Guid.NewGuid(),
+                    BookId = book.Id,
+                    ImageUrl = img.ImageUrl.Trim(),
+                    PublicId = img.PublicId?.Trim(),
+                    IsCover = img.IsCover || idx == 0,
+                    DisplayOrder = img.DisplayOrder > 0 ? img.DisplayOrder : idx,
+                    CreatedAt = DateTimeOffset.UtcNow
+                }).ToList();
+
+                _db.BookImages.AddRange(newImages);
+                book.Images = newImages;
+
+                if (newImages.Count > 0 && string.IsNullOrWhiteSpace(dto.ImageUrl))
+                {
+                    book.ImageUrl = (newImages.FirstOrDefault(i => i.IsCover) ?? newImages[0]).ImageUrl;
+                }
+            }
+            else if (dto.ImageUrls != null && dto.ImageUrls.Count > 0)
+            {
+                _db.BookImages.RemoveRange(book.Images);
+                var newImages = dto.ImageUrls.Where(u => !string.IsNullOrWhiteSpace(u)).Select((url, idx) => new BookImage
+                {
+                    Id = Guid.NewGuid(),
+                    BookId = book.Id,
+                    ImageUrl = url.Trim(),
+                    IsCover = idx == 0,
+                    DisplayOrder = idx,
+                    CreatedAt = DateTimeOffset.UtcNow
+                }).ToList();
+
+                _db.BookImages.AddRange(newImages);
+                book.Images = newImages;
+
+                if (newImages.Count > 0 && string.IsNullOrWhiteSpace(dto.ImageUrl))
+                {
+                    book.ImageUrl = newImages[0].ImageUrl;
+                }
+            }
+
             await _db.SaveChangesAsync();
 
             var categoryName = await _db.Categories
@@ -385,6 +484,16 @@ namespace BookManagement.Service.Shop
             PublishedYear = book.PublishedYear,
             Status = book.Status.ToString(),
             Rating = book.Rating,
+            Images = book.Images != null
+                ? book.Images.OrderBy(i => i.DisplayOrder).Select(i => new BookImageDto
+                {
+                    Id = i.Id,
+                    ImageUrl = i.ImageUrl,
+                    PublicId = i.PublicId,
+                    IsCover = i.IsCover,
+                    DisplayOrder = i.DisplayOrder
+                }).ToList()
+                : new List<BookImageDto>(),
             CreatedAt = book.CreatedAt,
             UpdatedAt = book.UpdatedAt
         };

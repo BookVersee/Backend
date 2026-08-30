@@ -30,7 +30,7 @@ namespace BookManagement.Api.Controllers
 
         /// Chức năng: Xem thông tin chi tiết sản phẩm sách
         [HttpGet("GetBookDetail")]
-        public async Task<IActionResult> GetBookDetail(Guid id)
+        public async Task<IActionResult> GetBookDetail([FromQuery] Guid id)
         {
             var book = await _bookService.GetBookDetailAsync(id);
             return Ok(ApiResponse<BookResponse>.SuccessResponse(book));
@@ -38,7 +38,7 @@ namespace BookManagement.Api.Controllers
 
         /// Chức năng: Xem thông tin hồ sơ cửa hàng
         [HttpGet("GetShopProfile")]
-        public async Task<IActionResult> GetShopProfile(Guid shopId)
+        public async Task<IActionResult> GetShopProfile([FromQuery] Guid shopId)
         {
             var shop = await _bookService.GetShopProfileAsync(shopId);
             return Ok(ApiResponse<ShopProfileDto>.SuccessResponse(shop));
@@ -46,7 +46,7 @@ namespace BookManagement.Api.Controllers
 
         /// Chức năng: Lấy danh sách sản phẩm sách của Cửa hàng
         [HttpGet("GetBooksByShop")]
-        public async Task<IActionResult> GetBooksByShop(Guid shopId)
+        public async Task<IActionResult> GetBooksByShop([FromQuery] Guid shopId)
         {
             var books = await _bookService.GetBooksByShopAsync(shopId);
             return Ok(ApiResponse<IEnumerable<BookResponse>>.SuccessResponse(books));

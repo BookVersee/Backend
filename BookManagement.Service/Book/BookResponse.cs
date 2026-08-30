@@ -22,8 +22,18 @@ namespace BookManagement.Service.Book
         public int? PublishedYear { get; set; }
         public BookStatus Status { get; set; }
         public double? Rating { get; set; }
+        public List<BookImageDto> Images { get; set; } = new List<BookImageDto>();
         public DateTimeOffset CreatedAt { get; set; }
         public DateTimeOffset? UpdatedAt { get; set; }
+    }
+
+    public class BookImageDto
+    {
+        public Guid Id { get; set; }
+        public string ImageUrl { get; set; } = string.Empty;
+        public string? PublicId { get; set; }
+        public bool IsCover { get; set; }
+        public int DisplayOrder { get; set; }
     }
 
     public class BookResponseDto
@@ -43,6 +53,7 @@ namespace BookManagement.Service.Book
         public int? PublishedYear { get; set; }
         public string Status { get; set; } = string.Empty;
         public float Rating { get; set; }
+        public List<BookImageDto> Images { get; set; } = new List<BookImageDto>();
         public DateTimeOffset CreatedAt { get; set; }
         public DateTimeOffset? UpdatedAt { get; set; }
     }

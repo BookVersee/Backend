@@ -18,6 +18,7 @@ namespace BookManagement.Repository.Data
         public DbSet<Shop> Shops { get; set; } = null!;
         public DbSet<Category> Categories { get; set; } = null!;
         public DbSet<Book> Books { get; set; } = null!;
+        public DbSet<BookImage> BookImages { get; set; } = null!;
         public DbSet<Cart> Carts { get; set; } = null!;
         public DbSet<CartBookDetail> CartBookDetails { get; set; } = null!;
         public DbSet<Order> Orders { get; set; } = null!;
@@ -121,6 +122,22 @@ namespace BookManagement.Repository.Data
                     .WithMany(c => c.Books)
                     .HasForeignKey(b => b.CategoryId)
                     .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // 4.1 BookImage
+            modelBuilder.Entity<BookImage>(builder =>
+            {
+                builder.ToTable("BookImages");
+                builder.HasKey(bi => bi.Id);
+                builder.Property(bi => bi.ImageUrl).IsRequired().HasMaxLength(500);
+                builder.Property(bi => bi.PublicId).HasMaxLength(200);
+                builder.Property(bi => bi.IsCover).HasDefaultValue(false);
+                builder.Property(bi => bi.DisplayOrder).HasDefaultValue(0);
+
+                builder.HasOne(bi => bi.Book)
+                    .WithMany(b => b.Images)
+                    .HasForeignKey(bi => bi.BookId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             // 5. Cart

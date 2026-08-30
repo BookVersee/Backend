@@ -13,7 +13,7 @@ namespace BookManagement.Repository.Entities
         public string ShippingAddress { get; set; } = null!;
         public decimal? Weight { get; set; }
         public string? Note { get; set; }
-        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
         public DateTimeOffset? UpdatedAt { get; set; }
 
         // Navigation Properties

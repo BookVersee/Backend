@@ -11,7 +11,7 @@ namespace BookManagement.Repository.Entities
         public string? DeviceInfo { get; set; }
         public DateTime ExpiresAt { get; set; }
         public bool IsRevoked { get; set; } = false;
-        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
         public DateTimeOffset? UpdatedAt { get; set; }
 
         // Navigation Properties

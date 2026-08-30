@@ -13,7 +13,7 @@ namespace BookManagement.Repository.Entities
         public decimal Amount { get; set; }
         public PaymentStatus Status { get; set; } = PaymentStatus.PENDING;
         public string? TransactionCode { get; set; }
-        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
         public DateTimeOffset? UpdatedAt { get; set; }
 
         // Navigation Properties

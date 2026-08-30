@@ -2,10 +2,9 @@ using System;
 
 namespace BookManagement.Repository.Abstractions
 {
-    public abstract class BaseEntity<TKey> : IAuditableEntity
+    public abstract class BaseEntity<TKey>
     {
         public TKey Id { get; set; } = default!;
-        public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
-        public DateTimeOffset? UpdatedAt { get; set; }
+        public bool IsDeleted { get; set; } = false;
     }
 }

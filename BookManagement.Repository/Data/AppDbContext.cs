@@ -347,7 +347,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Restrict);
 
                 builder.HasOne(c => c.Shop)
-                    .WithMany(s => s.Chats)
+                    .WithMany()
                     .HasForeignKey(c => c.ShopId)
                     .OnDelete(DeleteBehavior.Restrict);
             });

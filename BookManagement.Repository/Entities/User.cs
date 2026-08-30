@@ -16,7 +16,7 @@ namespace BookManagement.Repository.Entities
         public UserStatus Status { get; set; } = UserStatus.ACTIVE;
         public string? Address { get; set; }
         public string? QrImageUrl { get; set; }
-        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
         public DateTimeOffset? UpdatedAt { get; set; }
 
         // Navigation Properties

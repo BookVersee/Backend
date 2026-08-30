@@ -13,7 +13,7 @@ namespace BookManagement.Repository.Entities
         public string? ImageUrl { get; set; }
         public ReturnRequestStatus Status { get; set; } = ReturnRequestStatus.PENDING;
         public decimal RefundAmount { get; set; }
-        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
         public DateTimeOffset? UpdatedAt { get; set; }
 
         // Navigation Properties

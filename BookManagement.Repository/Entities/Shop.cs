@@ -6,6 +6,7 @@ namespace BookManagement.Repository.Entities
 {
     public class Shop : User
     {
+        public Guid? UserId { get; set; }
         public string ShopName { get; set; } = null!;
         public ShopCondition Condition { get; set; } = ShopCondition.OPEN;
         public float Rating { get; set; } = 0;

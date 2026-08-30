@@ -177,15 +177,10 @@ namespace BookManagement.Service.Chat
                     throw new KeyNotFoundException("Cửa hàng không tồn tại trên hệ thống.");
                 }
 
-                shop = new BookManagement.Repository.Entities.Shop
-                {
-                    Id = shopUser.Id,
-                    ShopName = shopUser.FullName ?? shopUser.Username,
-                    Condition = ShopCondition.OPEN,
-                    Rating = 0
-                };
-                await _db.Shops.AddAsync(shop);
-                await _db.SaveChangesAsync();
+                var shopName = shopUser.FullName ?? shopUser.Username;
+                var createdAt = DateTimeOffset.UtcNow;
+                await _db.Database.ExecuteSqlInterpolatedAsync(
+                    $"IF NOT EXISTS (SELECT 1 FROM Shops WHERE Id = {targetShopId}) INSERT INTO Shops (Id, ShopName, Condition, Rating, ViolationCount, CreatedAt) VALUES ({targetShopId}, {shopName}, 'OPEN', 0, 0, {createdAt});");
             }
 
             // Kiểm tra Người dùng gửi chat có tồn tại không

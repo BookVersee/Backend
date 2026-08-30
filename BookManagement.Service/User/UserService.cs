@@ -188,7 +188,9 @@ namespace BookManagement.Service.User
             user.Role = UserRole.SHOP;
             user.UpdatedAt = DateTimeOffset.UtcNow;
 
-            await _context.Shops.AddAsync(shop);
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $"IF NOT EXISTS (SELECT 1 FROM Shops WHERE Id = {userId}) INSERT INTO Shops (Id, ShopName, Condition, Rating, ViolationCount, CreatedAt) VALUES ({userId}, {request.ShopName.Trim()}, 'OPEN', 0, 0, {DateTimeOffset.UtcNow});");
+
             await _context.SaveChangesAsync();
 
             var adminUsers = await _context.Users.Where(u => u.Role == UserRole.ADMIN || u.Role == UserRole.SUPER_ADMIN).ToListAsync();

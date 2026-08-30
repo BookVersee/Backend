@@ -44,18 +44,7 @@ namespace BookManagement.Service.Shop
                 throw new InvalidOperationException("User already registered a shop.");
             }
 
-            var shop = new ShopEntity
-            {
-                Id = userId,
-                ShopName = dto.ShopName,
-                Condition = ShopCondition.OPEN,
-                Rating = 0,
-                CreatedAt = DateTimeOffset.UtcNow
-            };
-
-            _db.Shops.Add(shop);
-
-            var user = await _db.Users.FindAsync(userId);
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId);
             if (user != null)
             {
                 user.Role = UserRole.SHOP;
@@ -64,25 +53,31 @@ namespace BookManagement.Service.Shop
                 user.UpdatedAt = DateTimeOffset.UtcNow;
             }
 
+            var shopName = dto.ShopName.Trim();
+            var createdAt = DateTimeOffset.UtcNow;
+
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"IF NOT EXISTS (SELECT 1 FROM Shops WHERE Id = {userId}) INSERT INTO Shops (Id, ShopName, Condition, Rating, ViolationCount, CreatedAt) VALUES ({userId}, {shopName}, 'OPEN', 0, 0, {createdAt});");
+
             _db.Notifications.Add(new BookManagement.Repository.Entities.Notification
             {
                 Id = Guid.NewGuid(),
                 UserId = userId,
                 Type = NotificationType.SYSTEM,
-                ReferenceId = shop.Id,
-                Content = $"Chúc mừng! Cửa hàng '{shop.ShopName}' của bạn đã được đăng ký thành công và gian hàng đã đi vào hoạt động. Bạn có thể bắt đầu đăng bán sách ngay!",
+                ReferenceId = userId,
+                Content = $"Chúc mừng! Cửa hàng '{shopName}' của bạn đã được đăng ký thành công và gian hàng đã đi vào hoạt động. Bạn có thể bắt đầu đăng bán sách ngay!",
                 IsRead = false,
-                CreatedAt = DateTimeOffset.UtcNow
+                CreatedAt = createdAt
             });
 
             await _db.SaveChangesAsync();
 
             return new ShopRegisterResponseDto
             {
-                ShopId = shop.Id,
-                ShopName = shop.ShopName,
-                Condition = shop.Condition.ToString(),
-                CreatedAt = shop.CreatedAt
+                ShopId = userId,
+                ShopName = shopName,
+                Condition = ShopCondition.OPEN.ToString(),
+                CreatedAt = createdAt
             };
         }
 

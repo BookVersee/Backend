@@ -30,8 +30,8 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<IEnumerable<FeedbackResponse>>.SuccessResponse(feedbacks));
         }
 
-        /// Chức năng: Gửi đánh giá và chấm sao cho sản phẩm sách đã mua
-        [Authorize]
+        /// Chức năng: Gửi đánh giá và chấm sao cho sản phẩm sách đã mua (Chỉ dành cho Khách hàng đã mua hàng)
+        [Authorize(Roles = "CUSTOMER,SHOP")]
         [HttpPost("WriteFeedback")]
         public async Task<IActionResult> WriteFeedback(CreateFeedbackRequest request)
         {
@@ -40,8 +40,8 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<FeedbackResponse>.SuccessResponse(feedback, "Feedback submitted successfully."));
         }
 
-        /// Chức năng: Báo cáo phản hồi của Shop bị vi phạm lên Admin
-        [Authorize]
+        /// Chức năng: Báo cáo phản hồi của Shop bị vi phạm lên Admin (Dành cho Khách hàng sở hữu bài đánh giá)
+        [Authorize(Roles = "CUSTOMER,SHOP")]
         [HttpPost("ReportResponse")]
         public async Task<IActionResult> ReportResponse(Guid responseId, ReportResponseRequest request)
         {

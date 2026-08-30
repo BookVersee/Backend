@@ -20,9 +20,9 @@ public class DeliveryController : ControllerBase
         _deliveryService = deliveryService;
     }
 
-    /// Chức năng: Khởi tạo vận đơn giao hàng mới
+    /// Chức năng: Khởi tạo vận đơn giao hàng mới (Shop hoặc Admin bàn giao đơn)
     [HttpPost("CreateDelivery")]
-    [Authorize(Roles = "SHOP,ADMIN,SUPER_ADMIN,DELIVER,SHIPPER")]
+    [Authorize(Roles = "SHOP,ADMIN,SUPER_ADMIN")]
     public async Task<IActionResult> CreateDelivery(CreateDeliveryDto dto)
     {
         var (userId, role) = User.GetUserInfo();
@@ -30,9 +30,9 @@ public class DeliveryController : ControllerBase
         return Ok(ApiResponse.SuccessResponse(result, "Delivery created successfully"));
     }
 
-    /// Chức năng: Shipper xem danh sách các đơn hàng cần giao
+    /// Chức năng: Shipper xem danh sách các đơn hàng được phân công giao
     [HttpGet("GetDeliveryOrders")]
-    [Authorize(Roles = "SHIPPER,DELIVER,ADMIN,SUPER_ADMIN,SHOP")]
+    [Authorize(Roles = "SHIPPER,DELIVER,ADMIN,SUPER_ADMIN")]
     public async Task<IActionResult> GetDeliveryOrders(string? status)
     {
         var (userId, role) = User.GetUserInfo();
@@ -42,7 +42,7 @@ public class DeliveryController : ControllerBase
 
     /// Chức năng: Cập nhật trạng thái hành trình giao hàng (Shipper/Carrier)
     [HttpPost("UpdateDeliveryStatus")]
-    [Authorize(Roles = "SHIPPER,DELIVER,ADMIN,SUPER_ADMIN,SHOP")]
+    [Authorize(Roles = "SHIPPER,DELIVER,ADMIN,SUPER_ADMIN")]
     public async Task<IActionResult> UpdateDeliveryStatus(Guid deliveryId, UpdateDeliveryStatusDto dto)
     {
         var (userId, role) = User.GetUserInfo();

@@ -30,7 +30,7 @@ public class PaymentController : ControllerBase
 
     /// Chức năng: Tạo URL và mã QR thanh toán MoMo Sandbox
     [HttpPost("CreatePaymentUrl")]
-    [Authorize]
+    [Authorize(Roles = "CUSTOMER,SHOP")]
     public async Task<IActionResult> CreatePaymentUrl(CreatePaymentUrlDto dto)
     {
         var (userId, role) = User.GetUserInfo();
@@ -72,7 +72,7 @@ public class PaymentController : ControllerBase
 
     /// Chức năng: Hoàn tiền đơn hàng MoMo (Chống trùng lặp Idempotent)
     [HttpPost("ProcessRefund")]
-    [Authorize(Roles = "SHOP")]
+    [Authorize(Roles = "SHOP,ADMIN,SUPER_ADMIN")]
     [Idempotent]
     public async Task<IActionResult> ProcessRefund(ProcessRefundDto dto)
     {
@@ -84,7 +84,7 @@ public class PaymentController : ControllerBase
 
     /// Chức năng: Chủ động truy vấn đồng bộ trạng thái thanh toán từ MoMo
     [HttpPost("QueryPaymentStatus")]
-    [Authorize]
+    [Authorize(Roles = "CUSTOMER,SHOP")]
     public async Task<IActionResult> QueryPaymentStatus(Guid orderId)
     {
         var (isPaid, message, transCode) = await _paymentService.SyncPaymentStatusAsync(orderId);

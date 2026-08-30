@@ -13,7 +13,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace BookManagement.Api.Controllers
 {
     /// Vị trí: Api Controller - Tiếp nhận HTTP Request từ Frontend, kiểm tra đầu vào và trả về ApiResponse.
-    [Authorize]
+    [Authorize(Roles = "CUSTOMER,SHOP")]
     [ApiController]
     [Route("api/orders")]
     public class OrderController : ControllerBase
@@ -35,7 +35,6 @@ namespace BookManagement.Api.Controllers
         }
 
         /// Chức năng: Đặt hàng thanh toán từ giỏ hàng (Chống trùng lặp Idempotent)
-        [Authorize(Roles = "CUSTOMER,SHOP")]
         [HttpPost("CreateOrder")]
         [Idempotent]
         public async Task<IActionResult> CreateOrder(CreateOrderRequest request)

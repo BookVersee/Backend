@@ -57,12 +57,19 @@ namespace BookManagement.Service.Book
         public async Task<BookResponse> GetBookDetailAsync(Guid bookId)
         {
             var book = await _context.Books
-                .Include(b => b.Shop)
                 .Include(b => b.Category)
+                .Include(b => b.Images)
                 .FirstOrDefaultAsync(b => b.Id == bookId);
 
             if (book == null) throw new KeyNotFoundException("Book not found.");
-            return MapToResponse(book);
+
+            var res = MapToResponse(book);
+            var shop = await _context.Shops.FirstOrDefaultAsync(s => s.Id == book.ShopId);
+            if (shop != null)
+            {
+                res.ShopName = shop.ShopName;
+            }
+            return res;
         }
 
         /// Chức năng: Xem thông tin công khai của Cửa hàng
@@ -89,6 +96,7 @@ namespace BookManagement.Service.Book
         {
             var books = await _context.Books
                 .Include(b => b.Category)
+                .Include(b => b.Images)
                 .Where(b => b.ShopId == shopId)
                 .AsNoTracking()
                 .ToListAsync();
@@ -114,6 +122,16 @@ namespace BookManagement.Service.Book
             PublishedYear = b.PublishedYear,
             Status = b.Status,
             Rating = b.Rating,
+            Images = b.Images != null
+                ? b.Images.OrderBy(i => i.DisplayOrder).Select(i => new BookImageDto
+                {
+                    Id = i.Id,
+                    ImageUrl = i.ImageUrl,
+                    PublicId = i.PublicId,
+                    IsCover = i.IsCover,
+                    DisplayOrder = i.DisplayOrder
+                }).ToList()
+                : new List<BookImageDto>(),
             CreatedAt = b.CreatedAt,
             UpdatedAt = b.UpdatedAt
         };

@@ -174,6 +174,35 @@ using (var scope = app.Services.CreateScope())
                     END");
 
                 dbContext.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = N'BookImages')
+                    BEGIN
+                        CREATE TABLE [BookImages] (
+                            [Id] UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+                            [BookId] UNIQUEIDENTIFIER NOT NULL,
+                            [ImageUrl] NVARCHAR(500) NOT NULL,
+                            [PublicId] NVARCHAR(200) NULL,
+                            [IsCover] BIT NOT NULL DEFAULT 0,
+                            [DisplayOrder] INT NOT NULL DEFAULT 0,
+                            [IsDeleted] BIT NOT NULL DEFAULT 0,
+                            [CreatedAt] DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
+                            [UpdatedAt] DATETIMEOFFSET NULL,
+                            CONSTRAINT [FK_BookImages_Books_BookId] FOREIGN KEY ([BookId]) REFERENCES [Books] ([Id]) ON DELETE CASCADE
+                        );
+                        CREATE NONCLUSTERED INDEX [IX_BookImages_BookId] ON [BookImages]([BookId]);
+                    END
+                    ELSE
+                    BEGIN
+                        IF NOT EXISTS (
+                            SELECT 1 FROM sys.columns 
+                            WHERE object_id = OBJECT_ID(N'[BookImages]') 
+                            AND name = 'IsDeleted'
+                        )
+                        BEGIN
+                            ALTER TABLE [BookImages] ADD [IsDeleted] BIT NOT NULL DEFAULT 0;
+                        END
+                    END");
+
+                dbContext.Database.ExecuteSqlRaw(@"
                     IF NOT EXISTS (
                         SELECT 1 FROM sys.indexes 
                         WHERE object_id = OBJECT_ID(N'[Payments]') 

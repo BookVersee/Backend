@@ -56,6 +56,16 @@ public class ShopController : ControllerBase
         return Ok(ApiResponse.SuccessResponse(result));
     }
 
+    /// Chức năng: Xem thông tin chi tiết 1 sản phẩm sách của Cửa hàng
+    [HttpGet("GetShopBookDetail")]
+    [Authorize(Roles = "SHOP")]
+    public async Task<IActionResult> GetShopBookDetail([FromQuery] Guid bookId)
+    {
+        var (userId, role) = User.GetUserInfo();
+        var result = await _shopService.GetBookByIdAsync(userId, bookId);
+        return Ok(ApiResponse.SuccessResponse(result));
+    }
+
     /// Chức năng: Cập nhật thông tin và giá sản phẩm sách
     [HttpPost("UpdateShopBook")]
     [Authorize(Roles = "SHOP")]

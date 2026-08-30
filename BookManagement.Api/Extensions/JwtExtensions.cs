@@ -56,9 +56,9 @@ public static class JwtExtensions
                         }
 
                         var user = await dbContext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
-                        if (user == null || user.Status == BookManagement.Repository.Entities.Enums.UserStatus.LOCKED)
+                        if (user == null || user.Status != BookManagement.Repository.Entities.Enums.UserStatus.ACTIVE)
                         {
-                            context.Fail("User account is locked or disabled.");
+                            context.Fail("User account is locked or inactive.");
                             return;
                         }
 

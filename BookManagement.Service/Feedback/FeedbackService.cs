@@ -190,7 +190,7 @@ namespace BookManagement.Service.Feedback
             Type = f.Type,
             ImageUrl = f.ImageUrl,
             CreatedAt = f.CreatedAt,
-            Response = f.Response == null ? null : new ShopResponseResponse
+            Response = (f.Response == null || f.Response.IsDeleted) ? null : new ShopResponseResponse
             {
                 Id = f.Response.Id,
                 FeedbackId = f.Response.FeedbackId,

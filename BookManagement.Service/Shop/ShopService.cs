@@ -566,7 +566,7 @@ namespace BookManagement.Service.Shop
                     ImageUrl = f.ImageUrl,
                     CreatedAt = f.CreatedAt,
                     BookTitle = f.OrderDetail != null && f.OrderDetail.Book != null ? f.OrderDetail.Book.Title : null,
-                    Response = f.Response != null ? new FeedbackResponseDataDto
+                    Response = (f.Response != null && !f.Response.IsDeleted) ? new FeedbackResponseDataDto
                     {
                         ResponseId = f.Response.Id,
                         Content = f.Response.Content,

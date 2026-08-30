@@ -132,5 +132,15 @@ namespace BookManagement.Api.Controllers
             await _userService.LogoutAsync(userId, request?.RefreshToken);
             return Ok(ApiResponse<string>.SuccessResponse("Đăng xuất thành công."));
         }
+
+        /// Chức năng: Người dùng tự ngưng hoạt động / xóa tài khoản cá nhân (Status -> INACTIVE)
+        [Authorize]
+        [HttpDelete("DeleteAccount")]
+        public async Task<IActionResult> DeleteAccount()
+        {
+            var userId = User.GetUserId();
+            await _userService.DeactivateAccountAsync(userId);
+            return Ok(ApiResponse<string>.SuccessResponse("Tài khoản của bạn đã được vô hiệu hóa / xóa thành công."));
+        }
     }
 }

@@ -20,5 +20,6 @@ namespace BookManagement.Service.User
         Task<IEnumerable<TransactionResponse>> GetUserTransactionsAsync(Guid userId);
         Task<BookManagement.Service.Shop.ShopResponse> RegisterShopAsync(Guid userId, RegisterShopRequest request);
         Task LogoutAsync(Guid userId, string? refreshToken = null);
+        Task DeactivateAccountAsync(Guid userId);
     }
 }

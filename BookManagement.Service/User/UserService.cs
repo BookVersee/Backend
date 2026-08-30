@@ -254,6 +254,47 @@ namespace BookManagement.Service.User
             await _context.SaveChangesAsync();
         }
 
+        /// Chức năng: Người dùng tự xóa / ngưng hoạt động tài khoản (Status -> INACTIVE)
+        public async Task DeactivateAccountAsync(Guid userId)
+        {
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+            if (user == null)
+            {
+                throw new KeyNotFoundException("Tài khoản người dùng không tồn tại.");
+            }
+
+            if (user.Status == UserStatus.INACTIVE)
+            {
+                throw new InvalidOperationException("Tài khoản đã được ngưng hoạt động trước đó.");
+            }
+
+            user.Status = UserStatus.INACTIVE;
+            user.UpdatedAt = DateTimeOffset.UtcNow;
+
+            // Thu hồi toàn bộ phiên đăng nhập của người dùng
+            var activeSessions = await _context.UserSessions
+                .Where(s => s.UserId == userId && !s.IsRevoked)
+                .ToListAsync();
+
+            foreach (var session in activeSessions)
+            {
+                session.IsRevoked = true;
+            }
+
+            // Nếu tài khoản là Shop, chuyển trạng thái Shop sang CLOSED
+            if (user.Role == UserRole.SHOP)
+            {
+                var shop = await _context.Shops.FirstOrDefaultAsync(s => s.Id == userId);
+                if (shop != null)
+                {
+                    shop.Condition = ShopCondition.CLOSED;
+                    shop.UpdatedAt = DateTimeOffset.UtcNow;
+                }
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
         private static UserResponse MapToResponse(BookManagement.Repository.Entities.User user) => new UserResponse
         {
             Id = user.Id,

@@ -94,6 +94,11 @@ namespace BookManagement.Service.Auth
             if (user == null || !isMatch)
                 throw new UnauthorizedAccessException("Invalid username/email or password.");
 
+            if (user.Status == UserStatus.INACTIVE)
+            {
+                throw new UnauthorizedAccessException("Tài khoản của bạn đã ngưng hoạt động hoặc đã bị xóa.");
+            }
+
             if (user.Status == UserStatus.LOCKED)
             {
                 var shop = await _context.Shops.FirstOrDefaultAsync(s => s.Id == user.Id);
@@ -103,19 +108,16 @@ namespace BookManagement.Service.Auth
                     {
                         throw new UnauthorizedAccessException($"Cửa hàng và tài khoản của bạn đang bị tạm khóa 1 tháng do vi phạm quá 3 lần. Thời điểm mở khóa tự động: {shop.LockedUntil.Value:dd/MM/yyyy HH:mm}.");
                     }
-                    else
-                    {
-                        shop.Condition = ShopCondition.OPEN;
-                        shop.LockedUntil = null;
-                        shop.ViolationCount = 0;
-                        user.Status = UserStatus.ACTIVE;
-                        user.UpdatedAt = DateTimeOffset.UtcNow;
-                        await _context.SaveChangesAsync();
-                    }
+
+                    // Đã hết thời hạn khóa 1 tháng -> Tự động mở khóa lại cho Shop
+                    shop.Condition = ShopCondition.OPEN;
+                    shop.ViolationCount = 0;
+                    user.Status = UserStatus.ACTIVE;
+                    await _context.SaveChangesAsync();
                 }
                 else
                 {
-                    throw new UnauthorizedAccessException("Your account has been locked.");
+                    throw new UnauthorizedAccessException("Account is locked by administrator.");
                 }
             }
 
@@ -299,6 +301,11 @@ namespace BookManagement.Service.Auth
 
                 await _context.Users.AddAsync(user);
                 await _context.SaveChangesAsync();
+            }
+
+            if (user.Status == UserStatus.INACTIVE)
+            {
+                throw new UnauthorizedAccessException("Tài khoản của bạn đã ngưng hoạt động hoặc đã bị xóa.");
             }
 
             if (user.Status == UserStatus.LOCKED)

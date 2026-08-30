@@ -675,7 +675,8 @@ public class AdminService : IAdminService
 
         if (isDelete)
         {
-            _context.Responses.Remove(response);
+            response.IsDeleted = true;
+            response.UpdatedAt = DateTimeOffset.UtcNow;
 
             if (response.Shop != null)
             {

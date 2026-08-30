@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BookManagement.Api.Controllers;
 
+/// Vị trí: Api Controller - Tiếp nhận HTTP Request từ Frontend, kiểm tra đầu vào và trả về ApiResponse.
 [ApiController]
 [Route("api/shipping")]
 public class ShippingController : ControllerBase
@@ -22,9 +23,7 @@ public class ShippingController : ControllerBase
         _shippingService = shippingService;
     }
 
-    /// <summary>
-    /// Test Case 5.1: Tạo đơn vận chuyển qua GHN
-    /// </summary>
+    /// Chức năng: Tạo vận đơn giao hàng qua đơn vị Giao Hàng Nhanh (GHN)
     [HttpPost("CreateGhnOrder")]
     [Authorize(Roles = "SHOP,ADMIN,SUPER_ADMIN")]
     public async Task<IActionResult> CreateGhnOrder(CreateGhnOrderDto dto)
@@ -34,9 +33,7 @@ public class ShippingController : ControllerBase
         return Ok(ApiResponse.SuccessResponse(result, "GHN shipping order created successfully"));
     }
 
-    /// <summary>
-    /// Test Case 5.2: Tiếp nhận Webhook trạng thái từ GHN
-    /// </summary>
+    /// Chức năng: Webhook tiếp nhận tự động cập nhật trạng thái vận đơn từ GHN
     [HttpPost("GhnWebhook")]
     [AllowAnonymous]
     public async Task<IActionResult> GhnWebhook(GhnWebhookPayload payload)

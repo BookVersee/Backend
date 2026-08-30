@@ -8,6 +8,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace BookManagement.Service.Shipping;
 
+/// Vị trí: Infrastructure Client - Tích hợp gọi trực tiếp API Giao Hàng Nhanh (GHN Sandbox).
 public class GhnService
 {
     private readonly IConfiguration _config;
@@ -19,6 +20,7 @@ public class GhnService
         _httpClient = httpClient;
     }
 
+    /// Chức năng: Gửi yêu cầu tạo đơn hàng giao vận sang hệ thống GHN
     public async Task<(string OrderCode, decimal TotalFee)> CreateShippingOrderAsync(ShopEntity shop, OrderEntity order)
     {
         var token = _config["Ghn:Token"];
@@ -34,4 +36,3 @@ public class GhnService
         return await Task.FromResult((mockCode, 30000m));
     }
 }
-

@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BookManagement.Api.Controllers
 {
+    /// Vị trí: Api Controller - Tiếp nhận HTTP Request từ Frontend, kiểm tra đầu vào và trả về ApiResponse.
     [Authorize]
     [ApiController]
     [Route("api/orders")]
@@ -24,7 +25,7 @@ namespace BookManagement.Api.Controllers
             _orderService = orderService;
         }
 
-        /// Chức năng: Lấy danh sách lịch sử đơn hàng. Trả về: Danh sách đơn hàng theo trạng thái.
+        /// Chức năng: Lấy danh sách lịch sử đơn hàng
         [HttpGet("GetUserOrders")]
         public async Task<IActionResult> GetUserOrders(OrderStatus? status)
         {
@@ -33,7 +34,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<IEnumerable<OrderResponse>>.SuccessResponse(orders));
         }
 
-        /// Chức năng: Đặt hàng thanh toán từ giỏ hàng. Trả về: Thông tin đơn hàng mới tạo.
+        /// Chức năng: Đặt hàng thanh toán từ giỏ hàng (Chống trùng lặp Idempotent)
         [Authorize(Roles = "CUSTOMER,SHOP")]
         [HttpPost("CreateOrder")]
         [Idempotent]
@@ -44,7 +45,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<OrderResponse>.SuccessResponse(order, "Order created successfully."));
         }
 
-        /// Chức năng: Xem thông tin chi tiết đơn hàng. Trả về: Dữ liệu chi tiết sản phẩm và thanh toán của đơn hàng.
+        /// Chức năng: Xem thông tin chi tiết đơn hàng
         [HttpGet("GetOrderDetail")]
         public async Task<IActionResult> GetOrderDetail(Guid id)
         {
@@ -53,7 +54,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<OrderResponse>.SuccessResponse(order));
         }
 
-        /// Chức năng: Hủy đơn hàng đang chờ xử lý. Trả về: Thông báo xác nhận hủy đơn thành công.
+        /// Chức năng: Hủy đơn hàng đang ở trạng thái PENDING
         [HttpPost("CancelOrder")]
         public async Task<IActionResult> CancelOrder(Guid id)
         {
@@ -62,7 +63,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<string>.SuccessResponse("Order cancelled successfully."));
         }
 
-        /// Chức năng: Gửi yêu cầu khiếu nại trả hàng / hoàn tiền. Trả về: Dữ liệu đơn yêu cầu trả hàng.
+        /// Chức năng: Gửi yêu cầu khiếu nại trả hàng / hoàn tiền
         [HttpPost("SendRequestReturn")]
         public async Task<IActionResult> SendRequestReturn(Guid orderDetailId, CreateReturnRequest input)
         {
@@ -71,7 +72,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<ReturnRequestResponse>.SuccessResponse(returnRequest, "Return request submitted."));
         }
 
-        /// Chức năng: Gửi khiếu nại lên Admin khi yêu cầu trả hàng bị Shop từ chối.
+        /// Chức năng: Gửi khiếu nại lên Admin khi Shop từ chối trả hàng
         [HttpPost("EscalateDispute")]
         public async Task<IActionResult> EscalateDispute(Guid returnRequestId, string? reason)
         {

@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookManagement.Service.Delivery;
 
+/// Vị trí: Domain Service - Thực thi logic nghiệp vụ hệ thống, xử lý hành trình giao hàng và lưu DbContext.
 public class DeliveryService : IDeliveryService
 {
     private readonly AppDbContext _db;
@@ -19,6 +20,7 @@ public class DeliveryService : IDeliveryService
         _db = db;
     }
 
+    /// Chức năng: Khởi tạo vận đơn giao hàng mới cho đơn hàng
     public async Task<BookManagement.Repository.Entities.Delivery> CreateDeliveryAsync(CreateDeliveryDto dto)
     {
         var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == dto.OrderId);
@@ -27,7 +29,6 @@ public class DeliveryService : IDeliveryService
             throw new KeyNotFoundException("Order not found.");
         }
 
-        // 4. KIỂM TRA CHỐNG TẠO VẬN ĐƠN TRÙNG LẶP (DUPLICATE DELIVERY)
         if (await _db.Deliveries.AnyAsync(d => d.OrderId == dto.OrderId))
         {
             throw new InvalidOperationException($"Delivery record already exists for Order #{dto.OrderId}.");
@@ -51,6 +52,7 @@ public class DeliveryService : IDeliveryService
         return delivery;
     }
 
+    /// Chức năng: Xem chi tiết vận đơn giao hàng và thu tiền COD
     public async Task<DeliveryManifestDetailDto> GetDeliveryManifestDetailAsync(Guid deliveryId)
     {
         var delivery = await _db.Deliveries
@@ -104,6 +106,7 @@ public class DeliveryService : IDeliveryService
         };
     }
 
+    /// Chức năng: Cập nhật trạng thái vận đơn (Giao thành công, hoàn trả, chuyển kho)
     public async Task UpdateDeliveryStatusAsync(Guid deliveryId, UpdateDeliveryStatusDto dto)
     {
         var delivery = await _db.Deliveries
@@ -129,9 +132,8 @@ public class DeliveryService : IDeliveryService
             if (targetStatus == DeliveryStatus.DELIVERED)
             {
                 delivery.ActualDeliveredAt = DateTime.UtcNow;
-                order.OrderStatus = OrderStatus.DELIVERED; // Cập nhật đơn hàng thành DELIVERED khi giao thành công
+                order.OrderStatus = OrderStatus.DELIVERED;
 
-                // 3. DÒNG TIỀN COD TỰ ĐỘNG THU TIỀN MẶT & GHI TRANSACTION HISTORY
                 var codPayment = order.Payments.FirstOrDefault(p => p.Method == PaymentMethod.COD && p.Status == PaymentStatus.PENDING);
                 if (codPayment != null)
                 {
@@ -153,7 +155,6 @@ public class DeliveryService : IDeliveryService
                     _db.TransactionHistories.Add(codTransaction);
                 }
 
-                // Thông báo ORDER_UPDATE: Giao hàng thành công
                 _db.Notifications.Add(new BookManagement.Repository.Entities.Notification
                 {
                     Id = Guid.NewGuid(),
@@ -191,7 +192,6 @@ public class DeliveryService : IDeliveryService
                         }
                     }
 
-                    // Thông báo ORDER_UPDATE: Giao thất bại bị trả hàng
                     _db.Notifications.Add(new BookManagement.Repository.Entities.Notification
                     {
                         Id = Guid.NewGuid(),
@@ -208,7 +208,6 @@ public class DeliveryService : IDeliveryService
             {
                 order.OrderStatus = OrderStatus.DELIVERING;
 
-                // Thông báo ORDER_UPDATE: Đơn hàng đang được giao
                 _db.Notifications.Add(new BookManagement.Repository.Entities.Notification
                 {
                     Id = Guid.NewGuid(),
@@ -227,6 +226,7 @@ public class DeliveryService : IDeliveryService
         await _db.SaveChangesAsync();
     }
 
+    /// Chức năng: Shipper/Nhà vận chuyển lấy danh sách các đơn hàng vận chuyển
     public async Task<List<DeliveryManifestDetailDto>> GetDeliveryOrdersAsync(string? status)
     {
         var q = _db.Deliveries

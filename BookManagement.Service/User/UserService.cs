@@ -12,6 +12,7 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace BookManagement.Service.User
 {
+    /// Vị trí: Domain Service - Thực thi logic nghiệp vụ hệ thống, tính toán, xử lý bảo mật và truy vấn trực tiếp DbContext.
     public class UserService : IUserService
     {
         private readonly AppDbContext _context;
@@ -28,6 +29,7 @@ namespace BookManagement.Service.User
             _cache = cache;
         }
 
+        /// Chức năng: Lấy thông tin hồ sơ tài khoản cá nhân
         public async Task<UserResponse> GetProfileAsync(Guid userId)
         {
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
@@ -35,6 +37,7 @@ namespace BookManagement.Service.User
             return MapToResponse(user);
         }
 
+        /// Chức năng: Cập nhật thông tin lý lịch cá nhân
         public async Task<UserResponse> UpdateProfileAsync(Guid userId, UpdateProfileRequest request)
         {
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
@@ -56,7 +59,7 @@ namespace BookManagement.Service.User
             return MapToResponse(user);
         }
 
-        // TH1 - Bước 1: Gửi mã OTP khôi phục / đổi mật khẩu qua Gmail
+        /// Chức năng: Gửi mã OTP đổi mật khẩu qua Email (Bước 1)
         public async Task SendPasswordOtpAsync(SendOtpRequest request)
         {
             var emailOrUsername = request.Email.Trim().ToLower();
@@ -64,8 +67,6 @@ namespace BookManagement.Service.User
             if (user == null) throw new KeyNotFoundException("Không tìm thấy tài khoản với Email này.");
 
             var otp = Random.Shared.Next(100000, 999999).ToString();
-            
-            // Lưu OTP vào RAM Memory Cache trong 15 phút
             var cacheKey = $"reset_otp_{user.Email.ToLower()}";
             _cache.Set(cacheKey, otp, TimeSpan.FromMinutes(15));
 
@@ -83,7 +84,7 @@ namespace BookManagement.Service.User
             await _emailService.SendEmailAsync(user.Email, "Mã OTP Xác Thực Đổi Mật Khẩu - BookManagement", htmlBody);
         }
 
-        // TH1 - Bước 2: Xác thực mã OTP (Nếu đúng mới cho phép sang bước nhập mật khẩu mới)
+        /// Chức năng: Xác thực mã OTP đổi mật khẩu (Bước 2)
         public async Task VerifyPasswordOtpAsync(VerifyPasswordOtpRequest request)
         {
             var emailOrUsername = request.Email.Trim().ToLower();
@@ -96,12 +97,11 @@ namespace BookManagement.Service.User
                 throw new InvalidOperationException("Mã OTP không chính xác hoặc đã hết hạn.");
             }
 
-            // Đánh dấu xác thực OTP thành công trong RAM Cache (10 phút) để dùng ở Bước 3
             _cache.Set($"verified_reset_{user.Email.ToLower()}", true, TimeSpan.FromMinutes(10));
-            _cache.Remove(cacheKey); // Xóa OTP cũ sau khi đã xác thực thành công
+            _cache.Remove(cacheKey);
         }
 
-        // TH1 - Bước 3: Đặt mật khẩu mới (Chỉ cần Email và Mật khẩu mới, không cần nhập lại OTP)
+        /// Chức năng: Đặt mật khẩu mới sau khi xác thực OTP thành công (Bước 3)
         public async Task ResetNewPasswordAsync(ResetNewPasswordRequest request)
         {
             var emailOrUsername = request.Email.Trim().ToLower();
@@ -117,17 +117,16 @@ namespace BookManagement.Service.User
 
             user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
             user.UpdatedAt = DateTimeOffset.UtcNow;
-            _cache.Remove(verifiedCacheKey); // Xóa trạng thái xác thực sau khi đổi mật khẩu thành công
+            _cache.Remove(verifiedCacheKey);
             await _context.SaveChangesAsync();
         }
 
-        // TH2: Thay đổi mật khẩu khi nhớ Mật khẩu cũ (Yêu cầu đăng nhập)
+        /// Chức năng: Đổi mật khẩu tài khoản bằng mật khẩu cũ
         public async Task ChangePasswordAsync(Guid userId, ChangePasswordWithOldPasswordRequest request)
         {
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
             if (user == null) throw new KeyNotFoundException("Tài khoản không tồn tại.");
 
-            // Kiểm tra mật khẩu cũ
             if (!BCrypt.Net.BCrypt.Verify(request.OldPassword, user.PasswordHash))
             {
                 throw new InvalidOperationException("Mật khẩu cũ không chính xác.");
@@ -138,6 +137,7 @@ namespace BookManagement.Service.User
             await _context.SaveChangesAsync();
         }
 
+        /// Chức năng: Lấy lịch sử giao dịch tài chính cá nhân
         public async Task<IEnumerable<TransactionResponse>> GetUserTransactionsAsync(Guid userId)
         {
             var transactions = await _context.TransactionHistories
@@ -160,6 +160,7 @@ namespace BookManagement.Service.User
             });
         }
 
+        /// Chức năng: Đăng ký nâng cấp tài khoản mở Cửa hàng bán sách
         public async Task<BookManagement.Service.Shop.ShopResponse> RegisterShopAsync(Guid userId, RegisterShopRequest request)
         {
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
@@ -190,7 +191,6 @@ namespace BookManagement.Service.User
             await _context.Shops.AddAsync(shop);
             await _context.SaveChangesAsync();
 
-            // Auto-notify Admin & Super Admin accounts about new shop activation
             var adminUsers = await _context.Users.Where(u => u.Role == UserRole.ADMIN || u.Role == UserRole.SUPER_ADMIN).ToListAsync();
             foreach (var admin in adminUsers)
             {
@@ -205,7 +205,6 @@ namespace BookManagement.Service.User
                 });
             }
 
-            // Auto-notify New Shop Owner
             await _context.Notifications.AddAsync(new BookManagement.Repository.Entities.Notification
             {
                 Id = Guid.NewGuid(),

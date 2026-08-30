@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 
 namespace BookManagement.Service.Cloudinary;
 
+/// Vị trí: Infrastructure Service - Tích hợp dịch vụ đám mây Cloudinary để lưu trữ và quản lý tệp hình ảnh.
 public class CloudinaryService : ICloudinaryService
 {
     private readonly CloudinaryDotNet.Cloudinary _cloudinary;
@@ -23,6 +24,7 @@ public class CloudinaryService : ICloudinaryService
         _cloudinary.Api.Secure = true;
     }
 
+    /// Chức năng: Upload tệp hình ảnh lên Cloudinary CDN
     public async Task<(string Url, string PublicId)> UploadImageAsync(IFormFile file, string folder)
     {
         if (file == null || file.Length == 0)
@@ -49,6 +51,7 @@ public class CloudinaryService : ICloudinaryService
         return (secureUrl, uploadResult.PublicId);
     }
 
+    /// Chức năng: Xóa tệp hình ảnh khỏi Cloudinary CDN theo PublicId
     public async Task<bool> DeleteImageAsync(string publicId)
     {
         if (string.IsNullOrWhiteSpace(publicId))
@@ -58,7 +61,7 @@ public class CloudinaryService : ICloudinaryService
 
         var deletionParams = new DeletionParams(publicId)
         {
-            Invalidate = true // Xóa tức thì bản sao trên toàn bộ hệ thống máy chủ CDN
+            Invalidate = true
         };
         var result = await _cloudinary.DestroyAsync(deletionParams);
 

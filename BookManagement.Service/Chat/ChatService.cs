@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookManagement.Service.Chat
 {
+    /// Vị trí: Domain Service - Thực thi logic nghiệp vụ hệ thống, xử lý tin nhắn và lưu DbContext.
     public class ChatService : IChatService
     {
         private readonly AppDbContext _db;
@@ -20,6 +21,7 @@ namespace BookManagement.Service.Chat
             _realtimeNotifier = realtimeNotifier;
         }
 
+        /// Chức năng: Lấy danh sách các cuộc trò chuyện của khách hàng
         public async Task<List<ChatThreadDto>> GetUserChatThreadsAsync(Guid userId)
         {
             var chats = await _db.Chats
@@ -46,6 +48,7 @@ namespace BookManagement.Service.Chat
             }).OrderByDescending(t => t.UpdatedAt).ToList();
         }
 
+        /// Chức năng: Lấy danh sách các cuộc trò chuyện của Cửa hàng
         public async Task<List<ChatThreadDto>> GetShopChatThreadsAsync(Guid shopId)
         {
             var chats = await _db.Chats
@@ -72,6 +75,7 @@ namespace BookManagement.Service.Chat
             }).OrderByDescending(t => t.UpdatedAt).ToList();
         }
 
+        /// Chức năng: Xem danh sách tin nhắn và tự động đánh dấu đã đọc
         public async Task<List<MessageDto>> GetChatMessagesAsync(Guid chatId, Guid requesterId)
         {
             var chat = await _db.Chats
@@ -106,7 +110,6 @@ namespace BookManagement.Service.Chat
                 })
                 .ToListAsync();
 
-            // Mark unread messages as read
             var unreadMsgs = await _db.Messages
                 .Where(m => m.ChatId == chatId && !m.IsRead && m.SenderId != requesterId)
                 .ToListAsync();
@@ -123,6 +126,7 @@ namespace BookManagement.Service.Chat
             return messages;
         }
 
+        /// Chức năng: Gửi tin nhắn mới và bắn thông báo SignalR realtime
         public async Task<MessageDto> SendMessageAsync(Guid senderId, SendMessageDto dto)
         {
             Guid targetUserId = senderId;
@@ -142,13 +146,11 @@ namespace BookManagement.Service.Chat
                 var senderShop = await _db.Shops.FirstOrDefaultAsync(s => s.Id == senderId);
                 if (senderShop != null && senderShop.Id == dto.ShopId.Value && dto.UserId.HasValue)
                 {
-                    // Shop is replying to a customer
                     targetUserId = dto.UserId.Value;
                     targetShopId = senderShop.Id;
                 }
                 else
                 {
-                    // Customer is sending to shop
                     targetUserId = senderId;
                     targetShopId = dto.ShopId.Value;
                 }
@@ -206,6 +208,7 @@ namespace BookManagement.Service.Chat
             return messageDto;
         }
 
+        /// Chức năng: Gửi tin nhắn mới với tham số mở rộng
         public async Task<MessageDto> SendMessageAsync(Guid userId, Guid shopId, string content, string? imageUrl, Guid senderId)
         {
             return await SendMessageAsync(senderId, new SendMessageDto

@@ -14,6 +14,7 @@ public class UploadImageRequest
     public string? Folder { get; set; } = "bookverse/uploads";
 }
 
+/// Vị trí: Api Controller - Tiếp nhận HTTP Request từ Frontend, kiểm tra đầu vào và trả về ApiResponse.
 [ApiController]
 [Route("api/upload")]
 public class UploadController : ControllerBase
@@ -25,9 +26,7 @@ public class UploadController : ControllerBase
         _cloudinaryService = cloudinaryService;
     }
 
-    /// <summary>
-    /// Upload hình ảnh lên Cloudinary qua multipart/form-data
-    /// </summary>
+    /// Chức năng: Upload hình ảnh tập tin lên Cloudinary
     [HttpPost("image")]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> UploadImage([FromForm] UploadImageRequest request)
@@ -40,7 +39,6 @@ public class UploadController : ControllerBase
             return BadRequest(ApiResponse.ErrorResponse("Vui lòng chọn file hình ảnh hợp lệ."));
         }
 
-        // Kiểm tra định dạng ảnh cơ bản
         var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".webp", ".gif" };
         var extension = System.IO.Path.GetExtension(file.FileName).ToLowerInvariant();
         if (!Array.Exists(allowedExtensions, ext => ext == extension))
@@ -48,7 +46,6 @@ public class UploadController : ControllerBase
             return BadRequest(ApiResponse.ErrorResponse("Định dạng file không hỗ trợ. Chỉ chấp nhận JPG, JPEG, PNG, WEBP, GIF."));
         }
 
-        // Giới hạn dung lượng 10MB
         if (file.Length > 10 * 1024 * 1024)
         {
             return BadRequest(ApiResponse.ErrorResponse("Dung lượng file tối đa là 10MB."));
@@ -65,10 +62,7 @@ public class UploadController : ControllerBase
         }, "Upload ảnh lên Cloudinary thành công!"));
     }
 
-    /// <summary>
-    /// Xóa hình ảnh trên Cloudinary theo PublicId
-    /// </summary>
-    /// <param name="publicId">PublicId của ảnh trên Cloudinary</param>
+    /// Chức năng: Xóa tệp hình ảnh lưu trữ trên Cloudinary
     [HttpDelete("image")]
     public async Task<IActionResult> DeleteImage(string publicId)
     {

@@ -8,6 +8,7 @@ using NotificationEntity = BookManagement.Repository.Entities.Notification;
 
 namespace BookManagement.Service.Notification;
 
+/// Vị trí: Domain Service - Thực thi logic nghiệp vụ hệ thống, xử lý danh sách thông báo và lưu DbContext.
 public class NotificationService : INotificationService
 {
     private readonly AppDbContext _context;
@@ -17,6 +18,7 @@ public class NotificationService : INotificationService
         _context = context;
     }
 
+    /// Chức năng: Lấy danh sách toàn bộ thông báo cá nhân của người dùng
     public async Task<IEnumerable<NotificationResponse>> GetUserNotificationsAsync(Guid userId)
     {
         var notifications = await _context.Notifications
@@ -28,6 +30,7 @@ public class NotificationService : INotificationService
         return notifications.Select(MapToResponse).ToList();
     }
 
+    /// Chức năng: Lấy danh sách các thông báo chưa đọc của người dùng
     public async Task<IEnumerable<NotificationResponse>> GetUnreadNotificationsAsync(Guid userId)
     {
         var notifications = await _context.Notifications
@@ -39,6 +42,7 @@ public class NotificationService : INotificationService
         return notifications.Select(MapToResponse).ToList();
     }
 
+    /// Chức năng: Đánh dấu 1 thông báo cụ thể là đã đọc
     public async Task<bool> MarkNotificationAsReadAsync(Guid userId, Guid notificationId)
     {
         var notification = await _context.Notifications.FirstOrDefaultAsync(n => n.Id == notificationId && n.UserId == userId);
@@ -50,6 +54,7 @@ public class NotificationService : INotificationService
         return true;
     }
 
+    /// Chức năng: Đánh dấu tất cả thông báo của người dùng là đã đọc
     public async Task MarkAllNotificationsAsReadAsync(Guid userId)
     {
         var unreadNotifications = await _context.Notifications.Where(n => n.UserId == userId && !n.IsRead).ToListAsync();

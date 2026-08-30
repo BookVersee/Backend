@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BookManagement.Api.Controllers
 {
+    /// Vị trí: Api Controller - Tiếp nhận HTTP Request từ Frontend, kiểm tra đầu vào và trả về ApiResponse.
     [Authorize(Roles = "CUSTOMER,SHOP")]
     [ApiController]
     [Route("api/cart")]
@@ -21,7 +22,7 @@ namespace BookManagement.Api.Controllers
             _cartService = cartService;
         }
 
-        /// Chức năng: Lấy danh sách sản phẩm trong giỏ hàng. Trả về: Dữ liệu giỏ hàng và tạm tính tổng tiền.
+        /// Chức năng: Lấy danh sách sản phẩm giỏ hàng của người dùng
         [HttpGet("GetCart")]
         public async Task<IActionResult> GetCart()
         {
@@ -30,7 +31,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<CartResponse>.SuccessResponse(cart));
         }
 
-        /// Chức năng: Thêm sản phẩm sách vào giỏ hàng. Trả về: Dữ liệu giỏ hàng mới nhất.
+        /// Chức năng: Thêm sản phẩm sách vào giỏ hàng
         [HttpPost("AddToCart")]
         public async Task<IActionResult> AddToCart(AddItemRequest request)
         {
@@ -39,7 +40,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<CartResponse>.SuccessResponse(cart, "Item added to cart."));
         }
 
-        /// Chức năng: Thay đổi số lượng sản phẩm trong giỏ hàng. Trả về: Dữ liệu giỏ hàng sau điều chỉnh.
+        /// Chức năng: Cập nhật số lượng sản phẩm trong giỏ hàng
         [HttpPut("UpdateCartItem")]
         public async Task<IActionResult> UpdateCartItem(Guid cartDetailId, UpdateItemRequest request)
         {
@@ -48,7 +49,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<CartResponse>.SuccessResponse(cart, "Cart item updated."));
         }
 
-        /// Chức năng: Xóa sản phẩm khỏi giỏ hàng. Trả về: Dữ liệu giỏ hàng mới nhất.
+        /// Chức năng: Xóa 1 sản phẩm khỏi giỏ hàng
         [HttpDelete("RemoveFromCart")]
         public async Task<IActionResult> RemoveFromCart(Guid cartDetailId)
         {
@@ -57,7 +58,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<CartResponse>.SuccessResponse(cart, "Item removed from cart."));
         }
 
-        /// Chức năng: Làm trống toàn bộ giỏ hàng. Trả về: Thông báo xác nhận làm trống giỏ hàng.
+        /// Chức năng: Làm trống toàn bộ giỏ hàng
         [HttpDelete("ClearCart")]
         public async Task<IActionResult> ClearCart()
         {

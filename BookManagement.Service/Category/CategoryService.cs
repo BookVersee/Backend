@@ -9,6 +9,7 @@ using CategoryEntity = BookManagement.Repository.Entities.Category;
 
 namespace BookManagement.Service.Category;
 
+/// Vị trí: Domain Service - Thực thi logic nghiệp vụ hệ thống và truy vấn trực tiếp DbContext.
 public class CategoryService : ICategoryService
 {
     private readonly AppDbContext _context;
@@ -18,6 +19,7 @@ public class CategoryService : ICategoryService
         _context = context;
     }
 
+    /// Chức năng: Xem chi tiết thông tin 1 thể loại sách
     public async Task<CategoryResponse> GetCategoryAsync(Guid categoryId)
     {
         var category = await _context.Categories.AsNoTracking().FirstOrDefaultAsync(c => c.Id == categoryId);
@@ -28,18 +30,21 @@ public class CategoryService : ICategoryService
         return MapToResponse(category);
     }
 
+    /// Chức năng: Lấy danh sách toàn bộ các thể loại sách
     public async Task<IEnumerable<CategoryResponse>> GetAllCategoriesAsync()
     {
         var categories = await _context.Categories.AsNoTracking().OrderBy(c => c.CategoryName).ToListAsync();
         return categories.Select(MapToResponse).ToList();
     }
 
+    /// Chức năng: Lấy danh sách các thể loại sách đang mở hoạt động
     public async Task<IEnumerable<CategoryResponse>> GetActiveCategoriesAsync()
     {
         var categories = await _context.Categories.AsNoTracking().Where(c => c.Status).OrderBy(c => c.CategoryName).ToListAsync();
         return categories.Select(MapToResponse).ToList();
     }
 
+    /// Chức năng: Thêm mới 1 thể loại sách
     public async Task<CategoryResponse> CreateCategoryAsync(CreateCategoryRequest request)
     {
         var name = request.Name.Trim();
@@ -61,6 +66,7 @@ public class CategoryService : ICategoryService
         return MapToResponse(category);
     }
 
+    /// Chức năng: Cập nhật thông tin thể loại sách
     public async Task<CategoryResponse> UpdateCategoryAsync(Guid categoryId, UpdateCategoryRequest request)
     {
         var category = await _context.Categories.FirstOrDefaultAsync(c => c.Id == categoryId);
@@ -83,6 +89,7 @@ public class CategoryService : ICategoryService
         return MapToResponse(category);
     }
 
+    /// Chức năng: Xóa thể loại sách khỏi danh mục
     public async Task DeleteCategoryAsync(Guid categoryId)
     {
         var category = await _context.Categories.FirstOrDefaultAsync(c => c.Id == categoryId);

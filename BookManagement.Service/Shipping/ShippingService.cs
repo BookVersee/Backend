@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookManagement.Service.Shipping;
 
+/// Vị trí: Domain Service - Thực thi logic nghiệp vụ hệ thống, tích hợp đơn vị Giao Hàng Nhanh (GHN) và lưu DbContext.
 public class ShippingService : IShippingService
 {
     private readonly AppDbContext _db;
@@ -21,6 +22,7 @@ public class ShippingService : IShippingService
         _ghnService = ghnService;
     }
 
+    /// Chức năng: Tạo vận đơn giao hàng qua API Giao Hàng Nhanh (GHN)
     public async Task<DeliveryEntity> CreateGhnOrderAsync(Guid shopId, CreateGhnOrderDto dto)
     {
         var order = await _db.Orders
@@ -39,7 +41,6 @@ public class ShippingService : IShippingService
             throw new UnauthorizedAccessException("Shop does not have permission to create shipping order for this order.");
         }
 
-        // Kiểm tra chống tạo trùng vận đơn GHN
         if (await _db.Deliveries.AnyAsync(d => d.OrderId == order.Id))
         {
             throw new InvalidOperationException($"Delivery already exists for Order #{order.Id}.");
@@ -71,6 +72,7 @@ public class ShippingService : IShippingService
         return delivery;
     }
 
+    /// Chức năng: Xử lý Webhook tự động cập nhật trạng thái vận đơn từ GHN
     public async Task ProcessGhnWebhookAsync(GhnWebhookPayload payload)
     {
         if (string.IsNullOrEmpty(payload.OrderCode)) return;
@@ -102,7 +104,6 @@ public class ShippingService : IShippingService
                 {
                     order.OrderStatus = OrderStatus.DELIVERED;
 
-                    // Đồng bộ dòng tiền COD khi GHN báo giao thành công
                     var codPayment = order.Payments.FirstOrDefault(p => p.Method == PaymentMethod.COD && p.Status == PaymentStatus.PENDING);
                     if (codPayment != null)
                     {

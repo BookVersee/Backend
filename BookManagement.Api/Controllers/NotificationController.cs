@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BookManagement.Api.Controllers
 {
+    /// Vị trí: Api Controller - Tiếp nhận HTTP Request từ Frontend, kiểm tra đầu vào và trả về ApiResponse.
     [Authorize]
     [ApiController]
     [Route("api/notifications")]
@@ -22,7 +23,7 @@ namespace BookManagement.Api.Controllers
             _notificationService = notificationService;
         }
 
-        /// Chức năng: Lấy toàn bộ danh sách thông báo cá nhân. Trả về: Danh sách thông báo của người dùng.
+        /// Chức năng: Lấy danh sách toàn bộ thông báo cá nhân
         [HttpGet("GetNotifications")]
         public async Task<IActionResult> GetNotifications()
         {
@@ -31,7 +32,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<IEnumerable<NotificationResponse>>.SuccessResponse(notifications));
         }
 
-        /// Chức năng: Lấy danh sách thông báo chưa đọc. Trả về: Danh sách thông báo chưa xem.
+        /// Chức năng: Lấy danh sách các thông báo chưa đọc
         [HttpGet("GetUnreadNotifications")]
         public async Task<IActionResult> GetUnreadNotifications()
         {
@@ -40,7 +41,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<IEnumerable<NotificationResponse>>.SuccessResponse(notifications));
         }
 
-        /// Chức năng: Đánh dấu 1 thông báo là đã đọc. Trả về: Thông báo xác nhận đã xem.
+        /// Chức năng: Đánh dấu 1 thông báo cụ thể là đã đọc
         [HttpPut("MarkAsRead")]
         public async Task<IActionResult> MarkAsRead(Guid id)
         {
@@ -53,7 +54,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<string>.SuccessResponse("Notification marked as read."));
         }
 
-        /// Chức năng: Đánh dấu tất cả thông báo là đã đọc. Trả về: Thông báo xác nhận đã đọc toàn bộ.
+        /// Chức năng: Đánh dấu tất cả thông báo là đã đọc
         [HttpPut("MarkAllAsRead")]
         public async Task<IActionResult> MarkAllAsRead()
         {

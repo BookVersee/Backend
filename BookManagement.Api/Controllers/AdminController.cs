@@ -15,6 +15,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BookManagement.Api.Controllers
 {
+    /// Vị trí: Api Controller - Tiếp nhận HTTP Request từ Frontend, kiểm tra quyền Admin và trả về ApiResponse.
     [Authorize(Roles = "ADMIN,SUPER_ADMIN")]
     [ApiController]
     [Route("api/admin")]
@@ -29,7 +30,7 @@ namespace BookManagement.Api.Controllers
             _categoryService = categoryService;
         }
 
-        /// Chức năng: Trang quản trị - Lọc danh sách tài khoản người dùng. Trả về: Danh sách người dùng phân trang.
+        /// Chức năng: Lọc danh sách người dùng phân trang
         [HttpGet("GetUsers")]
         public async Task<IActionResult> GetUsers(UserFilterRequest filter)
         {
@@ -37,7 +38,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<PagedResult<UserResponse>>.SuccessResponse(users));
         }
 
-        /// Chức năng: Trang quản trị - Xem thông tin chi tiết người dùng. Trả về: Hồ sơ lý lịch và lịch sử số dư.
+        /// Chức năng: Xem chi tiết lý lịch người dùng
         [HttpGet("GetUserDetail")]
         public async Task<IActionResult> GetUserDetail(Guid id)
         {
@@ -45,7 +46,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<UserDetailResponse>.SuccessResponse(userDetail));
         }
 
-        /// Chức năng: Trang quản trị - Cập nhật trạng thái tài khoản. Trả về: Thông báo xác nhận cập nhật trạng thái.
+        /// Chức năng: Cập nhật trạng thái tài khoản
         [HttpPut("UpdateUserStatus")]
         public async Task<IActionResult> UpdateUserStatus(Guid id, UpdateUserStatusRequest request)
         {
@@ -53,7 +54,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<string>.SuccessResponse($"User status updated to {request.Status}."));
         }
 
-        /// Chức năng: Trang quản trị - Lấy danh sách đơn khiếu nại hoàn tiền. Trả về: Danh sách yêu cầu trả hàng.
+        /// Chức năng: Lấy danh sách khiếu nại hoàn tiền
         [HttpGet("GetDisputes")]
         public async Task<IActionResult> GetDisputes(ReturnRequestStatus? status)
         {
@@ -61,7 +62,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<IEnumerable<DisputeResponse>>.SuccessResponse(disputes));
         }
 
-        /// Chức năng: Trang quản trị - Xem chi tiết đơn khiếu nại. Trả về: Chi tiết nội dung khiếu nại.
+        /// Chức năng: Xem chi tiết nội dung khiếu nại
         [HttpGet("GetDisputeDetail")]
         public async Task<IActionResult> GetDisputeDetail(Guid id)
         {
@@ -69,7 +70,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<DisputeResponse>.SuccessResponse(dispute));
         }
 
-        /// Chức năng: Trang quản trị - Xử lý phê duyệt/từ chối khiếu nại. Trả về: Thông báo giải quyết khiếu nại.
+        /// Chức năng: Phê duyệt hoặc từ chối khiếu nại
         [HttpPost("ResolveDispute")]
         public async Task<IActionResult> ResolveDispute(Guid id, ResolveDisputeRequest request)
         {
@@ -77,7 +78,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<string>.SuccessResponse("Dispute resolved successfully. Resolution note published."));
         }
 
-        /// Chức năng: Trang quản trị - Giám sát toàn bộ đơn hàng hệ thống. Trả về: Danh sách đơn hàng phân trang.
+        /// Chức năng: Giám sát danh sách tất cả đơn hàng
         [HttpGet("GetAllOrders")]
         public async Task<IActionResult> GetAllOrders(int page = 1, int pageSize = 10)
         {
@@ -85,7 +86,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<PagedResult<OrderResponse>>.SuccessResponse(orders));
         }
 
-        /// Chức năng: Trang quản trị - Lọc danh sách đơn hàng theo trạng thái. Trả về: Danh sách đơn hàng phân trang.
+        /// Chức năng: Lọc đơn hàng theo trạng thái
         [HttpGet("GetOrdersByStatus")]
         public async Task<IActionResult> GetOrdersByStatus(string status, int page = 1, int pageSize = 10)
         {
@@ -93,7 +94,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<PagedResult<OrderResponse>>.SuccessResponse(orders));
         }
 
-        /// Chức năng: Trang quản trị - Xem chi tiết đơn hàng hệ thống. Trả về: Thông tin chi tiết toàn diện đơn hàng.
+        /// Chức năng: Xem chi tiết toàn diện đơn hàng
         [HttpGet("GetOrderDetail")]
         public async Task<IActionResult> GetOrderDetailAdmin(Guid orderId)
         {
@@ -101,7 +102,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<OrderResponse>.SuccessResponse(order));
         }
 
-        /// Chức năng: Trang quản trị - Quản lý kiểm duyệt sản phẩm sách. Trả về: Danh sách sản phẩm sách phân trang.
+        /// Chức năng: Quản lý danh sách toàn bộ sản phẩm sách
         [HttpGet("GetAllBooks")]
         public async Task<IActionResult> GetAllBooks(int page = 1, int pageSize = 10)
         {
@@ -109,7 +110,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<PagedResult<BookResponse>>.SuccessResponse(books));
         }
 
-        /// Chức năng: Trang quản trị - Lọc danh sách sách theo trạng thái. Trả về: Danh sách sách phân trang.
+        /// Chức năng: Lọc danh sách sách theo trạng thái
         [HttpGet("GetBooksByStatus")]
         public async Task<IActionResult> GetBooksByStatus(string status, int page = 1, int pageSize = 10)
         {
@@ -117,7 +118,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<PagedResult<BookResponse>>.SuccessResponse(books));
         }
 
-        /// Chức năng: Trang quản trị - Khóa hoặc ẩn sản phẩm sách vi phạm. Trả về: Thông báo ẩn sản phẩm thành công.
+        /// Chức năng: Ẩn sản phẩm sách vi phạm
         [HttpPut("HideBook")]
         public async Task<IActionResult> HideBook(Guid bookId)
         {
@@ -125,7 +126,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<string>.SuccessResponse("Book hidden successfully."));
         }
 
-        /// Chức năng: Trang quản trị - Quản lý toàn bộ các cửa hàng. Trả về: Danh sách cửa hàng phân trang.
+        /// Chức năng: Quản lý danh sách tất cả các Shop
         [HttpGet("GetAllShops")]
         public async Task<IActionResult> GetAllShops(int page = 1, int pageSize = 10)
         {
@@ -133,7 +134,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<PagedResult<ShopResponse>>.SuccessResponse(shops));
         }
 
-        /// Chức năng: Trang quản trị - Khóa quyền hoạt động cửa hàng. Trả về: Thông báo khóa cửa hàng thành công.
+        /// Chức năng: Khóa quyền hoạt động Cửa hàng vi phạm
         [HttpPost("LockShop")]
         public async Task<IActionResult> LockShop(Guid shopId, LockShopRequest request)
         {
@@ -141,7 +142,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<string>.SuccessResponse("Shop locked successfully."));
         }
 
-        /// Chức năng: Trang quản trị - Thống kê chỉ số hiệu suất toàn sàn. Trả về: Dữ liệu thống kê tổng quan.
+        /// Chức năng: Thống kê chỉ số hiệu suất toàn hệ thống
         [HttpGet("GetDashboardStatistics")]
         public async Task<IActionResult> GetDashboardStatistics(string period = "month")
         {
@@ -149,7 +150,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<DashboardStatisticsResponse>.SuccessResponse(stats));
         }
 
-        /// Chức năng: Trang quản trị - Báo cáo phân tích doanh thu hệ thống. Trả về: Dữ liệu doanh thu theo mốc thời gian.
+        /// Chức năng: Thống kê báo cáo doanh thu
         [HttpGet("GetRevenueReport")]
         public async Task<IActionResult> GetRevenueReport(string period = "month")
         {
@@ -157,7 +158,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<RevenueReportResponse>.SuccessResponse(revenue));
         }
 
-        /// Chức năng: Trang quản trị - Thống kê các cuốn sách bán chạy nhất. Trả về: Danh sách top sản phẩm sách bán chạy.
+        /// Chức năng: Thống kê top sản phẩm sách bán chạy
         [HttpGet("GetTopSellingBooks")]
         public async Task<IActionResult> GetTopSellingBooks(int limit = 10)
         {
@@ -165,7 +166,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<IEnumerable<TopSellingBooksResponse>>.SuccessResponse(books));
         }
 
-        /// Chức năng: Trang quản trị / Vận chuyển - Giám sát đơn hàng giao vận. Trả về: Danh sách vận đơn giao hàng phân trang.
+        /// Chức năng: Giám sát danh sách vận đơn giao hàng
         [HttpGet("GetDeliveries")]
         public async Task<IActionResult> GetDeliveries(string? status, int page = 1, int pageSize = 10)
         {
@@ -173,7 +174,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<PagedResult<DeliveryResponse>>.SuccessResponse(deliveries));
         }
 
-        /// Chức năng: Trang quản trị / Vận chuyển - Xem chi tiết vận đơn giao hàng. Trả về: Chi tiết lịch trình giao hàng.
+        /// Chức năng: Xem chi tiết vận đơn giao hàng
         [HttpGet("GetDeliveryDetail")]
         public async Task<IActionResult> GetDeliveryDetail(Guid deliveryId)
         {
@@ -181,7 +182,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<DeliveryResponse>.SuccessResponse(delivery));
         }
 
-        /// Chức năng: Trang quản trị - Xem toàn bộ danh mục thể loại sách. Trả về: Danh sách toàn bộ thể loại sách.
+        /// Chức năng: Xem tất cả thể loại sách
         [HttpGet("GetAllCategories")]
         public async Task<IActionResult> GetAllCategories()
         {
@@ -189,7 +190,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<IEnumerable<CategoryResponse>>.SuccessResponse(categories));
         }
 
-        /// Chức năng: Trang quản trị - Thêm mới thể loại sách. Trả về: Dữ liệu thể loại sách khởi tạo thành công.
+        /// Chức năng: Thêm mới thể loại sách
         [HttpPost("CreateCategory")]
         public async Task<IActionResult> CreateCategory(CreateCategoryRequest request)
         {
@@ -197,7 +198,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<CategoryResponse>.SuccessResponse(category, "Category created successfully."));
         }
 
-        /// Chức năng: Trang quản trị - Cập nhật thông tin thể loại sách. Trả về: Dữ liệu thể loại sách sau cập nhật.
+        /// Chức năng: Cập nhật thông tin thể loại sách
         [HttpPut("UpdateCategory")]
         public async Task<IActionResult> UpdateCategory(Guid id, UpdateCategoryRequest request)
         {
@@ -205,7 +206,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<CategoryResponse>.SuccessResponse(category, "Category updated successfully."));
         }
 
-        /// Chức năng: Trang quản trị - Xóa thể loại sách khỏi danh mục. Trả về: Thông báo xóa thể loại sách thành công.
+        /// Chức năng: Xóa thể loại sách
         [HttpDelete("DeleteCategory")]
         public async Task<IActionResult> DeleteCategory(Guid id)
         {
@@ -213,7 +214,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<string>.SuccessResponse("Category deleted successfully."));
         }
 
-        /// Chức năng: Xem danh sách Phản hồi của Shop bị báo cáo vi phạm.
+        /// Chức năng: Xem danh sách phản hồi của Shop bị báo cáo
         [HttpGet("GetReportedResponses")]
         public async Task<IActionResult> GetReportedResponses()
         {
@@ -221,7 +222,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<IEnumerable<ReportedResponseDto>>.SuccessResponse(reports));
         }
 
-        /// Chức năng: Admin xử lý Phản hồi của Shop bị báo cáo (Xóa/Ẩn phản hồi vi phạm & Cảnh báo Shop).
+        /// Chức năng: Xử lý phản hồi của Shop bị báo cáo vi phạm
         [HttpPost("ModerateShopResponse")]
         public async Task<IActionResult> ModerateShopResponse(Guid responseId, bool isDelete = true, string? adminNote = null)
         {

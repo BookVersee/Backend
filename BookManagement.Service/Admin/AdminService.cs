@@ -12,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookManagement.Service.Admin;
 
+/// Vị trí: Domain Service - Thực thi logic nghiệp vụ hệ thống, tính toán và truy vấn trực tiếp DbContext.
 public class AdminService : IAdminService
 {
     private readonly AppDbContext _context;
@@ -21,7 +22,7 @@ public class AdminService : IAdminService
         _context = context;
     }
 
-    // ===== USER MANAGEMENT =====
+    /// Chức năng: Tìm kiếm và lọc danh sách tài khoản người dùng phân trang
     public async Task<PagedResult<UserResponse>> GetUsersAsync(UserFilterRequest filter)
     {
         var query = _context.Users.AsNoTracking().AsQueryable();
@@ -58,6 +59,7 @@ public class AdminService : IAdminService
         };
     }
 
+    /// Chức năng: Xem thông tin chi tiết tài khoản người dùng, đơn hàng và lịch sử giao dịch
     public async Task<UserDetailResponse> GetUserDetailAsync(Guid id)
     {
         var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id);
@@ -115,6 +117,7 @@ public class AdminService : IAdminService
         };
     }
 
+    /// Chức năng: Cập nhật trạng thái khóa/mở tài khoản người dùng và thu hồi phiên đăng nhập
     public async Task UpdateUserStatusAsync(Guid userId, string status)
     {
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
@@ -145,7 +148,7 @@ public class AdminService : IAdminService
         await _context.SaveChangesAsync();
     }
 
-    // ===== DISPUTE MANAGEMENT =====
+    /// Chức năng: Lấy danh sách các tranh chấp/khiếu nại trả hàng
     public async Task<IEnumerable<DisputeResponse>> GetDisputesAsync(string? status = null)
     {
         IQueryable<BookManagement.Repository.Entities.ReturnRequest> query = _context.ReturnRequests.AsNoTracking()
@@ -163,6 +166,7 @@ public class AdminService : IAdminService
         return disputes.Select(MapToDisputeResponse);
     }
 
+    /// Chức năng: Xem chi tiết 1 vụ tranh chấp khiếu nại trả hàng
     public async Task<DisputeResponse> GetDisputeDetailAsync(Guid disputeId)
     {
         var dispute = await _context.ReturnRequests
@@ -181,6 +185,7 @@ public class AdminService : IAdminService
         return MapToDisputeResponse(dispute);
     }
 
+    /// Chức năng: Admin phán quyết đồng ý hoặc từ chối khiếu nại tranh chấp trả hàng
     public async Task ResolveDisputeAsync(Guid disputeId, ResolveDisputeRequest request)
     {
         var dispute = await _context.ReturnRequests
@@ -216,7 +221,6 @@ public class AdminService : IAdminService
                 await _context.Notifications.AddAsync(buyerNotification);
             }
 
-            // Nếu Admin phán quyết Khách thắng (ApproveRefund = true), tính 1 lần vi phạm cho Shop
             if (request.ApproveRefund && dispute.OrderDetail.Book != null && dispute.OrderDetail.Book.ShopId != Guid.Empty)
             {
                 var shop = await _context.Shops.FirstOrDefaultAsync(s => s.Id == dispute.OrderDetail.Book.ShopId);
@@ -230,7 +234,7 @@ public class AdminService : IAdminService
         await _context.SaveChangesAsync();
     }
 
-    // ===== ORDER MONITORING =====
+    /// Chức năng: Lấy danh sách toàn bộ đơn hàng trong hệ thống phân trang
     public async Task<PagedResult<OrderResponse>> GetAllOrdersAsync(int page = 1, int pageSize = 10)
     {
         var query = _context.Orders.AsNoTracking();
@@ -251,6 +255,7 @@ public class AdminService : IAdminService
         };
     }
 
+    /// Chức năng: Lọc danh sách đơn hàng theo trạng thái phân trang
     public async Task<PagedResult<OrderResponse>> GetOrdersByStatusAsync(string status, int page = 1, int pageSize = 10)
     {
         var orderStatus = (OrderStatus)Enum.Parse(typeof(OrderStatus), status);
@@ -272,6 +277,7 @@ public class AdminService : IAdminService
         };
     }
 
+    /// Chức năng: Admin xem chi tiết 1 đơn hàng bất kỳ trong hệ thống
     public async Task<OrderResponse> GetOrderDetailAsync(Guid orderId)
     {
         var order = await _context.Orders.AsNoTracking().FirstOrDefaultAsync(o => o.Id == orderId);
@@ -281,7 +287,7 @@ public class AdminService : IAdminService
         return MapToOrderResponse(order);
     }
 
-    // ===== BOOK MANAGEMENT =====
+    /// Chức năng: Lấy danh sách toàn bộ sản phẩm sách phân trang
     public async Task<PagedResult<BookResponse>> GetAllBooksAsync(int page = 1, int pageSize = 10)
     {
         var query = _context.Books.AsNoTracking();
@@ -302,6 +308,7 @@ public class AdminService : IAdminService
         };
     }
 
+    /// Chức năng: Lọc danh sách sản phẩm sách theo trạng thái phân trang
     public async Task<PagedResult<BookResponse>> GetBooksByStatusAsync(string status, int page = 1, int pageSize = 10)
     {
         var bookStatus = (BookStatus)Enum.Parse(typeof(BookStatus), status);
@@ -323,6 +330,7 @@ public class AdminService : IAdminService
         };
     }
 
+    /// Chức năng: Gỡ ẩn sản phẩm sách vi phạm khỏi hệ thống
     public async Task HideBookAsync(Guid bookId)
     {
         var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == bookId);
@@ -334,7 +342,7 @@ public class AdminService : IAdminService
         await _context.SaveChangesAsync();
     }
 
-    // ===== SHOP MANAGEMENT =====
+    /// Chức năng: Lấy danh sách toàn bộ Cửa hàng trong hệ thống phân trang
     public async Task<PagedResult<ShopResponse>> GetAllShopsAsync(int page = 1, int pageSize = 10)
     {
         var query = _context.Shops.AsNoTracking();
@@ -355,6 +363,7 @@ public class AdminService : IAdminService
         };
     }
 
+    /// Chức năng: Khóa Cửa hàng vi phạm và hủy các phiên làm việc
     public async Task LockShopAsync(Guid shopId, LockShopRequest request)
     {
         var shop = await _context.Shops.FirstOrDefaultAsync(s => s.Id == shopId);
@@ -380,7 +389,7 @@ public class AdminService : IAdminService
         await _context.SaveChangesAsync();
     }
 
-    // ===== DASHBOARD & STATISTICS =====
+    /// Chức năng: Thống kê các chỉ số tổng quan trên Dashboard Admin
     public async Task<DashboardStatisticsResponse> GetDashboardStatisticsAsync(string period = "month")
     {
         var validStatuses = new[] { OrderStatus.PAID, OrderStatus.SHIPPING, OrderStatus.DELIVERING, OrderStatus.DELIVERED };
@@ -402,6 +411,7 @@ public class AdminService : IAdminService
         };
     }
 
+    /// Chức năng: Thống kê báo cáo doanh thu toàn sàn
     public async Task<RevenueReportResponse> GetRevenueReportAsync(string period = "month")
     {
         var validStatuses = new[] { OrderStatus.PAID, OrderStatus.SHIPPING, OrderStatus.DELIVERING, OrderStatus.DELIVERED };
@@ -421,6 +431,7 @@ public class AdminService : IAdminService
         };
     }
 
+    /// Chức năng: Lấy danh sách Top các sách bán chạy nhất toàn hệ thống
     public async Task<IEnumerable<TopSellingBooksResponse>> GetTopSellingBooksAsync(int limit = 10)
     {
         var topBooks = await _context.OrderDetails
@@ -451,7 +462,7 @@ public class AdminService : IAdminService
         });
     }
 
-    // ===== DELIVERY MONITORING =====
+    /// Chức năng: Lấy danh sách vận đơn giao hàng trong hệ thống phân trang
     public async Task<PagedResult<DeliveryResponse>> GetDeliveriesAsync(string? status, int page = 1, int pageSize = 10)
     {
         var query = _context.Deliveries.AsNoTracking();
@@ -475,6 +486,7 @@ public class AdminService : IAdminService
         };
     }
 
+    /// Chức năng: Admin xem chi tiết 1 vận đơn giao hàng
     public async Task<DeliveryResponse> GetDeliveryDetailAsync(Guid deliveryId)
     {
         var delivery = await _context.Deliveries.AsNoTracking().FirstOrDefaultAsync(d => d.Id == deliveryId);
@@ -554,7 +566,7 @@ public class AdminService : IAdminService
         ActualDeliveredAt = delivery.ActualDeliveredAt
     };
 
-    // ===== RESPONSE MODERATION =====
+    /// Chức năng: Lấy danh sách các phản hồi của Shop bị người dùng báo cáo vi phạm
     public async Task<IEnumerable<ReportedResponseDto>> GetReportedResponsesAsync()
     {
         var notifications = await _context.Notifications
@@ -569,7 +581,6 @@ public class AdminService : IAdminService
         foreach (var n in notifications)
         {
             var content = n.Content ?? "";
-            // Parse responseId from "User reported shop response {responseId}: {reason}"
             var parts = content.Split(new[] { "User reported shop response ", ":" }, StringSplitOptions.RemoveEmptyEntries);
             Guid responseId = Guid.Empty;
             string reason = content;
@@ -604,6 +615,7 @@ public class AdminService : IAdminService
         return result;
     }
 
+    /// Chức năng: Kiểm duyệt xử lý gỡ phản hồi vi phạm của Shop và tính vi phạm
     public async Task ModerateShopResponseAsync(Guid responseId, bool isDelete, string? adminNote)
     {
         var response = await _context.Responses
@@ -622,13 +634,11 @@ public class AdminService : IAdminService
         {
             _context.Responses.Remove(response);
 
-            // 1. Tự động tính 1 vi phạm cho Shop và gửi thông báo theo 3 nấc (1/3, 2/3, 3/3 khóa 1 tháng)
             if (response.Shop != null)
             {
                 await HandleShopViolationAsync(response.Shop, "Admin xóa phản hồi do vi phạm tiêu chuẩn cộng đồng");
             }
 
-            // 2. Gửi thông báo SYSTEM cho Khách hàng đã viết Đánh giá ban đầu
             var customerUserId = response.Feedback?.OrderDetail?.Order?.UserId;
             if (customerUserId.HasValue && customerUserId.Value != Guid.Empty)
             {
@@ -649,6 +659,7 @@ public class AdminService : IAdminService
         await _context.SaveChangesAsync();
     }
 
+    /// Chức năng: Xử lý ghi nhận vi phạm cho Shop theo 3 nấc phạt (Cảnh báo -> Tạm khóa 1 tháng)
     private async Task HandleShopViolationAsync(BookManagement.Repository.Entities.Shop shop, string violationReason)
     {
         if (shop == null || shop.Id == Guid.Empty) return;

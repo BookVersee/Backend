@@ -6,6 +6,7 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace BookManagement.Service.Idempotency
 {
+    /// Vị trí: Core Infrastructure Service - Kiểm soát và ngăn chặn yêu cầu API trùng lặp (Idempotency Control).
     public class IdempotencyService : IIdempotencyService
     {
         private readonly IMemoryCache _cache;
@@ -27,6 +28,7 @@ namespace BookManagement.Service.Idempotency
             _cache = cache;
         }
 
+        /// Chức năng: Kiểm tra và khóa khóa Idempotency Key chống trùng lặp request
         public async Task<IdempotencyResult> TryAcquireAsync(string key, TimeSpan? processingTimeout = null)
         {
             if (string.IsNullOrWhiteSpace(key))
@@ -55,7 +57,6 @@ namespace BookManagement.Service.Idempotency
 
                     if (entry.Status == IdempotencyStatus.Processing)
                     {
-                        // Nếu vẫn đang trong thời gian xử lý hợp lệ
                         if (DateTimeOffset.UtcNow - entry.CreatedAt < timeout)
                         {
                             return IdempotencyResult.InProgress();
@@ -63,7 +64,6 @@ namespace BookManagement.Service.Idempotency
                     }
                 }
 
-                // Ghi nhận trạng thái Processing
                 var processingEntry = new CachedEntry
                 {
                     Status = IdempotencyStatus.Processing,
@@ -79,6 +79,7 @@ namespace BookManagement.Service.Idempotency
             }
         }
 
+        /// Chức năng: Đánh dấu hoàn tất xử lý request và lưu kết quả Response vào RAM Cache
         public Task CompleteAsync(string key, int statusCode, object? responseData, TimeSpan? cacheDuration = null)
         {
             if (string.IsNullOrWhiteSpace(key))
@@ -102,6 +103,7 @@ namespace BookManagement.Service.Idempotency
             return Task.CompletedTask;
         }
 
+        /// Chức năng: Giải phóng khóa Idempotency Key khi request bị lỗi
         public Task ReleaseAsync(string key)
         {
             if (string.IsNullOrWhiteSpace(key))

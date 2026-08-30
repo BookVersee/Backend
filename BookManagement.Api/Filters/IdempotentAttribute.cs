@@ -9,14 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace BookManagement.Api.Filters
 {
-    /// <summary>
-    /// Action Filter Attribute Chống trùng lặp dữ liệu & Chống Spam Request (Idempotency Key Filter).
-    /// Chức năng chính:
-    /// - Kiểm tra Header "Idempotency-Key" trong Request được gửi lên.
-    /// - Nếu cùng 1 Key được bấm nhiều lần liên tiếp (ví dụ: bấm nút Đặt hàng / Thanh toán 2 lần), Filter sẽ chặn các Request sau và trả về kết quả đã lưu trữ trước đó.
-    /// - Ngăn ngừa tình trạng tạo đơn hàng trùng hoặc trừ tiền 2 lần.
-    /// Vị trí: Presentation Layer (BookManagement.Api/Filters).
-    /// </summary>
+    /// Vị trí: Action Filter - Kiểm tra Header Idempotency-Key và chặn trùng lặp request.
     [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
     public class IdempotentAttribute : Attribute, IAsyncActionFilter
     {
@@ -24,6 +17,7 @@ namespace BookManagement.Api.Filters
         public int CacheDurationMinutes { get; set; } = 10;
         public int TimeoutSeconds { get; set; } = 30;
 
+        /// Chức năng: Thực thi kiểm tra khóa Idempotency Key trước và sau Action
         public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
         {
             var httpContext = context.HttpContext;

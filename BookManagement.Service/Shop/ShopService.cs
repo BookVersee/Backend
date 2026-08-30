@@ -15,6 +15,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookManagement.Service.Shop
 {
+    /// Vị trí: Domain Service - Thực thi logic nghiệp vụ hệ thống, quản lý Cửa hàng, gian hàng và kho hàng trong DbContext.
     public class ShopService : IShopService
     {
         private readonly AppDbContext _db;
@@ -34,6 +35,7 @@ namespace BookManagement.Service.Shop
             return shop.Id;
         }
 
+        /// Chức năng: Đăng ký tạo thông tin Cửa hàng bán sách mới
         public async Task<ShopRegisterResponseDto> RegisterShopAsync(Guid userId, ShopRegisterDto dto)
         {
             var existingShop = await _db.Shops.FirstOrDefaultAsync(s => s.Id == userId);
@@ -84,6 +86,7 @@ namespace BookManagement.Service.Shop
             };
         }
 
+        /// Chức năng: Xem thông tin hồ sơ lý lịch Cửa hàng
         public async Task<ShopProfileDto> GetShopProfileAsync(Guid userIdOrShopId)
         {
             var shopId = await ResolveShopIdAsync(userIdOrShopId);
@@ -107,6 +110,7 @@ namespace BookManagement.Service.Shop
             };
         }
 
+        /// Chức năng: Đăng bán sản phẩm sách mới cho Cửa hàng
         public async Task<BookResponseDto> CreateBookAsync(Guid userIdOrShopId, CreateBookRequestDto dto)
         {
             var shopId = await ResolveShopIdAsync(userIdOrShopId);
@@ -189,6 +193,7 @@ namespace BookManagement.Service.Shop
             return MapToBookDto(book, categoryName);
         }
 
+        /// Chức năng: Xem thông tin chi tiết 1 sản phẩm sách của Cửa hàng
         public async Task<BookResponseDto> GetBookByIdAsync(Guid userIdOrShopId, Guid bookId)
         {
             var shopId = await ResolveShopIdAsync(userIdOrShopId);
@@ -222,6 +227,7 @@ namespace BookManagement.Service.Shop
             return book;
         }
 
+        /// Chức năng: Lấy danh sách sản phẩm kho sách của Cửa hàng phân trang
         public async Task<PagedResultDto<BookResponseDto>> GetShopBooksAsync(Guid userIdOrShopId, BookQueryDto query)
         {
             var shopId = await ResolveShopIdAsync(userIdOrShopId);
@@ -277,6 +283,7 @@ namespace BookManagement.Service.Shop
             };
         }
 
+        /// Chức năng: Cập nhật thông tin và giá bán sản phẩm sách
         public async Task<BookResponseDto> UpdateBookAsync(Guid userIdOrShopId, Guid bookId, UpdateBookRequestDto dto)
         {
             var shopId = await ResolveShopIdAsync(userIdOrShopId);
@@ -361,6 +368,7 @@ namespace BookManagement.Service.Shop
             UpdatedAt = book.UpdatedAt
         };
 
+        /// Chức năng: Ẩn sản phẩm sách khỏi gian hàng Cửa hàng
         public async Task DeleteBookAsync(Guid userIdOrShopId, Guid bookId)
         {
             var shopId = await ResolveShopIdAsync(userIdOrShopId);
@@ -374,6 +382,7 @@ namespace BookManagement.Service.Shop
             await _db.SaveChangesAsync();
         }
 
+        /// Chức năng: Xem chi tiết đơn hàng bán của Cửa hàng
         public async Task<ShopOrderDetailDto> GetShopOrderDetailAsync(Guid userIdOrShopId, Guid orderId)
         {
             var shopId = await ResolveShopIdAsync(userIdOrShopId);
@@ -409,6 +418,7 @@ namespace BookManagement.Service.Shop
             };
         }
 
+        /// Chức năng: Cập nhật trạng thái xử lý đơn hàng của Cửa hàng
         public async Task UpdateOrderStatusAsync(Guid userIdOrShopId, Guid orderId, UpdateOrderStatusDto dto)
         {
             var shopId = await ResolveShopIdAsync(userIdOrShopId);
@@ -470,6 +480,7 @@ namespace BookManagement.Service.Shop
             });
         }
 
+        /// Chức năng: Thống kê doanh thu Cửa hàng theo mốc thời gian
         public async Task<RevenueResponseDto> GetShopRevenueAsync(Guid userIdOrShopId, RevenueQueryRequest query)
         {
             var shopId = await ResolveShopIdAsync(userIdOrShopId);
@@ -525,6 +536,7 @@ namespace BookManagement.Service.Shop
             };
         }
 
+        /// Chức năng: Lấy danh sách đánh giá từ khách hàng dành cho Cửa hàng
         public async Task<PagedResultDto<FeedbackDto>> GetShopFeedbacksAsync(Guid userIdOrShopId, ShopFeedbackQueryRequest query)
         {
             var shopId = await ResolveShopIdAsync(userIdOrShopId);
@@ -578,6 +590,7 @@ namespace BookManagement.Service.Shop
             };
         }
 
+        /// Chức năng: Phản hồi bình luận đánh giá của khách hàng
         public async Task<ResponseCreatedDto> CreateFeedbackResponseAsync(Guid userIdOrShopId, Guid feedbackId, FeedbackResponseRequestDto dto)
         {
             var shopId = await ResolveShopIdAsync(userIdOrShopId);
@@ -618,6 +631,7 @@ namespace BookManagement.Service.Shop
             };
         }
 
+        /// Chức năng: Xử lý chấp nhận hoặc từ chối yêu cầu trả hàng của khách
         public async Task ProcessReturnRequestAsync(Guid userIdOrShopId, Guid returnRequestId, ProcessReturnRequestDto dto)
         {
             var shopId = await ResolveShopIdAsync(userIdOrShopId);

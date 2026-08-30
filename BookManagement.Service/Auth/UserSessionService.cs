@@ -17,6 +17,7 @@ using UserEntity = BookManagement.Repository.Entities.User;
 
 namespace BookManagement.Service.Auth
 {
+    /// Vị trí: Domain Service - Thực thi logic nghiệp vụ hệ thống, tính toán, xử lý bảo mật và truy vấn trực tiếp DbContext.
     public class UserSessionService : IUserSessionService
     {
         private readonly AppDbContext _context;
@@ -39,6 +40,7 @@ namespace BookManagement.Service.Auth
             _memoryCache = memoryCache;
         }
 
+        /// Chức năng: Đăng ký tài khoản mới và tự động đăng nhập
         public async Task<TokenResponse> RegisterAsync(RegisterRequest request, string? ipAddress = null, string? deviceInfo = null)
         {
             var username = request.Username.Trim();
@@ -79,6 +81,7 @@ namespace BookManagement.Service.Auth
             };
         }
 
+        /// Chức năng: Kiểm tra thông tin tài khoản và cấp Token đăng nhập
         public async Task<TokenResponse> LoginAsync(LoginRequest request, string? ipAddress = null, string? deviceInfo = null)
         {
             var input = request.UsernameOrEmail.Trim().ToLower();
@@ -99,7 +102,6 @@ namespace BookManagement.Service.Auth
                     }
                     else
                     {
-                        // Hết thời hạn 1 tháng -> Tự động khôi phục cửa hàng và reset vi phạm
                         shop.Condition = ShopCondition.OPEN;
                         shop.LockedUntil = null;
                         shop.ViolationCount = 0;
@@ -126,6 +128,7 @@ namespace BookManagement.Service.Auth
             };
         }
 
+        /// Chức năng: Lưu trữ thông tin phiên đăng nhập UserSession
         public async Task<UserSessionResponse> CreateSessionAsync(Guid userId, string ipAddress, string deviceInfo)
         {
             var refreshToken = _tokenService.GenerateRefreshToken();
@@ -158,6 +161,7 @@ namespace BookManagement.Service.Auth
             };
         }
 
+        /// Chức năng: Thu hồi 1 phiên đăng nhập (Đăng xuất)
         public async Task RevokeSessionAsync(string refreshToken)
         {
             var session = await _context.UserSessions.FirstOrDefaultAsync(us => us.RefreshToken == refreshToken);
@@ -168,6 +172,7 @@ namespace BookManagement.Service.Auth
             }
         }
 
+        /// Chức năng: Thu hồi toàn bộ phiên đăng nhập của người dùng
         public async Task RevokeAllUserSessionsAsync(Guid userId)
         {
             var sessions = await _context.UserSessions.Where(us => us.UserId == userId && !us.IsRevoked).ToListAsync();
@@ -178,6 +183,7 @@ namespace BookManagement.Service.Auth
             await _context.SaveChangesAsync();
         }
 
+        /// Chức năng: Kiểm tra RefreshToken và cấp lại AccessToken mới (Token Rotation)
         public async Task<TokenResponse> ValidateAndRefreshTokenAsync(string refreshToken)
         {
             var session = await _context.UserSessions.Include(us => us.User).FirstOrDefaultAsync(us => us.RefreshToken == refreshToken);
@@ -188,7 +194,6 @@ namespace BookManagement.Service.Auth
             if (user == null || user.Status == UserStatus.LOCKED)
                 throw new UnauthorizedAccessException("User is inactive or locked.");
 
-            // Token Rotation: revoke old session, issue new pair
             session.IsRevoked = true;
             await _context.SaveChangesAsync();
 
@@ -204,6 +209,7 @@ namespace BookManagement.Service.Auth
             };
         }
 
+        /// Chức năng: Lấy danh sách các phiên đăng nhập đang hoạt động
         public async Task<IEnumerable<UserSessionResponse>> GetUserSessionsAsync(Guid userId)
         {
             var sessions = await _context.UserSessions
@@ -224,6 +230,7 @@ namespace BookManagement.Service.Auth
             });
         }
 
+        /// Chức năng: Đăng nhập/Đăng ký tự động bằng Google OAuth2
         public async Task<TokenResponse> GoogleLoginAsync(GoogleLoginRequest request, string? ipAddress = null, string? deviceInfo = null)
         {
             if (string.IsNullOrWhiteSpace(request.IdToken))
@@ -297,6 +304,7 @@ namespace BookManagement.Service.Auth
             };
         }
 
+        /// Chức năng: Gửi mã OTP khôi phục mật khẩu qua Email
         public async Task SendPasswordResetOtpAsync(string email)
         {
             if (string.IsNullOrWhiteSpace(email))
@@ -329,6 +337,7 @@ namespace BookManagement.Service.Auth
             await _emailService.SendEmailAsync(user.Email, "Mã OTP Đặt Lại Mật Khẩu - BookManagement", htmlBody);
         }
 
+        /// Chức năng: Đối chiếu kiểm tra mã OTP nhập vào
         public async Task<bool> VerifyResetOtpAsync(VerifyResetOtpRequest request)
         {
             if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.OtpCode))
@@ -349,7 +358,6 @@ namespace BookManagement.Service.Auth
                 throw new InvalidOperationException("Mã OTP không chính xác hoặc đã hết hạn (hiệu lực 5 phút).");
             }
 
-            // Xóa OTP đã sử dụng và lưu cờ xác thực thành công (hiệu lực 10 phút để người dùng đổi mật khẩu)
             _memoryCache.Remove(cacheKey);
             var verifiedKey = $"reset_verified_{user.Email.ToLower()}";
             _memoryCache.Set(verifiedKey, true, TimeSpan.FromMinutes(10));
@@ -357,6 +365,7 @@ namespace BookManagement.Service.Auth
             return true;
         }
 
+        /// Chức năng: Đặt lại mật khẩu mới sau khi xác thực OTP thành công
         public async Task ResetPasswordWithOtpAsync(ResetPasswordWithOtpRequest request)
         {
             if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.NewPassword))

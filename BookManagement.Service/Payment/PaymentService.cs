@@ -12,6 +12,7 @@ using PaymentEntity = BookManagement.Repository.Entities.Payment;
 
 namespace BookManagement.Service.Payment;
 
+/// Vị trí: Domain Service - Thực thi logic nghiệp vụ hệ thống, tích toán cổng thanh toán MoMo Sandbox và lưu DbContext.
 public class PaymentService : IPaymentService
 {
     private readonly AppDbContext _db;
@@ -24,6 +25,7 @@ public class PaymentService : IPaymentService
         _momoService = momoService;
     }
 
+    /// Chức năng: Khởi tạo URL thanh toán và mã QR MoMo Sandbox
     public async Task<(string PaymentUrl, string? QrCodeUrl, string? Deeplink)> CreateMomoUrlAsync(Guid userId, CreatePaymentUrlDto dto, string ipAddress)
     {
         var order = await _db.Orders.FirstOrDefaultAsync(o => o.Id == dto.OrderId);
@@ -32,7 +34,6 @@ public class PaymentService : IPaymentService
             throw new KeyNotFoundException("Order not found.");
         }
 
-        // Tái sử dụng hoặc tạo mới bản ghi Payment PENDING
         var existingPayment = await _db.Payments
             .FirstOrDefaultAsync(p => p.OrderId == dto.OrderId && p.Method == PaymentMethod.ONLINE && p.Status == PaymentStatus.PENDING);
 
@@ -63,6 +64,7 @@ public class PaymentService : IPaymentService
         return await _momoService.CreatePaymentAsync(payment.Id, payment.Amount, orderInfo);
     }
 
+    /// Chức năng: Webhook IPN xử lý kết quả thanh toán từ Server MoMo
     public async Task<(int ResultCode, string Message)> ProcessMomoIpnAsync(MomoIpnRequest req)
     {
         bool isValidSignature = _momoService.ValidateIpnSignature(req);
@@ -91,7 +93,6 @@ public class PaymentService : IPaymentService
                 return (1, "Payment Record Not Found");
             }
 
-            // Chống Idempotency: Nếu Payment đã SUCCESS hoặc mã giao dịch MoMo đã ghi nhận
             string transIdStr = req.TransId.ToString();
             bool isTransRecorded = req.TransId > 0 && await _db.TransactionHistories
                 .AnyAsync(t => t.TransactionCode == transIdStr && t.ReferenceType == ReferenceType.ORDER_PAYMENT);
@@ -158,6 +159,7 @@ public class PaymentService : IPaymentService
         }
     }
 
+    /// Chức năng: Xử lý hoàn tiền MoMo cho đơn hàng trả hàng/hoàn tiền
     public async Task ProcessRefundAsync(Guid shopId, ProcessRefundDto dto)
     {
         ReturnRequest? returnReq = null;
@@ -181,7 +183,6 @@ public class PaymentService : IPaymentService
                 .FirstOrDefaultAsync(r => r.OrderDetail.OrderId == dto.OrderId);
         }
 
-        // Chống Idempotency: Kiểm tra nếu yêu cầu đổi trả đã hoàn tiền
         if (returnReq != null && returnReq.OrderDetail.ReturnStatus == ReturnStatus.REFUNDED)
         {
             throw new InvalidOperationException("Yêu cầu trả hàng này đã được hoàn tiền trước đó.");
@@ -215,7 +216,6 @@ public class PaymentService : IPaymentService
         decimal itemRefundFallback = (returnReq?.OrderDetail != null) ? (returnReq.OrderDetail.UnitPrice * returnReq.OrderDetail.Quantity) : order.TotalAmount;
         decimal refundAmount = dto.Amount ?? ((returnReq?.RefundAmount > 0) ? returnReq.RefundAmount : itemRefundFallback);
 
-        // Kiểm tra tổng tiền đã hoàn cho đơn hàng
         var alreadyRefundedAmount = await _db.Payments
             .Where(p => p.OrderId == dto.OrderId && p.PaymentType == PaymentType.REFUND && p.Status == PaymentStatus.SUCCESS)
             .SumAsync(p => p.Amount);
@@ -295,9 +295,7 @@ public class PaymentService : IPaymentService
         }
     }
 
-    /// <summary>
-    /// Chủ động truy vấn trạng thái thanh toán từ MoMo và đồng bộ trạng thái đơn hàng (Vấn đề 6: Query Status & Reconciliation)
-    /// </summary>
+    /// Chức năng: Chủ động truy vấn và đồng bộ trạng thái thanh toán từ MoMo
     public async Task<(bool IsPaid, string Message, string? TransactionCode)> SyncPaymentStatusAsync(Guid orderId)
     {
         var order = await _db.Orders
@@ -325,7 +323,6 @@ public class PaymentService : IPaymentService
 
         try
         {
-            // Thử query theo payment.Id
             var queryRes = await _momoService.QueryPaymentStatusAsync(payment.Id.ToString());
 
             if (queryRes != null && queryRes.ResultCode == 0)
@@ -383,9 +380,7 @@ public class PaymentService : IPaymentService
         }
     }
 
-    /// <summary>
-    /// Tự động quét và hủy các đơn hàng chờ thanh toán quá hạn (Hold Expiry / Zombie Orders - Vấn đề 4)
-    /// </summary>
+    /// Chức năng: Quét và tự động hủy đơn hàng PENDING quá hạn 15 phút
     public async Task<int> ExpirePendingOrdersAsync(int expiryMinutes = 15)
     {
         var cutoffTime = DateTimeOffset.UtcNow.AddMinutes(-expiryMinutes);
@@ -404,18 +399,16 @@ public class PaymentService : IPaymentService
             var onlinePayment = order.Payments.FirstOrDefault(p => p.Method == PaymentMethod.ONLINE && p.Status == PaymentStatus.PENDING);
             if (onlinePayment != null)
             {
-                // Kiểm tra lại với MoMo trước khi quyết định hủy (Vấn đề 6: Tránh hủy nhầm đơn khách đã trả tiền nhưng rớt IPN)
                 try
                 {
                     var syncResult = await SyncPaymentStatusAsync(order.Id);
                     if (syncResult.IsPaid)
                     {
-                        continue; // Khách đã trả tiền, đã sync thành PAID
+                        continue;
                     }
                 }
                 catch
                 {
-                    // Tiếp tục xử lý hủy nếu query lỗi
                 }
             }
 
@@ -434,7 +427,6 @@ public class PaymentService : IPaymentService
                         payment.UpdatedAt = DateTimeOffset.UtcNow;
                     }
 
-                    // Hoàn lại tồn kho cho từng sản phẩm
                     foreach (var detail in order.OrderDetails)
                     {
                         await _db.Database.ExecuteSqlInterpolatedAsync(
@@ -466,4 +458,3 @@ public class PaymentService : IPaymentService
         return cancelledCount;
     }
 }
-

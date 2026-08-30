@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookManagement.Service.Cart
 {
+    /// Vị trí: Domain Service - Thực thi logic nghiệp vụ hệ thống, tính toán và truy vấn trực tiếp DbContext.
     public class CartService : ICartService
     {
         private readonly AppDbContext _context;
@@ -18,6 +19,7 @@ namespace BookManagement.Service.Cart
             _context = context;
         }
 
+        /// Chức năng: Tìm hoặc tự động tạo mới giỏ hàng cho người dùng
         private async Task<BookManagement.Repository.Entities.Cart> GetOrCreateCartEntityAsync(Guid userId)
         {
             var cart = await _context.Carts
@@ -42,12 +44,14 @@ namespace BookManagement.Service.Cart
             return cart;
         }
 
+        /// Chức năng: Lấy thông tin giỏ hàng của người dùng
         public async Task<CartResponse> GetCartAsync(Guid userId)
         {
             var cart = await GetOrCreateCartEntityAsync(userId);
             return MapToResponse(cart);
         }
 
+        /// Chức năng: Thêm mới sản phẩm sách vào giỏ hàng
         public async Task<CartResponse> AddToCartAsync(Guid userId, AddItemRequest request)
         {
             var cart = await GetOrCreateCartEntityAsync(userId);
@@ -101,6 +105,7 @@ namespace BookManagement.Service.Cart
             return MapToResponse(updatedCart);
         }
 
+        /// Chức năng: Cập nhật số lượng sản phẩm trong giỏ hàng
         public async Task<CartResponse> UpdateCartItemAsync(Guid userId, Guid cartDetailId, UpdateItemRequest request)
         {
             var cart = await GetOrCreateCartEntityAsync(userId);
@@ -138,6 +143,7 @@ namespace BookManagement.Service.Cart
             return MapToResponse(updatedCart);
         }
 
+        /// Chức năng: Xóa 1 sản phẩm khỏi giỏ hàng
         public async Task<CartResponse> RemoveFromCartAsync(Guid userId, Guid cartDetailId)
         {
             var cart = await GetOrCreateCartEntityAsync(userId);
@@ -151,6 +157,7 @@ namespace BookManagement.Service.Cart
             return MapToResponse(updatedCart);
         }
 
+        /// Chức năng: Làm trống toàn bộ giỏ hàng
         public async Task ClearCartAsync(Guid userId)
         {
             var cart = await _context.Carts

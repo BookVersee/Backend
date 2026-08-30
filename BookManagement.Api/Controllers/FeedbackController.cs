@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BookManagement.Api.Controllers
 {
+    /// Vị trí: Api Controller - Tiếp nhận HTTP Request từ Frontend, kiểm tra đầu vào và trả về ApiResponse.
     [ApiController]
     [Route("api/feedback")]
     public class FeedbackController : ControllerBase
@@ -21,7 +22,7 @@ namespace BookManagement.Api.Controllers
             _feedbackService = feedbackService;
         }
 
-        /// Chức năng: Lấy danh sách bài đánh giá sản phẩm sách. Trả về: Danh sách bình luận và điểm sao đánh giá.
+        /// Chức năng: Xem danh sách đánh giá của 1 cuốn sách
         [HttpGet("GetBookFeedbacks")]
         public async Task<IActionResult> GetBookFeedbacks(Guid bookId)
         {
@@ -29,7 +30,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<IEnumerable<FeedbackResponse>>.SuccessResponse(feedbacks));
         }
 
-        /// Chức năng: Gửi bình luận và điểm đánh giá sản phẩm. Trả về: Thông tin bài đánh giá đã tạo.
+        /// Chức năng: Gửi đánh giá và chấm sao cho sản phẩm sách đã mua
         [Authorize]
         [HttpPost("WriteFeedback")]
         public async Task<IActionResult> WriteFeedback(CreateFeedbackRequest request)
@@ -39,7 +40,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<FeedbackResponse>.SuccessResponse(feedback, "Feedback submitted successfully."));
         }
 
-        /// Chức năng: Báo cáo vi phạm phản hồi của người bán. Trả về: Thông báo xác nhận gửi báo cáo.
+        /// Chức năng: Báo cáo phản hồi của Shop bị vi phạm lên Admin
         [Authorize]
         [HttpPost("ReportResponse")]
         public async Task<IActionResult> ReportResponse(Guid responseId, ReportResponseRequest request)

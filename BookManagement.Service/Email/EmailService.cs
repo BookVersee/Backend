@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 
 namespace BookManagement.Service.Email
 {
+    /// Vị trí: Infrastructure Service - Tích hợp dịch vụ gửi Email thông báo qua SMTP Gmail.
     public class EmailService : IEmailService
     {
         private readonly EmailOptions _emailOptions;
@@ -18,6 +19,7 @@ namespace BookManagement.Service.Email
             _logger = logger;
         }
 
+        /// Chức năng: Gửi thư điện tử Email nội dung HTML qua SMTP Server
         public async Task SendEmailAsync(string toEmail, string subject, string htmlBody)
         {
             if (string.IsNullOrWhiteSpace(_emailOptions.SenderEmail) || string.IsNullOrWhiteSpace(_emailOptions.AppPassword))

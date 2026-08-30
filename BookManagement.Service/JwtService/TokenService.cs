@@ -10,6 +10,7 @@ using UserEntity = BookManagement.Repository.Entities.User;
 
 namespace BookManagement.Service.JwtService
 {
+    /// Vị trí: Security Service - Tạo và giải mã Token JWT AccessToken/RefreshToken phục vụ xác thực người dùng.
     public class TokenService : ITokenService
     {
         private readonly JwtOptions _jwtOptions;
@@ -19,6 +20,7 @@ namespace BookManagement.Service.JwtService
             _jwtOptions = jwtOptions.Value;
         }
 
+        /// Chức năng: Tạo AccessToken chuỗi JWT mã hóa HMAC-SHA256
         public string GenerateAccessToken(UserEntity user)
         {
             var tokenHandler = new JwtSecurityTokenHandler();
@@ -53,17 +55,16 @@ namespace BookManagement.Service.JwtService
             return tokenHandler.WriteToken(token);
         }
 
+        /// Chức năng: Sinh ngẫu nhiên chuỗi RefreshToken bảo mật Cryptographic
         public string GenerateRefreshToken()
         {
             var randomNumber = new byte[64];
-
             using var rng = RandomNumberGenerator.Create();
-
             rng.GetBytes(randomNumber);
-
             return Convert.ToBase64String(randomNumber);
         }
 
+        /// Chức năng: Bóc tách đọc thông tin Principal Claim từ AccessToken đã hết hạn
         public ClaimsPrincipal? GetPrincipalFromExpiredToken(string token)
         {
             var tokenValidationParameters = new TokenValidationParameters

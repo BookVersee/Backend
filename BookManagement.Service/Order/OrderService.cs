@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookManagement.Service.Order
 {
+    /// Vị trí: Domain Service - Thực thi logic nghiệp vụ hệ thống, xử lý giao dịch mua bán, thanh toán và lưu DbContext.
     public class OrderService : IOrderService
     {
         private readonly AppDbContext _context;
@@ -30,6 +31,7 @@ namespace BookManagement.Service.Order
                 .AsNoTracking();
         }
 
+        /// Chức năng: Lấy danh sách lịch sử đơn hàng của người dùng hoặc Shop
         public async Task<IEnumerable<OrderResponse>> GetUserOrdersAsync(Guid userId, OrderStatus? status = null)
         {
             var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
@@ -55,6 +57,7 @@ namespace BookManagement.Service.Order
             return orders.Select(MapToResponse);
         }
 
+        /// Chức năng: Xem thông tin chi tiết toàn diện của 1 đơn hàng
         public async Task<OrderResponse> GetOrderDetailAsync(Guid userId, Guid orderId)
         {
             var order = await GetFullOrderQuery().FirstOrDefaultAsync(o => o.Id == orderId);
@@ -71,6 +74,7 @@ namespace BookManagement.Service.Order
             return MapToResponse(order);
         }
 
+        /// Chức năng: Đặt hàng thanh toán (Trừ kho nguyên tử chống Overselling Race Condition)
         public async Task<OrderResponse> CreateOrderAsync(Guid userId, CreateOrderRequest request)
         {
             var cart = await _context.Carts
@@ -103,7 +107,6 @@ namespace BookManagement.Service.Order
                 try
                 {
                     var now = DateTimeOffset.UtcNow;
-                    // Validate status, shop condition, and deduct stock atomically
                     foreach (var item in selectedCartList)
                     {
                         var book = item.Book;
@@ -122,7 +125,6 @@ namespace BookManagement.Service.Order
                             throw new InvalidOperationException($"Cửa hàng cung cấp cuốn sách '{book.Title}' hiện chưa được duyệt hoặc đang đóng cửa.");
                         }
 
-                        // Chống bán vượt tồn kho (Overselling Race Condition): Thực hiện trừ kho nguyên tử trên Database
                         int rowsAffected = await _context.Database.ExecuteSqlInterpolatedAsync(
                             $"UPDATE Books SET StockQuantity = StockQuantity - {item.Quantity}, Status = CASE WHEN StockQuantity - {item.Quantity} = 0 THEN 'EMPTY' ELSE Status END, UpdatedAt = {now} WHERE Id = {item.BookId} AND StockQuantity >= {item.Quantity} AND Status = 'ACTIVE'");
 
@@ -132,7 +134,6 @@ namespace BookManagement.Service.Order
                         }
                     }
 
-                    // Calculate total using current Book.Price
                     var totalAmount = selectedCartList.Sum(cbd => cbd.Quantity * cbd.Book.Price);
 
                     var order = new BookManagement.Repository.Entities.Order
@@ -155,7 +156,6 @@ namespace BookManagement.Service.Order
                         ReturnStatus = ReturnStatus.NONE
                     }).ToList();
 
-                    // Gán Payment.Status = PENDING ban đầu cho TẤT CẢ các phương thức thanh toán
                     var payment = new BookManagement.Repository.Entities.Payment
                     {
                         Id = Guid.NewGuid(),
@@ -171,7 +171,6 @@ namespace BookManagement.Service.Order
                     await _context.OrderDetails.AddRangeAsync(orderDetails);
                     await _context.Payments.AddAsync(payment);
 
-                    // Automated Notification for Buyer
                     var buyerNotification = new BookManagement.Repository.Entities.Notification
                     {
                         Id = Guid.NewGuid(),
@@ -183,7 +182,6 @@ namespace BookManagement.Service.Order
                     };
                     await _context.Notifications.AddAsync(buyerNotification);
 
-                    // Clear ONLY selected items from cart after checkout
                     _context.CartBookDetails.RemoveRange(selectedCartList);
                     await _context.SaveChangesAsync();
                     await tx.CommitAsync();
@@ -199,6 +197,7 @@ namespace BookManagement.Service.Order
             });
         }
 
+        /// Chức năng: Hủy đơn hàng PENDING và hoàn trả tồn kho sản phẩm
         public async Task CancelOrderAsync(Guid userId, Guid orderId)
         {
             var order = await _context.Orders
@@ -212,7 +211,6 @@ namespace BookManagement.Service.Order
             order.OrderStatus = OrderStatus.CANCELLED;
             order.UpdatedAt = DateTimeOffset.UtcNow;
 
-            // Restore book stock quantity
             foreach (var detail in order.OrderDetails)
             {
                 if (detail.Book != null)
@@ -225,7 +223,6 @@ namespace BookManagement.Service.Order
                 }
             }
 
-            // Notification
             var notification = new BookManagement.Repository.Entities.Notification
             {
                 Id = Guid.NewGuid(),
@@ -239,6 +236,7 @@ namespace BookManagement.Service.Order
             await _context.SaveChangesAsync();
         }
 
+        /// Chức năng: Gửi yêu cầu khiếu nại trả hàng / hoàn tiền cho sản phẩm
         public async Task<ReturnRequestResponse> CreateReturnRequestAsync(Guid userId, Guid orderDetailId, CreateReturnRequest input)
         {
             var orderDetail = await _context.OrderDetails
@@ -283,7 +281,6 @@ namespace BookManagement.Service.Order
 
             await _context.ReturnRequests.AddAsync(returnRequest);
 
-            // Notification for Buyer
             var buyerNotification = new BookManagement.Repository.Entities.Notification
             {
                 Id = Guid.NewGuid(),
@@ -295,7 +292,6 @@ namespace BookManagement.Service.Order
             };
             await _context.Notifications.AddAsync(buyerNotification);
 
-            // Notification for Shop Owner
             var shopUserId = orderDetail.Book?.ShopId;
             if (shopUserId.HasValue && shopUserId.Value != Guid.Empty)
             {
@@ -326,6 +322,7 @@ namespace BookManagement.Service.Order
             };
         }
 
+        /// Chức năng: Gửi khiếu nại lên Admin khi Shop từ chối yêu cầu trả hàng
         public async Task EscalateReturnRequestAsync(Guid userId, Guid returnRequestId, string? reason)
         {
             var returnReq = await _context.ReturnRequests
@@ -343,7 +340,6 @@ namespace BookManagement.Service.Order
                 throw new InvalidOperationException("Chỉ có thể gửi khiếu nại lên Admin khi yêu cầu trả hàng bị Shop từ chối.");
             }
 
-            // Mark as PENDING again for Admin escalation
             returnReq.Status = ReturnRequestStatus.PENDING;
             returnReq.DetailedReason = (returnReq.DetailedReason ?? "") + $" | [KHIẾU NẠI ADMIN: {reason}]";
             returnReq.UpdatedAt = DateTimeOffset.UtcNow;

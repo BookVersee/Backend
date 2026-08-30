@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BookManagement.Api.Controllers
 {
+    /// Vị trí: Api Controller - Tiếp nhận HTTP Request từ Frontend, kiểm tra đầu vào và trả về ApiResponse.
     [ApiController]
     [Route("api/auth")]
     public class AuthController : ControllerBase
@@ -21,7 +22,7 @@ namespace BookManagement.Api.Controllers
             _sessionService = sessionService;
         }
 
-        /// Chức năng: Đăng ký tài khoản người dùng mới. Trả về: Chuỗi JWT Token và thông tin tài khoản.
+        /// Chức năng: Đăng ký tài khoản người dùng mới
         [HttpPost("Register")]
         public async Task<IActionResult> Register(RegisterRequest request)
         {
@@ -32,7 +33,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<TokenResponse>.SuccessResponse(response, "User registered successfully."));
         }
 
-        /// Chức năng: Xác thực đăng nhập tài khoản. Trả về: Chuỗi JWT Access Token và Refresh Token.
+        /// Chức năng: Đăng nhập tài khoản hệ thống
         [HttpPost("Login")]
         public async Task<IActionResult> Login(LoginRequest request)
         {
@@ -43,7 +44,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<TokenResponse>.SuccessResponse(response, "Login successful."));
         }
 
-        /// Chức năng: Đăng nhập nhanh bằng Google (Google Cloud Client ID). Trả về: Chuỗi JWT Access Token và Refresh Token.
+        /// Chức năng: Đăng nhập bằng tài khoản Google OAuth2
         [HttpPost("GoogleLogin")]
         public async Task<IActionResult> GoogleLogin(GoogleLoginRequest request)
         {
@@ -54,7 +55,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<TokenResponse>.SuccessResponse(response, "Google authentication successful."));
         }
 
-        /// Chức năng: Yêu cầu gửi mã OTP Đặt lại mật khẩu về Email. Trả về: Thông báo đã gửi mã OTP.
+        /// Chức năng: Gửi mã OTP quên mật khẩu về Email
         [HttpPost("ForgotPassword")]
         public async Task<IActionResult> ForgotPassword(ForgotPasswordRequest request)
         {
@@ -62,7 +63,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<string>.SuccessResponse("Mã OTP đặt lại mật khẩu đã được gửi về Email của bạn. Vui lòng kiểm tra hộp thư."));
         }
 
-        /// Chức năng: Kiểm tra mã OTP hợp lệ trước khi đổi mật khẩu. Trả về: Thông báo OTP hợp lệ.
+        /// Chức năng: Xác thực mã OTP quên mật khẩu
         [HttpPost("VerifyOtp")]
         public async Task<IActionResult> VerifyOtp(VerifyResetOtpRequest request)
         {
@@ -70,7 +71,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<string>.SuccessResponse("Mã OTP xác thực thành công. Vui lòng nhập mật khẩu mới."));
         }
 
-        /// Chức năng: Xác thực mã OTP và đặt lại mật khẩu mới. Trả về: Thông báo đổi mật khẩu thành công.
+        /// Chức năng: Đặt lại mật khẩu mới sau khi xác thực OTP
         [HttpPost("ResetPassword")]
         public async Task<IActionResult> ResetPassword(ResetPasswordWithOtpRequest request)
         {
@@ -78,7 +79,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<string>.SuccessResponse("Đặt lại mật khẩu mới thành công. Vui lòng sử dụng mật khẩu mới để đăng nhập."));
         }
 
-        /// Chức năng: Cấp mới Access Token bằng Refresh Token. Trả về: Chuỗi Access Token mới.
+        /// Chức năng: Cấp AccessToken mới từ RefreshToken
         [HttpPost("RefreshToken")]
         public async Task<IActionResult> RefreshToken(RefreshTokenRequest request)
         {

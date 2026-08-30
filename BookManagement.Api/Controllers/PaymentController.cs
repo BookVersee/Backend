@@ -12,6 +12,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace BookManagement.Api.Controllers;
 
+/// Vị trí: Api Controller - Tiếp nhận HTTP Request từ Frontend, kiểm tra đầu vào và trả về ApiResponse.
 [ApiController]
 [Route("api/payment")]
 public class PaymentController : ControllerBase
@@ -27,9 +28,7 @@ public class PaymentController : ControllerBase
         _configuration = configuration;
     }
 
-    /// <summary>
-    /// Tạo URL thanh toán MoMo Sandbox (Quét mã QR Code / Ví MoMo)
-    /// </summary>
+    /// Chức năng: Tạo URL và mã QR thanh toán MoMo Sandbox
     [HttpPost("CreatePaymentUrl")]
     [Authorize]
     public async Task<IActionResult> CreatePaymentUrl(CreatePaymentUrlDto dto)
@@ -45,9 +44,7 @@ public class PaymentController : ControllerBase
         }));
     }
 
-    /// <summary>
-    /// Callback MoMo: Nhận kết quả và chuyển hướng trình duyệt sau khi khách thanh toán
-    /// </summary>
+    /// Chức năng: Callback chuyển hướng trình duyệt sau khi thanh toán MoMo
     [HttpGet("Callback")]
     [AllowAnonymous]
     public IActionResult Callback(string? orderId, int? resultCode, string? message)
@@ -64,9 +61,7 @@ public class PaymentController : ControllerBase
         }, msg));
     }
 
-    /// <summary>
-    /// IPN Webhook MoMo: Server-to-Server tự động cập nhật đơn hàng thành PAID
-    /// </summary>
+    /// Chức năng: Webhook IPN nhận kết quả thanh toán từ Server MoMo
     [HttpPost("Ipn")]
     [AllowAnonymous]
     public async Task<IActionResult> Ipn(MomoIpnRequest req)
@@ -75,9 +70,7 @@ public class PaymentController : ControllerBase
         return Ok(new { resultCode, message });
     }
 
-    /// <summary>
-    /// Hoàn tiền đơn hàng qua MoMo
-    /// </summary>
+    /// Chức năng: Hoàn tiền đơn hàng MoMo (Chống trùng lặp Idempotent)
     [HttpPost("ProcessRefund")]
     [Authorize(Roles = "SHOP")]
     [Idempotent]
@@ -89,9 +82,7 @@ public class PaymentController : ControllerBase
         return Ok(ApiResponse.SuccessResponse(null, "MoMo refund processed successfully."));
     }
 
-    /// <summary>
-    /// Chủ động truy vấn và đồng bộ trạng thái thanh toán từ MoMo (Query Status & Reconciliation - Vấn đề 6)
-    /// </summary>
+    /// Chức năng: Chủ động truy vấn đồng bộ trạng thái thanh toán từ MoMo
     [HttpPost("QueryPaymentStatus")]
     [Authorize]
     public async Task<IActionResult> QueryPaymentStatus(Guid orderId)
@@ -105,9 +96,7 @@ public class PaymentController : ControllerBase
         }, message));
     }
 
-    /// <summary>
-    /// Quét và hủy đơn hàng quá hạn thanh toán thủ công hoặc qua Cron (Vấn đề 4)
-    /// </summary>
+    /// Chức năng: Quét và hủy các đơn hàng PENDING quá hạn 15 phút
     [HttpPost("ExpirePendingOrders")]
     [Authorize(Roles = "ADMIN,SUPER_ADMIN")]
     public async Task<IActionResult> ExpirePendingOrders(int expiryMinutes = 15)

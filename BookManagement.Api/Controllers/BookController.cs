@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BookManagement.Api.Controllers
 {
+    /// Vị trí: Api Controller - Tiếp nhận HTTP Request từ Frontend, kiểm tra đầu vào và trả về ApiResponse.
     [ApiController]
     [Route("api/shop")]
     public class BookController : ControllerBase
@@ -19,7 +20,7 @@ namespace BookManagement.Api.Controllers
             _bookService = bookService;
         }
 
-        /// Chức năng: Tìm kiếm và lọc danh sách sản phẩm sách. Trả về: Danh sách sản phẩm sách phân trang.
+        /// Chức năng: Tìm kiếm và lọc danh sách sản phẩm sách
         [HttpGet("FindBooks")]
         public async Task<IActionResult> FindBooks(BookQueryDto filter)
         {
@@ -27,7 +28,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<PagedResponse<BookResponse>>.SuccessResponse(result));
         }
 
-        /// Chức năng: Xem thông tin chi tiết cuốn sách. Trả về: Dữ liệu chi tiết sản phẩm sách.
+        /// Chức năng: Xem thông tin chi tiết sản phẩm sách
         [HttpGet("GetBookDetail")]
         public async Task<IActionResult> GetBookDetail(Guid id)
         {
@@ -35,7 +36,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<BookResponse>.SuccessResponse(book));
         }
 
-        /// Chức năng: Xem thông tin hồ sơ cửa hàng. Trả về: Thông tin công khai của cửa hàng.
+        /// Chức năng: Xem thông tin hồ sơ cửa hàng
         [HttpGet("GetShopProfile")]
         public async Task<IActionResult> GetShopProfile(Guid shopId)
         {
@@ -43,7 +44,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<ShopProfileDto>.SuccessResponse(shop));
         }
 
-        /// Chức năng: Lấy danh sách sản phẩm sách của cửa hàng. Trả về: Danh sách sách do cửa hàng đăng bán.
+        /// Chức năng: Lấy danh sách sản phẩm sách của Cửa hàng
         [HttpGet("GetBooksByShop")]
         public async Task<IActionResult> GetBooksByShop(Guid shopId)
         {

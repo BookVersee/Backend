@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BookManagement.Api.Controllers;
 
+/// Vị trí: Api Controller - Tiếp nhận HTTP Request từ Frontend, kiểm tra đầu vào và trả về ApiResponse.
 [ApiController]
 [Route("api/delivery")]
 public class DeliveryController : ControllerBase
@@ -18,9 +19,7 @@ public class DeliveryController : ControllerBase
         _deliveryService = deliveryService;
     }
 
-    /// <summary>
-    /// Test Case 4.1: Tạo vận đơn giao hàng mới
-    /// </summary>
+    /// Chức năng: Khởi tạo vận đơn giao hàng mới
     [HttpPost("CreateDelivery")]
     [Authorize(Roles = "SHOP,ADMIN,SUPER_ADMIN,DELIVER,SHIPPER")]
     public async Task<IActionResult> CreateDelivery(CreateDeliveryDto dto)
@@ -29,9 +28,7 @@ public class DeliveryController : ControllerBase
         return Ok(ApiResponse.SuccessResponse(result, "Delivery created successfully"));
     }
 
-    /// <summary>
-    /// Test Case 4.2: Shipper xem danh sách đơn cần giao
-    /// </summary>
+    /// Chức năng: Shipper xem danh sách các đơn hàng cần giao
     [HttpGet("GetDeliveryOrders")]
     [Authorize(Roles = "SHIPPER,DELIVER,ADMIN,SUPER_ADMIN,SHOP")]
     public async Task<IActionResult> GetDeliveryOrders(string? status)
@@ -40,9 +37,7 @@ public class DeliveryController : ControllerBase
         return Ok(ApiResponse.SuccessResponse(result));
     }
 
-    /// <summary>
-    /// Test Case 4.3: Shipper cập nhật giao hàng thành công
-    /// </summary>
+    /// Chức năng: Cập nhật trạng thái hành trình giao hàng (Shipper/Carrier)
     [HttpPost("UpdateDeliveryStatus")]
     [Authorize(Roles = "SHIPPER,DELIVER,ADMIN,SUPER_ADMIN,SHOP")]
     public async Task<IActionResult> UpdateDeliveryStatus(Guid deliveryId, UpdateDeliveryStatusDto dto)

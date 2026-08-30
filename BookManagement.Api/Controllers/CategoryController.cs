@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BookManagement.Api.Controllers
 {
+    /// Vị trí: Api Controller - Tiếp nhận HTTP Request từ Frontend, kiểm tra đầu vào và trả về ApiResponse.
     [ApiController]
     [Route("api/categories")]
     public class CategoryController : ControllerBase
@@ -18,7 +19,7 @@ namespace BookManagement.Api.Controllers
             _categoryService = categoryService;
         }
 
-        /// Chức năng: Lấy danh sách thể loại sách công khai. Trả về: Danh sách thể loại sách đang hoạt động.
+        /// Chức năng: Lấy danh sách thể loại sách công khai
         [HttpGet("GetCategories")]
         public async Task<IActionResult> GetCategories()
         {
@@ -26,7 +27,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<IEnumerable<CategoryResponse>>.SuccessResponse(categories));
         }
 
-        /// Chức năng: Xem chi tiết thông tin thể loại sách theo ID. Trả về: Dữ liệu chi tiết thể loại sách.
+        /// Chức năng: Xem chi tiết thông tin thể loại sách
         [HttpGet("GetCategoryDetail")]
         public async Task<IActionResult> GetCategoryDetail(Guid id)
         {

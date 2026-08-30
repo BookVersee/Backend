@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookManagement.Service.Feedback
 {
+    /// Vị trí: Domain Service - Thực thi logic nghiệp vụ hệ thống, xử lý bài đánh giá và tính điểm sao trung bình trong DbContext.
     public class FeedbackService : IFeedbackService
     {
         private readonly AppDbContext _context;
@@ -27,6 +28,7 @@ namespace BookManagement.Service.Feedback
                 .AsNoTracking();
         }
 
+        /// Chức năng: Lấy danh sách đánh giá của 1 sản phẩm sách
         public async Task<IEnumerable<FeedbackResponse>> GetBookFeedbacksAsync(Guid bookId)
         {
             var feedbacks = await GetFullFeedbackQuery()
@@ -37,6 +39,7 @@ namespace BookManagement.Service.Feedback
             return feedbacks.Select(MapToResponse);
         }
 
+        /// Chức năng: Gửi bình luận đánh giá và tính lại điểm sao trung bình của Sách & Shop
         public async Task<FeedbackResponse> CreateFeedbackAsync(Guid userId, CreateFeedbackRequest request)
         {
             var orderDetail = await _context.OrderDetails
@@ -89,7 +92,6 @@ namespace BookManagement.Service.Feedback
             await _context.Feedbacks.AddAsync(feedback);
             await _context.SaveChangesAsync();
 
-            // Recalculate average rating for Book & Shop
             if (orderDetail.BookId != Guid.Empty)
             {
                 var book = await _context.Books.FindAsync(orderDetail.BookId);
@@ -122,7 +124,6 @@ namespace BookManagement.Service.Feedback
                         shop.Rating = (float)shopFeedbacks.Average();
                     }
 
-                    // Notification for Shop Owner
                     if (shop.Id != Guid.Empty)
                     {
                         var shopNotification = new BookManagement.Repository.Entities.Notification
@@ -145,6 +146,7 @@ namespace BookManagement.Service.Feedback
             return MapToResponse(created ?? feedback);
         }
 
+        /// Chức năng: Gửi báo cáo phản hồi của Shop bị vi phạm lên hệ thống
         public async Task ReportResponseAsync(Guid userId, Guid responseId, ReportResponseRequest request)
         {
             var response = await _context.Responses

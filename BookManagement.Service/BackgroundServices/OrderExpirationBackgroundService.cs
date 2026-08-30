@@ -6,16 +6,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace BookManagement.Api.BackgroundServices
+namespace BookManagement.Service.BackgroundServices
 {
-    /// <summary>
-    /// Background Worker tự động quét và hủy các đơn hàng chờ thanh toán quá hạn (Zombie Orders), hoàn lại tồn kho cho hệ thống.
-    /// </summary>
+    /// Vị trí: Background Service Worker - Chạy độc lập dưới nền Server, định kỳ quét hủy đơn quá hạn và hoàn lại kho.
     public class OrderExpirationBackgroundService : BackgroundService
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly ILogger<OrderExpirationBackgroundService> _logger;
-        private readonly TimeSpan _checkInterval = TimeSpan.FromMinutes(1); // Quét mỗi 1 phút
+        private readonly TimeSpan _checkInterval = TimeSpan.FromMinutes(1);
 
         public OrderExpirationBackgroundService(
             IServiceProvider serviceProvider,
@@ -25,11 +23,11 @@ namespace BookManagement.Api.BackgroundServices
             _logger = logger;
         }
 
+        /// Chức năng: Tiến trình tự động quét và hủy đơn hàng quá hạn 15 phút
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             _logger.LogInformation("OrderExpirationBackgroundService đã khởi động.");
 
-            // Đợi 5 giây đầu tiên để ứng dụng hoàn tất khởi tạo Database & DI Scope
             await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
 
             while (!stoppingToken.IsCancellationRequested)
@@ -39,7 +37,6 @@ namespace BookManagement.Api.BackgroundServices
                     using var scope = _serviceProvider.CreateScope();
                     var paymentService = scope.ServiceProvider.GetRequiredService<IPaymentService>();
 
-                    // Hủy các đơn hàng PENDING quá hạn 15 phút và hoàn lại kho
                     int expiredOrdersCount = await paymentService.ExpirePendingOrdersAsync(expiryMinutes: 15);
                     if (expiredOrdersCount > 0)
                     {

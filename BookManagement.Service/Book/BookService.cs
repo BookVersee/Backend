@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookManagement.Service.Book
 {
+    /// Vị trí: Domain Service - Thực thi logic nghiệp vụ hệ thống, tính toán và truy vấn trực tiếp DbContext.
     public class BookService : IBookService
     {
         private readonly AppDbContext _context;
@@ -18,6 +19,7 @@ namespace BookManagement.Service.Book
             _context = context;
         }
 
+        /// Chức năng: Tìm kiếm và lọc danh sách sản phẩm sách phân trang
         public async Task<PagedResponse<BookResponse>> FindBooksAsync(BookQueryDto filter)
         {
             var query = _context.Books
@@ -51,6 +53,7 @@ namespace BookManagement.Service.Book
             };
         }
 
+        /// Chức năng: Xem thông tin chi tiết của 1 cuốn sách
         public async Task<BookResponse> GetBookDetailAsync(Guid bookId)
         {
             var book = await _context.Books
@@ -62,6 +65,7 @@ namespace BookManagement.Service.Book
             return MapToResponse(book);
         }
 
+        /// Chức năng: Xem thông tin công khai của Cửa hàng
         public async Task<ShopProfileDto> GetShopProfileAsync(Guid shopId)
         {
             var shop = await _context.Shops
@@ -80,6 +84,7 @@ namespace BookManagement.Service.Book
             };
         }
 
+        /// Chức năng: Lấy danh sách toàn bộ sách do Cửa hàng bán
         public async Task<IEnumerable<BookResponse>> GetBooksByShopAsync(Guid shopId)
         {
             var books = await _context.Books

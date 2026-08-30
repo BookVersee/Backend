@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BookManagement.Api.Controllers;
 
+/// Vị trí: Api Controller - Tiếp nhận HTTP Request từ Frontend, kiểm tra đầu vào và trả về ApiResponse.
 [ApiController]
 [Route("api/chat")]
 [Authorize]
@@ -22,9 +23,7 @@ public class ChatController : ControllerBase
         _chatService = chatService;
     }
 
-    /// <summary>
-    /// Test Case 2.1: Khách hàng xem danh sách cuộc trò chuyện
-    /// </summary>
+    /// Chức năng: Khách hàng xem danh sách hội thoại chat
     [HttpGet("GetUserConversations")]
     public async Task<IActionResult> GetUserConversations()
     {
@@ -33,9 +32,7 @@ public class ChatController : ControllerBase
         return Ok(ApiResponse.SuccessResponse(conversations));
     }
 
-    /// <summary>
-    /// Test Case 2.2: Shop xem danh sách khách hàng đang chat
-    /// </summary>
+    /// Chức năng: Shop xem danh sách khách hàng chat với mình
     [HttpGet("GetShopConversations")]
     public async Task<IActionResult> GetShopConversations(Guid shopId)
     {
@@ -43,9 +40,7 @@ public class ChatController : ControllerBase
         return Ok(ApiResponse.SuccessResponse(conversations));
     }
 
-    /// <summary>
-    /// Test Case 2.3: Xem lịch sử tin nhắn trong phòng chat
-    /// </summary>
+    /// Chức năng: Xem lịch sử tin nhắn của 1 phòng chat
     [HttpGet("GetConversationMessages")]
     public async Task<IActionResult> GetConversationMessages(Guid chatId)
     {
@@ -54,9 +49,7 @@ public class ChatController : ControllerBase
         return Ok(ApiResponse.SuccessResponse(messages));
     }
 
-    /// <summary>
-    /// Test Case 2.4: Gửi tin nhắn mới & Broadcast Real-Time
-    /// </summary>
+    /// Chức năng: Gửi tin nhắn mới và bắn thông báo SignalR realtime
     [HttpPost("SendMessage")]
     public async Task<IActionResult> SendMessage(SendMessageDto dto)
     {

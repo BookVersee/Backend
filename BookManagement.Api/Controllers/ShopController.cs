@@ -1,6 +1,7 @@
 using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using BookManagement.Api.Extensions;
 using BookManagement.Repository.Entities.Enums;
 using BookManagement.Service.Common;
 using BookManagement.Service.Book;
@@ -12,6 +13,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace BookManagement.Api.Controllers;
 
+/// Vị trí: Api Controller - Tiếp nhận HTTP Request từ Frontend, kiểm tra đầu vào và trả về ApiResponse.
 [ApiController]
 [Route("api/shop")]
 [Authorize]
@@ -24,137 +26,112 @@ public class ShopController : ControllerBase
         _shopService = shopService;
     }
 
-    private Guid GetUserId()
-    {
-        var userIdStr = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
-        return Guid.TryParse(userIdStr, out var id) ? id : Guid.Empty;
-    }
-
-    /// <summary>
-    /// Test Case 1.1: Xem hồ sơ Shop hiện tại
-    /// </summary>
+    /// Chức năng: Xem thông tin hồ sơ Cửa hàng cá nhân
     [HttpGet("GetMyProfile")]
     public async Task<IActionResult> GetShopProfile()
     {
-        var userId = GetUserId();
+        var userId = User.GetUserId();
         var result = await _shopService.GetShopProfileAsync(userId);
         return Ok(ApiResponse.SuccessResponse(result));
     }
 
-    /// <summary>
-    /// Test Case 1.2: Đăng bán sách mới
-    /// </summary>
+    /// Chức năng: Đăng bán sản phẩm sách mới cho Cửa hàng
     [HttpPost("CreateShopBook")]
     [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> CreateBook(CreateBookRequestDto dto)
     {
-        var userId = GetUserId();
+        var userId = User.GetUserId();
         var result = await _shopService.CreateBookAsync(userId, dto);
         return Ok(ApiResponse.SuccessResponse(result, "Book created successfully"));
     }
 
-    /// <summary>
-    /// Test Case 1.3: Lấy danh sách kho sách & Lọc sản phẩm
-    /// </summary>
+    /// Chức năng: Lấy danh sách tồn kho sách của Cửa hàng
     [HttpGet("GetShopInventory")]
     [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> GetShopInventory(BookQueryDto query)
     {
-        var userId = GetUserId();
+        var userId = User.GetUserId();
         var result = await _shopService.GetShopBooksAsync(userId, query);
         return Ok(ApiResponse.SuccessResponse(result));
     }
 
-    /// <summary>
-    /// Test Case 1.4: Cập nhật thông tin & Giá sách
-    /// </summary>
+    /// Chức năng: Cập nhật thông tin và giá sản phẩm sách
     [HttpPost("UpdateShopBook")]
     [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> UpdateShopBook(Guid bookId, UpdateBookRequestDto dto)
     {
-        var userId = GetUserId();
+        var userId = User.GetUserId();
         var result = await _shopService.UpdateBookAsync(userId, bookId, dto);
         return Ok(ApiResponse.SuccessResponse(result, "Book updated successfully"));
     }
 
-    /// <summary>
-    /// Test Case 1.5: Ẩn sách khỏi gian hàng
-    /// </summary>
+    /// Chức năng: Ẩn sản phẩm sách khỏi gian hàng
     [HttpPost("DeleteShopBook")]
     [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> DeleteShopBook(Guid bookId)
     {
-        var userId = GetUserId();
+        var userId = User.GetUserId();
         await _shopService.DeleteBookAsync(userId, bookId);
         return Ok(ApiResponse.SuccessResponse(null, "Book status updated to HIDDEN successfully"));
     }
 
-    /// <summary>
-    /// Test Case 3.1: Xem chi tiết đơn hàng của Shop
-    /// </summary>
+    /// Chức năng: Xem thông tin chi tiết đơn hàng của Cửa hàng
     [HttpGet("GetShopOrderDetail")]
     [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> GetShopOrderDetail(Guid orderId)
     {
-        var userId = GetUserId();
+        var userId = User.GetUserId();
         var result = await _shopService.GetShopOrderDetailAsync(userId, orderId);
         return Ok(ApiResponse.SuccessResponse(result));
     }
 
-    /// <summary>
-    /// Test Case 3.2: Cập nhật trạng thái đơn hàng
-    /// </summary>
+    /// Chức năng: Cập nhật trạng thái xử lý đơn hàng của Cửa hàng
     [HttpPost("UpdateOrderStatus")]
     [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> UpdateOrderStatus(Guid orderId, UpdateOrderStatusDto dto)
     {
-        var userId = GetUserId();
+        var userId = User.GetUserId();
         await _shopService.UpdateOrderStatusAsync(userId, orderId, dto);
         return Ok(ApiResponse.SuccessResponse(null, "Order status updated successfully"));
     }
 
-    /// <summary>
-    /// Test Case 3.3: Thống kê doanh thu Shop
-    /// </summary>
+    /// Chức năng: Thống kê doanh thu Cửa hàng theo mốc thời gian
     [HttpGet("GetRevenueStatistics")]
     [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> GetRevenueStatistics(RevenueQueryRequest query)
     {
-        var userId = GetUserId();
+        var userId = User.GetUserId();
         var result = await _shopService.GetShopRevenueAsync(userId, query);
         return Ok(ApiResponse.SuccessResponse(result));
     }
 
-    /// <summary>
-    /// Test Case 3.4: Xem & Trả lời đánh giá của khách
-    /// </summary>
+    /// Chức năng: Lấy danh sách đánh giá từ khách hàng dành cho Cửa hàng
     [HttpGet("GetShopFeedbacks")]
     [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> GetShopFeedbacks(ShopFeedbackQueryRequest query)
     {
-        var userId = GetUserId();
+        var userId = User.GetUserId();
         var result = await _shopService.GetShopFeedbacksAsync(userId, query);
         return Ok(ApiResponse.SuccessResponse(result));
     }
 
+    /// Chức năng: Phản hồi bình luận đánh giá của khách hàng
     [HttpPost("ReplyFeedback")]
     [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> ReplyFeedback(Guid feedbackId, FeedbackResponseRequestDto dto)
     {
-        var userId = GetUserId();
+        var userId = User.GetUserId();
         var targetFeedbackId = dto.FeedbackId ?? feedbackId;
         var result = await _shopService.CreateFeedbackResponseAsync(userId, targetFeedbackId, dto);
         return Ok(ApiResponse.SuccessResponse(result, "Feedback response created successfully"));
     }
 
-    /// <summary>
-    /// Test Case 3.5: Xử lý yêu cầu hoàn trả hàng
-    /// </summary>
+    /// Chức năng: Xử lý chấp nhận hoặc từ chối yêu cầu trả hàng
     [HttpPost("ProcessReturnRequest")]
     [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> ProcessReturnRequest(Guid returnRequestId, ProcessReturnRequestDto dto)
     {
-        var userId = GetUserId();
+        var userId = User.GetUserId();
         await _shopService.ProcessReturnRequestAsync(userId, returnRequestId, dto);
         return Ok(ApiResponse.SuccessResponse(null, "Return request processed successfully"));
     }

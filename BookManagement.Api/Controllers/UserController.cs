@@ -12,6 +12,7 @@ using UserResponse = BookManagement.Service.User.UserResponse;
 
 namespace BookManagement.Api.Controllers
 {
+    /// Vị trí: Api Controller - Tiếp nhận HTTP Request từ Frontend, kiểm tra đầu vào và trả về ApiResponse.
     [ApiController]
     [Route("api/user")]
     public class UserController : ControllerBase
@@ -25,7 +26,7 @@ namespace BookManagement.Api.Controllers
             _sessionService = sessionService;
         }
 
-        /// Chức năng: Xem thông tin tài khoản cá nhân. Trả về: Dữ liệu hồ sơ người dùng.
+        /// Chức năng: Xem thông tin hồ sơ tài khoản cá nhân
         [Authorize]
         [HttpGet("GetProfile")]
         public async Task<IActionResult> GetProfile()
@@ -35,7 +36,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<UserResponse>.SuccessResponse(profile));
         }
 
-        /// Chức năng: Cập nhật thông tin cá nhân người dùng. Trả về: Dữ liệu hồ sơ mới nhất.
+        /// Chức năng: Cập nhật thông tin cá nhân (Họ tên, SĐT, Địa chỉ)
         [Authorize]
         [HttpPut("UpdateProfile")]
         public async Task<IActionResult> UpdateProfile(UpdateProfileRequest request)
@@ -45,7 +46,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<UserResponse>.SuccessResponse(updated, "Profile updated successfully."));
         }
 
-        /// TH1 - Bước 1: Gửi mã OTP xác thực đổi/khôi phục mật khẩu qua Gmail.
+        /// Chức năng: Gửi mã OTP đổi mật khẩu về Gmail (Bước 1)
         [Authorize]
         [HttpPost("SendPasswordOtp")]
         public async Task<IActionResult> SendPasswordOtp(SendOtpRequest request)
@@ -54,7 +55,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<string>.SuccessResponse("Mã OTP đã được gửi về Gmail của bạn. Vui lòng kiểm tra hộp thư."));
         }
 
-        /// TH1 - Bước 2: Xác thực mã OTP trước khi nhập mật khẩu mới (Nếu đúng mới cho đổi, sai thì báo lỗi).
+        /// Chức năng: Xác thực mã OTP đổi mật khẩu (Bước 2)
         [Authorize]
         [HttpPost("VerifyPasswordOtp")]
         public async Task<IActionResult> VerifyPasswordOtp(VerifyPasswordOtpRequest request)
@@ -63,7 +64,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<string>.SuccessResponse("Xác thực OTP thành công! Vui lòng chuyển sang bước nhập mật khẩu mới."));
         }
 
-        /// TH1 - Bước 3: Đặt mật khẩu mới (Chỉ cần Email và Mật khẩu mới, không cần ghi lại OTP).
+        /// Chức năng: Đặt mật khẩu mới sau khi xác thực OTP thành công (Bước 3)
         [Authorize]
         [HttpPost("ResetNewPassword")]
         public async Task<IActionResult> ResetNewPassword(ResetNewPasswordRequest request)
@@ -72,7 +73,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<string>.SuccessResponse("Đặt mật khẩu mới thành công!"));
         }
 
-        /// TH2: Thay đổi mật khẩu khi đã đăng nhập (Bằng Mật khẩu cũ + Mật khẩu mới).
+        /// Chức năng: Đổi mật khẩu tài khoản bằng mật khẩu cũ
         [Authorize]
         [HttpPut("ChangePassword")]
         public async Task<IActionResult> ChangePassword(ChangePasswordWithOldPasswordRequest request)
@@ -82,7 +83,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<string>.SuccessResponse("Đổi mật khẩu thành công!"));
         }
 
-        /// Chức năng: Truy vấn lịch sử giao dịch tài chính. Trả về: Danh sách biến động số dư tài khoản.
+        /// Chức năng: Xem lịch sử giao dịch tài chính cá nhân
         [Authorize]
         [HttpGet("GetTransactions")]
         public async Task<IActionResult> GetTransactions()
@@ -92,7 +93,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<IEnumerable<TransactionResponse>>.SuccessResponse(transactions));
         }
 
-        /// Chức năng: Đăng ký mở Cửa hàng bán sách mới. Trả về: Thông tin cửa hàng vừa đăng ký ở trạng thái PENDING.
+        /// Chức năng: Đăng ký nâng cấp mở Cửa hàng bán sách
         [Authorize]
         [HttpPost("RegisterShop")]
         public async Task<IActionResult> RegisterShop(RegisterShopRequest request)
@@ -102,7 +103,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<BookManagement.Service.Shop.ShopResponse>.SuccessResponse(shop, "Shop registration submitted for Admin review."));
         }
 
-        /// Chức năng: Đăng xuất khỏi tài khoản trên thiết bị hiện tại.
+        /// Chức năng: Đăng xuất khỏi tài khoản trên thiết bị hiện tại
         [Authorize]
         [HttpPost("Logout")]
         public async Task<IActionResult> Logout(RevokeTokenRequest? request)
@@ -117,7 +118,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<string>.SuccessResponse("Đăng xuất thành công."));
         }
 
-        /// Chức năng: Đăng xuất khỏi tất cả các thiết bị khác.
+        /// Chức năng: Đăng xuất khỏi tất cả các thiết bị khác
         [Authorize]
         [HttpPost("RevokeAllSessions")]
         public async Task<IActionResult> RevokeAllSessions()
@@ -127,7 +128,7 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<string>.SuccessResponse("Đã đăng xuất khỏi tất cả các thiết bị thành công."));
         }
 
-        /// Chức năng: Xem danh sách tất cả các phiên / thiết bị đang đăng nhập vào tài khoản.
+        /// Chức năng: Xem danh sách các thiết bị đang đăng nhập tài khoản
         [Authorize]
         [HttpGet("GetActiveSessions")]
         public async Task<IActionResult> GetActiveSessions()

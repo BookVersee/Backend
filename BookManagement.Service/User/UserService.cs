@@ -230,6 +230,30 @@ namespace BookManagement.Service.User
             };
         }
 
+        /// Chức năng: Đăng xuất tài khoản người dùng đang đăng nhập (Nút Logout trong User)
+        public async Task LogoutAsync(Guid userId, string? refreshToken = null)
+        {
+            var activeSessions = await _context.UserSessions
+                .Where(us => us.UserId == userId && !us.IsRevoked)
+                .ToListAsync();
+
+            foreach (var session in activeSessions)
+            {
+                session.IsRevoked = true;
+            }
+
+            if (!string.IsNullOrWhiteSpace(refreshToken))
+            {
+                var specificSession = await _context.UserSessions.FirstOrDefaultAsync(us => us.RefreshToken == refreshToken);
+                if (specificSession != null && !specificSession.IsRevoked)
+                {
+                    specificSession.IsRevoked = true;
+                }
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
         private static UserResponse MapToResponse(BookManagement.Repository.Entities.User user) => new UserResponse
         {
             Id = user.Id,

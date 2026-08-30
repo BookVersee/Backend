@@ -48,6 +48,15 @@ Content-Type: application/json
   "refreshToken": "{{refreshToken}}"
 }
 
+### 5b. User Logout (Requires Auth - Nút Logout trong User)
+POST {{HostAddress}}/api/user/logout
+Authorization: Bearer {{accessToken}}
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshToken}}"
+}
+
 ### 6. Revoke All User Sessions (Requires Auth)
 POST {{HostAddress}}/api/auth/revoke-all
 Authorization: Bearer {{accessToken}}

@@ -46,24 +46,29 @@ public static class JwtExtensions
                     OnTokenValidated = async context =>
                     {
                         var dbContext = context.HttpContext.RequestServices.GetRequiredService<BookManagement.Repository.Data.AppDbContext>();
-                        var userIdClaim = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                        if (Guid.TryParse(userIdClaim, out var userId))
+                        var userIdClaim = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                            ?? context.Principal?.FindFirst("sub")?.Value;
+
+                        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
                         {
-                            var user = await dbContext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
-                            if (user == null || user.Status == BookManagement.Repository.Entities.Enums.UserStatus.LOCKED)
-                            {
-                                context.Fail("User account is locked or disabled.");
-                                return;
-                            }
+                            context.Fail("Invalid or missing user identity claim.");
+                            return;
+                        }
 
-                            var hasActiveSession = await dbContext.UserSessions.AsNoTracking()
-                                .AnyAsync(s => s.UserId == userId && !s.IsRevoked && s.ExpiresAt > DateTime.UtcNow);
+                        var user = await dbContext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
+                        if (user == null || user.Status == BookManagement.Repository.Entities.Enums.UserStatus.LOCKED)
+                        {
+                            context.Fail("User account is locked or disabled.");
+                            return;
+                        }
 
-                            if (!hasActiveSession)
-                            {
-                                context.Fail("Session has been logged out or revoked.");
-                                return;
-                            }
+                        var hasActiveSession = await dbContext.UserSessions.AsNoTracking()
+                            .AnyAsync(s => s.UserId == userId && !s.IsRevoked && s.ExpiresAt > DateTime.UtcNow);
+
+                        if (!hasActiveSession)
+                        {
+                            context.Fail("Session has been logged out or revoked.");
+                            return;
                         }
                     }
                 };

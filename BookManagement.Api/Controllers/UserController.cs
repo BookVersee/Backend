@@ -122,5 +122,15 @@ namespace BookManagement.Api.Controllers
             var sessions = await _sessionService.GetUserSessionsAsync(userId);
             return Ok(ApiResponse<IEnumerable<UserSessionResponse>>.SuccessResponse(sessions, "Lấy danh sách thiết bị đang hoạt động thành công."));
         }
+
+        /// Chức năng: Đăng xuất người dùng đang đăng nhập (Nút Logout trong trang User)
+        [Authorize]
+        [HttpPost("Logout")]
+        public async Task<IActionResult> Logout([FromBody] LogoutRequest? request = null)
+        {
+            var userId = User.GetUserId();
+            await _userService.LogoutAsync(userId, request?.RefreshToken);
+            return Ok(ApiResponse<string>.SuccessResponse("Đăng xuất thành công."));
+        }
     }
 }

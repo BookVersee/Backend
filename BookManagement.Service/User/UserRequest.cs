@@ -35,4 +35,9 @@ namespace BookManagement.Service.User
     {
         public string ShopName { get; set; } = null!;
     }
+
+    public class LogoutRequest
+    {
+        public string? RefreshToken { get; set; }
+    }
 }

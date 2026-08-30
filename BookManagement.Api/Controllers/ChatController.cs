@@ -27,7 +27,7 @@ public class ChatController : ControllerBase
     [HttpGet("GetUserConversations")]
     public async Task<IActionResult> GetUserConversations()
     {
-        var userId = User.GetUserId();
+        var (userId, role) = User.GetUserInfo();
         var conversations = await _chatService.GetUserChatThreadsAsync(userId);
         return Ok(ApiResponse.SuccessResponse(conversations));
     }
@@ -44,7 +44,7 @@ public class ChatController : ControllerBase
     [HttpGet("GetConversationMessages")]
     public async Task<IActionResult> GetConversationMessages(Guid chatId)
     {
-        var userId = User.GetUserId();
+        var (userId, role) = User.GetUserInfo();
         var messages = await _chatService.GetChatMessagesAsync(chatId, userId);
         return Ok(ApiResponse.SuccessResponse(messages));
     }
@@ -53,7 +53,7 @@ public class ChatController : ControllerBase
     [HttpPost("SendMessage")]
     public async Task<IActionResult> SendMessage(SendMessageDto dto)
     {
-        var senderId = User.GetUserId();
+        var (senderId, role) = User.GetUserInfo();
         var messageDto = await _chatService.SendMessageAsync(senderId, dto);
         return Ok(ApiResponse.SuccessResponse(messageDto, "Message sent successfully"));
     }

@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using BookManagement.Api.Extensions;
 using BookManagement.Service.Delivery;
 using BookManagement.Service.Common;
 using Microsoft.AspNetCore.Authorization;
@@ -24,6 +25,7 @@ public class DeliveryController : ControllerBase
     [Authorize(Roles = "SHOP,ADMIN,SUPER_ADMIN,DELIVER,SHIPPER")]
     public async Task<IActionResult> CreateDelivery(CreateDeliveryDto dto)
     {
+        var (userId, role) = User.GetUserInfo();
         var result = await _deliveryService.CreateDeliveryAsync(dto);
         return Ok(ApiResponse.SuccessResponse(result, "Delivery created successfully"));
     }
@@ -33,6 +35,7 @@ public class DeliveryController : ControllerBase
     [Authorize(Roles = "SHIPPER,DELIVER,ADMIN,SUPER_ADMIN,SHOP")]
     public async Task<IActionResult> GetDeliveryOrders(string? status)
     {
+        var (userId, role) = User.GetUserInfo();
         var result = await _deliveryService.GetDeliveryOrdersAsync(status);
         return Ok(ApiResponse.SuccessResponse(result));
     }
@@ -42,6 +45,7 @@ public class DeliveryController : ControllerBase
     [Authorize(Roles = "SHIPPER,DELIVER,ADMIN,SUPER_ADMIN,SHOP")]
     public async Task<IActionResult> UpdateDeliveryStatus(Guid deliveryId, UpdateDeliveryStatusDto dto)
     {
+        var (userId, role) = User.GetUserInfo();
         if (deliveryId == Guid.Empty)
         {
             return BadRequest(ApiResponse.ErrorResponse("deliveryId is required."));

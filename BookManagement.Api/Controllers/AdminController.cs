@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using BookManagement.Api.Extensions;
 using BookManagement.Repository.Entities.Enums;
 using BookManagement.Service.Admin;
 using BookManagement.Service.Book;
@@ -34,6 +35,7 @@ namespace BookManagement.Api.Controllers
         [HttpGet("GetUsers")]
         public async Task<IActionResult> GetUsers(UserFilterRequest filter)
         {
+            var (adminId, adminRole) = User.GetUserInfo();
             var users = await _adminService.GetUsersAsync(filter);
             return Ok(ApiResponse<PagedResult<UserResponse>>.SuccessResponse(users));
         }
@@ -42,6 +44,7 @@ namespace BookManagement.Api.Controllers
         [HttpGet("GetUserDetail")]
         public async Task<IActionResult> GetUserDetail(Guid id)
         {
+            var (adminId, adminRole) = User.GetUserInfo();
             var userDetail = await _adminService.GetUserDetailAsync(id);
             return Ok(ApiResponse<UserDetailResponse>.SuccessResponse(userDetail));
         }
@@ -50,6 +53,7 @@ namespace BookManagement.Api.Controllers
         [HttpPut("UpdateUserStatus")]
         public async Task<IActionResult> UpdateUserStatus(Guid id, UpdateUserStatusRequest request)
         {
+            var (adminId, adminRole) = User.GetUserInfo();
             await _adminService.UpdateUserStatusAsync(id, request.Status.ToString());
             return Ok(ApiResponse<string>.SuccessResponse($"User status updated to {request.Status}."));
         }
@@ -58,176 +62,189 @@ namespace BookManagement.Api.Controllers
         [HttpGet("GetDisputes")]
         public async Task<IActionResult> GetDisputes(ReturnRequestStatus? status)
         {
+            var (adminId, adminRole) = User.GetUserInfo();
             var disputes = await _adminService.GetDisputesAsync(status?.ToString());
             return Ok(ApiResponse<IEnumerable<DisputeResponse>>.SuccessResponse(disputes));
         }
 
-        /// Chức năng: Xem chi tiết nội dung khiếu nại
+        /// Chức năng: Xem chi tiết 1 khiếu nại hoàn tiền
         [HttpGet("GetDisputeDetail")]
-        public async Task<IActionResult> GetDisputeDetail(Guid id)
+        public async Task<IActionResult> GetDisputeDetail(Guid disputeId)
         {
-            var dispute = await _adminService.GetDisputeDetailAsync(id);
+            var (adminId, adminRole) = User.GetUserInfo();
+            var dispute = await _adminService.GetDisputeDetailAsync(disputeId);
             return Ok(ApiResponse<DisputeResponse>.SuccessResponse(dispute));
         }
 
-        /// Chức năng: Phê duyệt hoặc từ chối khiếu nại
+        /// Chức năng: Admin phán quyết chấp nhận hoặc từ chối khiếu nại
         [HttpPost("ResolveDispute")]
-        public async Task<IActionResult> ResolveDispute(Guid id, ResolveDisputeRequest request)
+        public async Task<IActionResult> ResolveDispute(Guid disputeId, ResolveDisputeRequest request)
         {
-            await _adminService.ResolveDisputeAsync(id, request);
-            return Ok(ApiResponse<string>.SuccessResponse("Dispute resolved successfully. Resolution note published."));
+            var (adminId, adminRole) = User.GetUserInfo();
+            await _adminService.ResolveDisputeAsync(disputeId, request);
+            return Ok(ApiResponse<string>.SuccessResponse("Dispute resolved successfully."));
         }
 
-        /// Chức năng: Giám sát danh sách tất cả đơn hàng
+        /// Chức năng: Lấy danh sách toàn bộ đơn hàng phân trang
         [HttpGet("GetAllOrders")]
         public async Task<IActionResult> GetAllOrders(int page = 1, int pageSize = 10)
         {
-            var orders = await _adminService.GetAllOrdersAsync(page, pageSize);
-            return Ok(ApiResponse<PagedResult<OrderResponse>>.SuccessResponse(orders));
+            var (adminId, adminRole) = User.GetUserInfo();
+            var result = await _adminService.GetAllOrdersAsync(page, pageSize);
+            return Ok(ApiResponse<PagedResult<OrderResponse>>.SuccessResponse(result));
         }
 
-        /// Chức năng: Lọc đơn hàng theo trạng thái
+        /// Chức năng: Lọc danh sách đơn hàng theo trạng thái
         [HttpGet("GetOrdersByStatus")]
-        public async Task<IActionResult> GetOrdersByStatus(string status, int page = 1, int pageSize = 10)
+        public async Task<IActionResult> GetOrdersByStatus(OrderStatus status, int page = 1, int pageSize = 10)
         {
-            var orders = await _adminService.GetOrdersByStatusAsync(status, page, pageSize);
-            return Ok(ApiResponse<PagedResult<OrderResponse>>.SuccessResponse(orders));
+            var (adminId, adminRole) = User.GetUserInfo();
+            var result = await _adminService.GetOrdersByStatusAsync(status.ToString(), page, pageSize);
+            return Ok(ApiResponse<PagedResult<OrderResponse>>.SuccessResponse(result));
         }
 
-        /// Chức năng: Xem chi tiết toàn diện đơn hàng
+        /// Chức năng: Xem thông tin chi tiết đơn hàng
         [HttpGet("GetOrderDetail")]
-        public async Task<IActionResult> GetOrderDetailAdmin(Guid orderId)
+        public async Task<IActionResult> GetOrderDetail(Guid orderId)
         {
+            var (adminId, adminRole) = User.GetUserInfo();
             var order = await _adminService.GetOrderDetailAsync(orderId);
             return Ok(ApiResponse<OrderResponse>.SuccessResponse(order));
         }
 
-        /// Chức năng: Quản lý danh sách toàn bộ sản phẩm sách
+        /// Chức năng: Lấy danh sách toàn bộ sách phân trang
         [HttpGet("GetAllBooks")]
         public async Task<IActionResult> GetAllBooks(int page = 1, int pageSize = 10)
         {
-            var books = await _adminService.GetAllBooksAsync(page, pageSize);
-            return Ok(ApiResponse<PagedResult<BookResponse>>.SuccessResponse(books));
-        }
-
-        /// Chức năng: Lọc danh sách sách theo trạng thái
-        [HttpGet("GetBooksByStatus")]
-        public async Task<IActionResult> GetBooksByStatus(string status, int page = 1, int pageSize = 10)
-        {
-            var books = await _adminService.GetBooksByStatusAsync(status, page, pageSize);
-            return Ok(ApiResponse<PagedResult<BookResponse>>.SuccessResponse(books));
+            var (adminId, adminRole) = User.GetUserInfo();
+            var result = await _adminService.GetAllBooksAsync(page, pageSize);
+            return Ok(ApiResponse<PagedResult<BookResponse>>.SuccessResponse(result));
         }
 
         /// Chức năng: Ẩn sản phẩm sách vi phạm
         [HttpPut("HideBook")]
         public async Task<IActionResult> HideBook(Guid bookId)
         {
+            var (adminId, adminRole) = User.GetUserInfo();
             await _adminService.HideBookAsync(bookId);
-            return Ok(ApiResponse<string>.SuccessResponse("Book hidden successfully."));
+            return Ok(ApiResponse<string>.SuccessResponse("Book status updated to HIDDEN."));
         }
 
-        /// Chức năng: Quản lý danh sách tất cả các Shop
+        /// Chức năng: Lấy danh sách các thể loại sách
+        [HttpGet("GetCategories")]
+        public async Task<IActionResult> GetCategories()
+        {
+            var (adminId, adminRole) = User.GetUserInfo();
+            var result = await _categoryService.GetAllCategoriesAsync();
+            return Ok(ApiResponse<IEnumerable<CategoryResponse>>.SuccessResponse(result));
+        }
+
+        /// Chức năng: Thêm mới 1 thể loại sách
+        [HttpPost("CreateCategory")]
+        public async Task<IActionResult> CreateCategory(CreateCategoryRequest request)
+        {
+            var (adminId, adminRole) = User.GetUserInfo();
+            var result = await _categoryService.CreateCategoryAsync(request);
+            return Ok(ApiResponse<CategoryResponse>.SuccessResponse(result, "Category created successfully."));
+        }
+
+        /// Chức năng: Cập nhật thông tin thể loại sách
+        [HttpPut("UpdateCategory")]
+        public async Task<IActionResult> UpdateCategory(Guid categoryId, UpdateCategoryRequest request)
+        {
+            var (adminId, adminRole) = User.GetUserInfo();
+            var result = await _categoryService.UpdateCategoryAsync(categoryId, request);
+            return Ok(ApiResponse<CategoryResponse>.SuccessResponse(result, "Category updated successfully."));
+        }
+
+        /// Chức năng: Xóa thể loại sách
+        [HttpDelete("DeleteCategory")]
+        public async Task<IActionResult> DeleteCategory(Guid categoryId)
+        {
+            var (adminId, adminRole) = User.GetUserInfo();
+            await _categoryService.DeleteCategoryAsync(categoryId);
+            return Ok(ApiResponse<string>.SuccessResponse("Category deleted successfully."));
+        }
+
+        /// Chức năng: Lấy danh sách tất cả Cửa hàng
         [HttpGet("GetAllShops")]
         public async Task<IActionResult> GetAllShops(int page = 1, int pageSize = 10)
         {
-            var shops = await _adminService.GetAllShopsAsync(page, pageSize);
-            return Ok(ApiResponse<PagedResult<ShopResponse>>.SuccessResponse(shops));
+            var (adminId, adminRole) = User.GetUserInfo();
+            var result = await _adminService.GetAllShopsAsync(page, pageSize);
+            return Ok(ApiResponse<PagedResult<ShopResponse>>.SuccessResponse(result));
         }
 
-        /// Chức năng: Khóa quyền hoạt động Cửa hàng vi phạm
-        [HttpPost("LockShop")]
+        /// Chức năng: Khóa Cửa hàng vi phạm
+        [HttpPut("LockShop")]
         public async Task<IActionResult> LockShop(Guid shopId, LockShopRequest request)
         {
+            var (adminId, adminRole) = User.GetUserInfo();
             await _adminService.LockShopAsync(shopId, request);
-            return Ok(ApiResponse<string>.SuccessResponse("Shop locked successfully."));
+            return Ok(ApiResponse<string>.SuccessResponse($"Shop status updated to CLOSED."));
         }
 
-        /// Chức năng: Thống kê chỉ số hiệu suất toàn hệ thống
+        /// Chức năng: Thống kê chỉ số Dashboard Admin
         [HttpGet("GetDashboardStatistics")]
         public async Task<IActionResult> GetDashboardStatistics(string period = "month")
         {
-            var stats = await _adminService.GetDashboardStatisticsAsync(period);
-            return Ok(ApiResponse<DashboardStatisticsResponse>.SuccessResponse(stats));
+            var (adminId, adminRole) = User.GetUserInfo();
+            var result = await _adminService.GetDashboardStatisticsAsync(period);
+            return Ok(ApiResponse<DashboardStatisticsResponse>.SuccessResponse(result));
         }
 
-        /// Chức năng: Thống kê báo cáo doanh thu
+        /// Chức năng: Báo cáo doanh thu toàn sàn
         [HttpGet("GetRevenueReport")]
         public async Task<IActionResult> GetRevenueReport(string period = "month")
         {
-            var revenue = await _adminService.GetRevenueReportAsync(period);
-            return Ok(ApiResponse<RevenueReportResponse>.SuccessResponse(revenue));
+            var (adminId, adminRole) = User.GetUserInfo();
+            var result = await _adminService.GetRevenueReportAsync(period);
+            return Ok(ApiResponse<RevenueReportResponse>.SuccessResponse(result));
         }
 
-        /// Chức năng: Thống kê top sản phẩm sách bán chạy
+        /// Chức năng: Lấy danh sách Top sách bán chạy nhất
         [HttpGet("GetTopSellingBooks")]
         public async Task<IActionResult> GetTopSellingBooks(int limit = 10)
         {
-            var books = await _adminService.GetTopSellingBooksAsync(limit);
-            return Ok(ApiResponse<IEnumerable<TopSellingBooksResponse>>.SuccessResponse(books));
+            var (adminId, adminRole) = User.GetUserInfo();
+            var result = await _adminService.GetTopSellingBooksAsync(limit);
+            return Ok(ApiResponse<IEnumerable<TopSellingBooksResponse>>.SuccessResponse(result));
         }
 
-        /// Chức năng: Giám sát danh sách vận đơn giao hàng
+        /// Chức năng: Lấy danh sách vận đơn giao hàng
         [HttpGet("GetDeliveries")]
         public async Task<IActionResult> GetDeliveries(string? status, int page = 1, int pageSize = 10)
         {
-            var deliveries = await _adminService.GetDeliveriesAsync(status, page, pageSize);
-            return Ok(ApiResponse<PagedResult<DeliveryResponse>>.SuccessResponse(deliveries));
+            var (adminId, adminRole) = User.GetUserInfo();
+            var result = await _adminService.GetDeliveriesAsync(status, page, pageSize);
+            return Ok(ApiResponse<PagedResult<DeliveryResponse>>.SuccessResponse(result));
         }
 
         /// Chức năng: Xem chi tiết vận đơn giao hàng
         [HttpGet("GetDeliveryDetail")]
         public async Task<IActionResult> GetDeliveryDetail(Guid deliveryId)
         {
-            var delivery = await _adminService.GetDeliveryDetailAsync(deliveryId);
-            return Ok(ApiResponse<DeliveryResponse>.SuccessResponse(delivery));
+            var (adminId, adminRole) = User.GetUserInfo();
+            var result = await _adminService.GetDeliveryDetailAsync(deliveryId);
+            return Ok(ApiResponse<DeliveryResponse>.SuccessResponse(result));
         }
 
-        /// Chức năng: Xem tất cả thể loại sách
-        [HttpGet("GetAllCategories")]
-        public async Task<IActionResult> GetAllCategories()
-        {
-            var categories = await _categoryService.GetAllCategoriesAsync();
-            return Ok(ApiResponse<IEnumerable<CategoryResponse>>.SuccessResponse(categories));
-        }
-
-        /// Chức năng: Thêm mới thể loại sách
-        [HttpPost("CreateCategory")]
-        public async Task<IActionResult> CreateCategory(CreateCategoryRequest request)
-        {
-            var category = await _categoryService.CreateCategoryAsync(request);
-            return Ok(ApiResponse<CategoryResponse>.SuccessResponse(category, "Category created successfully."));
-        }
-
-        /// Chức năng: Cập nhật thông tin thể loại sách
-        [HttpPut("UpdateCategory")]
-        public async Task<IActionResult> UpdateCategory(Guid id, UpdateCategoryRequest request)
-        {
-            var category = await _categoryService.UpdateCategoryAsync(id, request);
-            return Ok(ApiResponse<CategoryResponse>.SuccessResponse(category, "Category updated successfully."));
-        }
-
-        /// Chức năng: Xóa thể loại sách
-        [HttpDelete("DeleteCategory")]
-        public async Task<IActionResult> DeleteCategory(Guid id)
-        {
-            await _categoryService.DeleteCategoryAsync(id);
-            return Ok(ApiResponse<string>.SuccessResponse("Category deleted successfully."));
-        }
-
-        /// Chức năng: Xem danh sách phản hồi của Shop bị báo cáo
+        /// Chức năng: Lấy danh sách các phản hồi của Shop bị báo cáo vi phạm
         [HttpGet("GetReportedResponses")]
         public async Task<IActionResult> GetReportedResponses()
         {
-            var reports = await _adminService.GetReportedResponsesAsync();
-            return Ok(ApiResponse<IEnumerable<ReportedResponseDto>>.SuccessResponse(reports));
+            var (adminId, adminRole) = User.GetUserInfo();
+            var result = await _adminService.GetReportedResponsesAsync();
+            return Ok(ApiResponse<IEnumerable<ReportedResponseDto>>.SuccessResponse(result));
         }
 
-        /// Chức năng: Xử lý phản hồi của Shop bị báo cáo vi phạm
+        /// Chức năng: Phán quyết kiểm duyệt gỡ phản hồi vi phạm của Shop
         [HttpPost("ModerateShopResponse")]
-        public async Task<IActionResult> ModerateShopResponse(Guid responseId, bool isDelete = true, string? adminNote = null)
+        public async Task<IActionResult> ModerateShopResponse(Guid responseId, bool isDelete, string? adminNote)
         {
+            var (adminId, adminRole) = User.GetUserInfo();
             await _adminService.ModerateShopResponseAsync(responseId, isDelete, adminNote);
-            return Ok(ApiResponse<string>.SuccessResponse("Đã xử lý phản hồi bị báo cáo thành công.", "Response moderated successfully."));
+            return Ok(ApiResponse<string>.SuccessResponse("Đã xử lý kiểm duyệt phản hồi thành công."));
         }
     }
 }

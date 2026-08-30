@@ -7,7 +7,14 @@ using Microsoft.AspNetCore.SignalR;
 
 namespace BookManagement.Api.Hubs;
 
-/// Vị trí: Presentation/Hub - Quản lý luồng kết nối Websocket thời gian thực giữa Khách hàng và Chủ Shop.
+/// <summary>
+///  thu vien HTTP/Websocket
+/// SignalR Real-time Hub: Quản lý luồng kết nối Websocket trực tiếp giữa Khách hàng và Chủ Shop.
+/// Chức năng chính:
+/// - Quản lý tham gia/rời phòng chat (JoinRoom / LeaveRoom).
+/// - Nhận và phát tin nhắn thời gian thực mà không cần reload trang.
+/// Vị trí: Presentation Layer (BookManagement.Api/Hubs).
+/// </summary>
 [Authorize]
 public class ChatHub : Hub
 {
@@ -24,19 +31,25 @@ public class ChatHub : Hub
         return Guid.TryParse(userIdStr, out var id) ? id : Guid.Empty;
     }
 
-    /// Chức năng: Tham gia vào phòng chat cụ thể
+    /// <summary>
+    /// Tham gia vào phòng chat cụ thể (roomName = "chat_{chatId}")
+    /// </summary>
     public async Task JoinRoom(string roomName)
     {
         await Groups.AddToGroupAsync(Context.ConnectionId, roomName);
     }
 
-    /// Chức năng: Rời khỏi phòng chat
+    /// <summary>
+    /// Rời khỏi phòng chat
+    /// </summary>
     public async Task LeaveRoom(string roomName)
     {
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, roomName);
     }
 
-    /// Chức năng: Khách hàng gửi tin nhắn cho Cửa hàng qua Websocket
+    /// <summary>
+    /// Khách hàng gửi tin nhắn cho Cửa hàng qua Websocket
+    /// </summary>
     public async Task SendMessageToShop(Guid shopId, string content, string? imageUrl = null)
     {
         var senderId = GetUserId();
@@ -46,7 +59,9 @@ public class ChatHub : Hub
         await Clients.Group(roomName).SendAsync("ReceiveMessage", messageDto);
     }
 
-    /// Chức năng: Chủ Shop phản hồi tin nhắn cho Khách hàng qua Websocket
+    /// <summary>
+    /// Chủ Shop phản hồi tin nhắn cho Khách hàng qua Websocket
+    /// </summary>
     public async Task SendMessageToUser(Guid userId, Guid shopId, string content, string? imageUrl = null)
     {
         var senderId = GetUserId();

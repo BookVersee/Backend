@@ -31,7 +31,7 @@ namespace BookManagement.Api.Controllers
         [HttpGet("GetProfile")]
         public async Task<IActionResult> GetProfile()
         {
-            var userId = User.GetUserId();
+            var (userId, role) = User.GetUserInfo();
             var profile = await _userService.GetProfileAsync(userId);
             return Ok(ApiResponse<UserResponse>.SuccessResponse(profile));
         }
@@ -41,7 +41,7 @@ namespace BookManagement.Api.Controllers
         [HttpPut("UpdateProfile")]
         public async Task<IActionResult> UpdateProfile(UpdateProfileRequest request)
         {
-            var userId = User.GetUserId();
+            var (userId, role) = User.GetUserInfo();
             var updated = await _userService.UpdateProfileAsync(userId, request);
             return Ok(ApiResponse<UserResponse>.SuccessResponse(updated, "Profile updated successfully."));
         }
@@ -61,7 +61,7 @@ namespace BookManagement.Api.Controllers
         public async Task<IActionResult> VerifyPasswordOtp(VerifyPasswordOtpRequest request)
         {
             await _userService.VerifyPasswordOtpAsync(request);
-            return Ok(ApiResponse<string>.SuccessResponse("Xác thực OTP thành công! Vui lòng chuyển sang bước nhập mật khẩu mới."));
+            return Ok(ApiResponse<string>.SuccessResponse("Xác thực OTP thành công! Bạn có thể đặt mật khẩu mới."));
         }
 
         /// Chức năng: Đặt mật khẩu mới sau khi xác thực OTP thành công (Bước 3)
@@ -70,52 +70,37 @@ namespace BookManagement.Api.Controllers
         public async Task<IActionResult> ResetNewPassword(ResetNewPasswordRequest request)
         {
             await _userService.ResetNewPasswordAsync(request);
-            return Ok(ApiResponse<string>.SuccessResponse("Đặt mật khẩu mới thành công!"));
+            return Ok(ApiResponse<string>.SuccessResponse("Đặt mật khẩu mới thành công. Vui lòng đăng nhập lại."));
         }
 
         /// Chức năng: Đổi mật khẩu tài khoản bằng mật khẩu cũ
         [Authorize]
-        [HttpPut("ChangePassword")]
+        [HttpPost("ChangePassword")]
         public async Task<IActionResult> ChangePassword(ChangePasswordWithOldPasswordRequest request)
         {
-            var userId = User.GetUserId();
+            var (userId, role) = User.GetUserInfo();
             await _userService.ChangePasswordAsync(userId, request);
-            return Ok(ApiResponse<string>.SuccessResponse("Đổi mật khẩu thành công!"));
+            return Ok(ApiResponse<string>.SuccessResponse("Mật khẩu đã được thay đổi thành công."));
         }
 
-        /// Chức năng: Xem lịch sử giao dịch tài chính cá nhân
+        /// Chức năng: Lịch sử giao dịch tài chính cá nhân
         [Authorize]
-        [HttpGet("GetTransactions")]
-        public async Task<IActionResult> GetTransactions()
+        [HttpGet("GetMyTransactions")]
+        public async Task<IActionResult> GetMyTransactions()
         {
-            var userId = User.GetUserId();
+            var (userId, role) = User.GetUserInfo();
             var transactions = await _userService.GetUserTransactionsAsync(userId);
-            return Ok(ApiResponse<IEnumerable<TransactionResponse>>.SuccessResponse(transactions));
+            return Ok(ApiResponse<IEnumerable<TransactionResponse>>.SuccessResponse(transactions, "Lấy lịch sử giao dịch thành công."));
         }
 
-        /// Chức năng: Đăng ký nâng cấp mở Cửa hàng bán sách
+        /// Chức năng: Đăng ký nâng cấp tài khoản thành Cửa hàng bán sách
         [Authorize]
         [HttpPost("RegisterShop")]
         public async Task<IActionResult> RegisterShop(RegisterShopRequest request)
         {
-            var userId = User.GetUserId();
+            var (userId, role) = User.GetUserInfo();
             var shop = await _userService.RegisterShopAsync(userId, request);
-            return Ok(ApiResponse<BookManagement.Service.Shop.ShopResponse>.SuccessResponse(shop, "Shop registration submitted for Admin review."));
-        }
-
-        /// Chức năng: Đăng xuất khỏi tài khoản trên thiết bị hiện tại
-        [Authorize]
-        [HttpPost("Logout")]
-        public async Task<IActionResult> Logout(RevokeTokenRequest? request)
-        {
-            if (!string.IsNullOrEmpty(request?.RefreshToken))
-            {
-                await _sessionService.RevokeSessionAsync(request.RefreshToken);
-            }
-
-            var userId = User.GetUserId();
-            await _sessionService.RevokeAllUserSessionsAsync(userId);
-            return Ok(ApiResponse<string>.SuccessResponse("Đăng xuất thành công."));
+            return Ok(ApiResponse<BookManagement.Service.Shop.ShopResponse>.SuccessResponse(shop, "Đăng ký mở Cửa hàng bán sách thành công. Gian hàng của bạn đã sẵn sàng hoạt động!"));
         }
 
         /// Chức năng: Đăng xuất khỏi tất cả các thiết bị khác
@@ -123,7 +108,7 @@ namespace BookManagement.Api.Controllers
         [HttpPost("RevokeAllSessions")]
         public async Task<IActionResult> RevokeAllSessions()
         {
-            var userId = User.GetUserId();
+            var (userId, role) = User.GetUserInfo();
             await _sessionService.RevokeAllUserSessionsAsync(userId);
             return Ok(ApiResponse<string>.SuccessResponse("Đã đăng xuất khỏi tất cả các thiết bị thành công."));
         }
@@ -133,7 +118,7 @@ namespace BookManagement.Api.Controllers
         [HttpGet("GetActiveSessions")]
         public async Task<IActionResult> GetActiveSessions()
         {
-            var userId = User.GetUserId();
+            var (userId, role) = User.GetUserInfo();
             var sessions = await _sessionService.GetUserSessionsAsync(userId);
             return Ok(ApiResponse<IEnumerable<UserSessionResponse>>.SuccessResponse(sessions, "Lấy danh sách thiết bị đang hoạt động thành công."));
         }

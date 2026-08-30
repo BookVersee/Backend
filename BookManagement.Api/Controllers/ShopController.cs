@@ -30,7 +30,7 @@ public class ShopController : ControllerBase
     [HttpGet("GetMyProfile")]
     public async Task<IActionResult> GetShopProfile()
     {
-        var userId = User.GetUserId();
+        var (userId, role) = User.GetUserInfo();
         var result = await _shopService.GetShopProfileAsync(userId);
         return Ok(ApiResponse.SuccessResponse(result));
     }
@@ -40,7 +40,7 @@ public class ShopController : ControllerBase
     [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> CreateBook(CreateBookRequestDto dto)
     {
-        var userId = User.GetUserId();
+        var (userId, role) = User.GetUserInfo();
         var result = await _shopService.CreateBookAsync(userId, dto);
         return Ok(ApiResponse.SuccessResponse(result, "Book created successfully"));
     }
@@ -50,7 +50,7 @@ public class ShopController : ControllerBase
     [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> GetShopInventory(BookQueryDto query)
     {
-        var userId = User.GetUserId();
+        var (userId, role) = User.GetUserInfo();
         var result = await _shopService.GetShopBooksAsync(userId, query);
         return Ok(ApiResponse.SuccessResponse(result));
     }
@@ -60,7 +60,7 @@ public class ShopController : ControllerBase
     [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> UpdateShopBook(Guid bookId, UpdateBookRequestDto dto)
     {
-        var userId = User.GetUserId();
+        var (userId, role) = User.GetUserInfo();
         var result = await _shopService.UpdateBookAsync(userId, bookId, dto);
         return Ok(ApiResponse.SuccessResponse(result, "Book updated successfully"));
     }
@@ -70,7 +70,7 @@ public class ShopController : ControllerBase
     [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> DeleteShopBook(Guid bookId)
     {
-        var userId = User.GetUserId();
+        var (userId, role) = User.GetUserInfo();
         await _shopService.DeleteBookAsync(userId, bookId);
         return Ok(ApiResponse.SuccessResponse(null, "Book status updated to HIDDEN successfully"));
     }
@@ -80,7 +80,7 @@ public class ShopController : ControllerBase
     [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> GetShopOrderDetail(Guid orderId)
     {
-        var userId = User.GetUserId();
+        var (userId, role) = User.GetUserInfo();
         var result = await _shopService.GetShopOrderDetailAsync(userId, orderId);
         return Ok(ApiResponse.SuccessResponse(result));
     }
@@ -90,7 +90,7 @@ public class ShopController : ControllerBase
     [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> UpdateOrderStatus(Guid orderId, UpdateOrderStatusDto dto)
     {
-        var userId = User.GetUserId();
+        var (userId, role) = User.GetUserInfo();
         await _shopService.UpdateOrderStatusAsync(userId, orderId, dto);
         return Ok(ApiResponse.SuccessResponse(null, "Order status updated successfully"));
     }
@@ -100,7 +100,7 @@ public class ShopController : ControllerBase
     [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> GetRevenueStatistics(RevenueQueryRequest query)
     {
-        var userId = User.GetUserId();
+        var (userId, role) = User.GetUserInfo();
         var result = await _shopService.GetShopRevenueAsync(userId, query);
         return Ok(ApiResponse.SuccessResponse(result));
     }
@@ -110,7 +110,7 @@ public class ShopController : ControllerBase
     [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> GetShopFeedbacks(ShopFeedbackQueryRequest query)
     {
-        var userId = User.GetUserId();
+        var (userId, role) = User.GetUserInfo();
         var result = await _shopService.GetShopFeedbacksAsync(userId, query);
         return Ok(ApiResponse.SuccessResponse(result));
     }
@@ -120,7 +120,7 @@ public class ShopController : ControllerBase
     [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> ReplyFeedback(Guid feedbackId, FeedbackResponseRequestDto dto)
     {
-        var userId = User.GetUserId();
+        var (userId, role) = User.GetUserInfo();
         var targetFeedbackId = dto.FeedbackId ?? feedbackId;
         var result = await _shopService.CreateFeedbackResponseAsync(userId, targetFeedbackId, dto);
         return Ok(ApiResponse.SuccessResponse(result, "Feedback response created successfully"));
@@ -131,7 +131,7 @@ public class ShopController : ControllerBase
     [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> ProcessReturnRequest(Guid returnRequestId, ProcessReturnRequestDto dto)
     {
-        var userId = User.GetUserId();
+        var (userId, role) = User.GetUserInfo();
         await _shopService.ProcessReturnRequestAsync(userId, returnRequestId, dto);
         return Ok(ApiResponse.SuccessResponse(null, "Return request processed successfully"));
     }

@@ -25,11 +25,11 @@ namespace BookManagement.Api.Controllers
             _orderService = orderService;
         }
 
-        /// Chức năng: Lấy danh sách lịch sử đơn hàng
+        /// Chức năng: Lấy danh sách lịch sử đơn hàng của người dùng hoặc Shop
         [HttpGet("GetUserOrders")]
         public async Task<IActionResult> GetUserOrders(OrderStatus? status)
         {
-            var userId = User.GetUserId();
+            var (userId, role) = User.GetUserInfo();
             var orders = await _orderService.GetUserOrdersAsync(userId, status);
             return Ok(ApiResponse<IEnumerable<OrderResponse>>.SuccessResponse(orders));
         }
@@ -40,7 +40,7 @@ namespace BookManagement.Api.Controllers
         [Idempotent]
         public async Task<IActionResult> CreateOrder(CreateOrderRequest request)
         {
-            var userId = User.GetUserId();
+            var (userId, role) = User.GetUserInfo();
             var order = await _orderService.CreateOrderAsync(userId, request);
             return Ok(ApiResponse<OrderResponse>.SuccessResponse(order, "Order created successfully."));
         }
@@ -49,7 +49,7 @@ namespace BookManagement.Api.Controllers
         [HttpGet("GetOrderDetail")]
         public async Task<IActionResult> GetOrderDetail(Guid id)
         {
-            var userId = User.GetUserId();
+            var (userId, role) = User.GetUserInfo();
             var order = await _orderService.GetOrderDetailAsync(userId, id);
             return Ok(ApiResponse<OrderResponse>.SuccessResponse(order));
         }
@@ -58,7 +58,7 @@ namespace BookManagement.Api.Controllers
         [HttpPost("CancelOrder")]
         public async Task<IActionResult> CancelOrder(Guid id)
         {
-            var userId = User.GetUserId();
+            var (userId, role) = User.GetUserInfo();
             await _orderService.CancelOrderAsync(userId, id);
             return Ok(ApiResponse<string>.SuccessResponse("Order cancelled successfully."));
         }
@@ -67,7 +67,7 @@ namespace BookManagement.Api.Controllers
         [HttpPost("SendRequestReturn")]
         public async Task<IActionResult> SendRequestReturn(Guid orderDetailId, CreateReturnRequest input)
         {
-            var userId = User.GetUserId();
+            var (userId, role) = User.GetUserInfo();
             var returnRequest = await _orderService.CreateReturnRequestAsync(userId, orderDetailId, input);
             return Ok(ApiResponse<ReturnRequestResponse>.SuccessResponse(returnRequest, "Return request submitted."));
         }
@@ -76,7 +76,7 @@ namespace BookManagement.Api.Controllers
         [HttpPost("EscalateDispute")]
         public async Task<IActionResult> EscalateDispute(Guid returnRequestId, string? reason)
         {
-            var userId = User.GetUserId();
+            var (userId, role) = User.GetUserInfo();
             await _orderService.EscalateReturnRequestAsync(userId, returnRequestId, reason);
             return Ok(ApiResponse<string>.SuccessResponse("Khiếu nại của bạn đã được gửi tới Admin xử lý.", "Escalation submitted."));
         }

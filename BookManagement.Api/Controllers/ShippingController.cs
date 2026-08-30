@@ -28,7 +28,7 @@ public class ShippingController : ControllerBase
     [Authorize(Roles = "SHOP,ADMIN,SUPER_ADMIN")]
     public async Task<IActionResult> CreateGhnOrder(CreateGhnOrderDto dto)
     {
-        var userId = User.GetUserId();
+        var (userId, role) = User.GetUserInfo();
         var result = await _shippingService.CreateGhnOrderAsync(userId, dto);
         return Ok(ApiResponse.SuccessResponse(result, "GHN shipping order created successfully"));
     }

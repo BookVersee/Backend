@@ -35,7 +35,7 @@ namespace BookManagement.Api.Controllers
         [HttpPost("WriteFeedback")]
         public async Task<IActionResult> WriteFeedback(CreateFeedbackRequest request)
         {
-            var userId = User.GetUserId();
+            var (userId, role) = User.GetUserInfo();
             var feedback = await _feedbackService.CreateFeedbackAsync(userId, request);
             return Ok(ApiResponse<FeedbackResponse>.SuccessResponse(feedback, "Feedback submitted successfully."));
         }
@@ -45,7 +45,7 @@ namespace BookManagement.Api.Controllers
         [HttpPost("ReportResponse")]
         public async Task<IActionResult> ReportResponse(Guid responseId, ReportResponseRequest request)
         {
-            var userId = User.GetUserId();
+            var (userId, role) = User.GetUserInfo();
             await _feedbackService.ReportResponseAsync(userId, responseId, request);
             return Ok(ApiResponse<string>.SuccessResponse("Report submitted to Admin for review."));
         }

@@ -33,7 +33,7 @@ public class PaymentController : ControllerBase
     [Authorize]
     public async Task<IActionResult> CreatePaymentUrl(CreatePaymentUrlDto dto)
     {
-        var userId = User.GetUserId();
+        var (userId, role) = User.GetUserInfo();
         var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
         var (paymentUrl, qrCodeUrl, deeplink) = await _paymentService.CreateMomoUrlAsync(userId, dto, ipAddress);
         return Ok(ApiResponse.SuccessResponse(new 
@@ -76,7 +76,7 @@ public class PaymentController : ControllerBase
     [Idempotent]
     public async Task<IActionResult> ProcessRefund(ProcessRefundDto dto)
     {
-        var userId = User.GetUserId();
+        var (userId, role) = User.GetUserInfo();
         var profile = await _shopService.GetShopProfileAsync(userId);
         await _paymentService.ProcessRefundAsync(profile.ShopId, dto);
         return Ok(ApiResponse.SuccessResponse(null, "MoMo refund processed successfully."));

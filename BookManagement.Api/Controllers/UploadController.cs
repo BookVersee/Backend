@@ -1,5 +1,6 @@
 using System;
 using System.Threading.Tasks;
+using BookManagement.Api.Extensions;
 using BookManagement.Service.Cloudinary;
 using BookManagement.Service.Common;
 using Microsoft.AspNetCore.Authorization;
@@ -15,6 +16,7 @@ public class UploadImageRequest
 }
 
 /// Vị trí: Api Controller - Tiếp nhận HTTP Request từ Frontend, kiểm tra đầu vào và trả về ApiResponse.
+[Authorize]
 [ApiController]
 [Route("api/upload")]
 public class UploadController : ControllerBase
@@ -31,6 +33,7 @@ public class UploadController : ControllerBase
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> UploadImage([FromForm] UploadImageRequest request)
     {
+        var (userId, role) = User.GetUserInfo();
         var file = request.File;
         var folder = request.Folder;
 
@@ -66,6 +69,7 @@ public class UploadController : ControllerBase
     [HttpDelete("image")]
     public async Task<IActionResult> DeleteImage(string publicId)
     {
+        var (userId, role) = User.GetUserInfo();
         if (string.IsNullOrWhiteSpace(publicId))
         {
             return BadRequest(ApiResponse.ErrorResponse("PublicId không được để trống."));

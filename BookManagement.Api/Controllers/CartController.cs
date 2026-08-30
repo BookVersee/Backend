@@ -26,7 +26,7 @@ namespace BookManagement.Api.Controllers
         [HttpGet("GetCart")]
         public async Task<IActionResult> GetCart()
         {
-            var userId = User.GetUserId();
+            var (userId, role) = User.GetUserInfo();
             var cart = await _cartService.GetCartAsync(userId);
             return Ok(ApiResponse<CartResponse>.SuccessResponse(cart));
         }
@@ -35,7 +35,7 @@ namespace BookManagement.Api.Controllers
         [HttpPost("AddToCart")]
         public async Task<IActionResult> AddToCart(AddItemRequest request)
         {
-            var userId = User.GetUserId();
+            var (userId, role) = User.GetUserInfo();
             var cart = await _cartService.AddToCartAsync(userId, request);
             return Ok(ApiResponse<CartResponse>.SuccessResponse(cart, "Item added to cart."));
         }
@@ -44,7 +44,7 @@ namespace BookManagement.Api.Controllers
         [HttpPut("UpdateCartItem")]
         public async Task<IActionResult> UpdateCartItem(Guid cartDetailId, UpdateItemRequest request)
         {
-            var userId = User.GetUserId();
+            var (userId, role) = User.GetUserInfo();
             var cart = await _cartService.UpdateCartItemAsync(userId, cartDetailId, request);
             return Ok(ApiResponse<CartResponse>.SuccessResponse(cart, "Cart item updated."));
         }
@@ -53,7 +53,7 @@ namespace BookManagement.Api.Controllers
         [HttpDelete("RemoveFromCart")]
         public async Task<IActionResult> RemoveFromCart(Guid cartDetailId)
         {
-            var userId = User.GetUserId();
+            var (userId, role) = User.GetUserInfo();
             var cart = await _cartService.RemoveFromCartAsync(userId, cartDetailId);
             return Ok(ApiResponse<CartResponse>.SuccessResponse(cart, "Item removed from cart."));
         }
@@ -62,7 +62,7 @@ namespace BookManagement.Api.Controllers
         [HttpDelete("ClearCart")]
         public async Task<IActionResult> ClearCart()
         {
-            var userId = User.GetUserId();
+            var (userId, role) = User.GetUserInfo();
             await _cartService.ClearCartAsync(userId);
             return Ok(ApiResponse<string>.SuccessResponse("Cart cleared."));
         }

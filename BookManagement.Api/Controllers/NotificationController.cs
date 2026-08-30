@@ -27,7 +27,7 @@ namespace BookManagement.Api.Controllers
         [HttpGet("GetNotifications")]
         public async Task<IActionResult> GetNotifications()
         {
-            var userId = User.GetUserId();
+            var (userId, role) = User.GetUserInfo();
             var notifications = await _notificationService.GetUserNotificationsAsync(userId);
             return Ok(ApiResponse<IEnumerable<NotificationResponse>>.SuccessResponse(notifications));
         }
@@ -36,7 +36,7 @@ namespace BookManagement.Api.Controllers
         [HttpGet("GetUnreadNotifications")]
         public async Task<IActionResult> GetUnreadNotifications()
         {
-            var userId = User.GetUserId();
+            var (userId, role) = User.GetUserInfo();
             var notifications = await _notificationService.GetUnreadNotificationsAsync(userId);
             return Ok(ApiResponse<IEnumerable<NotificationResponse>>.SuccessResponse(notifications));
         }
@@ -45,7 +45,7 @@ namespace BookManagement.Api.Controllers
         [HttpPut("MarkAsRead")]
         public async Task<IActionResult> MarkAsRead(Guid id)
         {
-            var userId = User.GetUserId();
+            var (userId, role) = User.GetUserInfo();
             var success = await _notificationService.MarkNotificationAsReadAsync(userId, id);
             if (!success)
             {
@@ -58,7 +58,7 @@ namespace BookManagement.Api.Controllers
         [HttpPut("MarkAllAsRead")]
         public async Task<IActionResult> MarkAllAsRead()
         {
-            var userId = User.GetUserId();
+            var (userId, role) = User.GetUserInfo();
             await _notificationService.MarkAllNotificationsAsReadAsync(userId);
             return Ok(ApiResponse<string>.SuccessResponse("All notifications marked as read."));
         }

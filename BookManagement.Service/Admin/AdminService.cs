@@ -148,6 +148,49 @@ public class AdminService : IAdminService
         await _context.SaveChangesAsync();
     }
 
+    /// Chức năng: Super Admin tạo tài khoản Quản trị viên (Admin / Staff) mới
+    public async Task<UserResponse> CreateAdminAccountAsync(CreateAdminRequest request)
+    {
+        var username = request.Username.Trim();
+        var email = request.Email.Trim().ToLower();
+
+        if (await _context.Users.AnyAsync(u => u.Username == username))
+            throw new InvalidOperationException("Username is already taken.");
+
+        if (await _context.Users.AnyAsync(u => u.Email == email))
+            throw new InvalidOperationException("Email is already registered.");
+
+        var user = new BookManagement.Repository.Entities.User
+        {
+            Id = Guid.NewGuid(),
+            Username = username,
+            Email = email,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+            FullName = request.FullName,
+            Phone = request.Phone,
+            Address = request.Address,
+            Role = request.Role == UserRole.SUPER_ADMIN ? UserRole.SUPER_ADMIN : UserRole.ADMIN,
+            Status = UserStatus.ACTIVE,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+        await _context.Users.AddAsync(user);
+        await _context.SaveChangesAsync();
+
+        return new UserResponse
+        {
+            Id = user.Id,
+            Username = user.Username,
+            Email = user.Email,
+            FullName = user.FullName,
+            Phone = user.Phone,
+            Address = user.Address,
+            Role = user.Role,
+            Status = user.Status,
+            CreatedAt = user.CreatedAt
+        };
+    }
+
     /// Chức năng: Lấy danh sách các tranh chấp/khiếu nại trả hàng
     public async Task<IEnumerable<DisputeResponse>> GetDisputesAsync(string? status = null)
     {

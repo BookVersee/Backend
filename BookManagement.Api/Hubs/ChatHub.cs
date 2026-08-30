@@ -50,6 +50,7 @@ public class ChatHub : Hub
     /// <summary>
     /// Khách hàng gửi tin nhắn cho Cửa hàng qua Websocket
     /// </summary>
+    [Authorize(Roles = "CUSTOMER,SHOP,ADMIN,SUPER_ADMIN")]
     public async Task SendMessageToShop(Guid shopId, string content, string? imageUrl = null)
     {
         var senderId = GetUserId();
@@ -62,6 +63,7 @@ public class ChatHub : Hub
     /// <summary>
     /// Chủ Shop phản hồi tin nhắn cho Khách hàng qua Websocket
     /// </summary>
+    [Authorize(Roles = "SHOP,ADMIN,SUPER_ADMIN")]
     public async Task SendMessageToUser(Guid userId, Guid shopId, string content, string? imageUrl = null)
     {
         var senderId = GetUserId();

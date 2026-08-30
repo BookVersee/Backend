@@ -28,6 +28,7 @@ public class ShopController : ControllerBase
 
     /// Chức năng: Xem thông tin hồ sơ Cửa hàng cá nhân
     [HttpGet("GetMyProfile")]
+    [Authorize(Roles = "SHOP")]
     public async Task<IActionResult> GetShopProfile()
     {
         var (userId, role) = User.GetUserInfo();

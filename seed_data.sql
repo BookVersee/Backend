@@ -1,15 +1,18 @@
 USE [BookManagementDb];
 GO
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+GO
 
 -- 1. Thêm Thể loại Sách (Categories)
 IF NOT EXISTS (SELECT 1 FROM Categories WHERE CategoryName = N'Văn Học')
 BEGIN
-    INSERT INTO Categories (Id, CategoryName, Status, IsDeleted) VALUES 
-    (NEWID(), N'Văn Học', 1, 0),
-    (NEWID(), N'Kinh Tế & Quản Trị', 1, 0),
-    (NEWID(), N'Công Nghệ Thông Tin', 1, 0),
-    (NEWID(), N'Tâm Lý & Kỹ Năng Sống', 1, 0),
-    (NEWID(), N'Ngoại Ngữ & Du Học', 1, 0);
+    INSERT INTO Categories (Id, CategoryName, Status, CreatedAt, IsDeleted) VALUES 
+    (NEWID(), N'Văn Học', 1, SYSDATETIMEOFFSET(), 0),
+    (NEWID(), N'Kinh Tế & Quản Trị', 1, SYSDATETIMEOFFSET(), 0),
+    (NEWID(), N'Công Nghệ Thông Tin', 1, SYSDATETIMEOFFSET(), 0),
+    (NEWID(), N'Tâm Lý & Kỹ Năng Sống', 1, SYSDATETIMEOFFSET(), 0),
+    (NEWID(), N'Ngoại Ngữ & Du Học', 1, SYSDATETIMEOFFSET(), 0);
 END;
 GO
 
@@ -40,16 +43,16 @@ GO
 DECLARE @SO1Id UNIQUEIDENTIFIER = (SELECT Id FROM Users WHERE Username = 'shopowner1');
 DECLARE @SO2Id UNIQUEIDENTIFIER = (SELECT Id FROM Users WHERE Username = 'shopowner2');
 
-IF @SO1Id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Shops WHERE UserId = @SO1Id)
+IF @SO1Id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Shops WHERE Id = @SO1Id)
 BEGIN
-    INSERT INTO Shops (Id, UserId, ShopName, Condition, Rating, CreatedAt, IsDeleted) VALUES
-    (NEWID(), @SO1Id, N'Nhà Sách Tri Thức Việt', 'OPEN', 4.8, SYSDATETIMEOFFSET(), 0);
+    INSERT INTO Shops (Id, ShopName, Condition, Rating, ViolationCount) VALUES
+    (@SO1Id, N'Nhà Sách Tri Thức Việt', 'OPEN', 4.8, 0);
 END;
 
-IF @SO2Id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Shops WHERE UserId = @SO2Id)
+IF @SO2Id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Shops WHERE Id = @SO2Id)
 BEGIN
-    INSERT INTO Shops (Id, UserId, ShopName, Condition, Rating, CreatedAt, IsDeleted) VALUES
-    (NEWID(), @SO2Id, N'Nhà Sách Nhã Nam Demo', 'OPEN', 4.9, SYSDATETIMEOFFSET(), 0);
+    INSERT INTO Shops (Id, ShopName, Condition, Rating, ViolationCount) VALUES
+    (@SO2Id, N'Nhà Sách Nhã Nam Demo', 'OPEN', 4.9, 0);
 END;
 GO
 
@@ -126,23 +129,23 @@ BEGIN
         DECLARE @OD1Id UNIQUEIDENTIFIER = NEWID();
         DECLARE @OD2Id UNIQUEIDENTIFIER = NEWID();
 
-        INSERT INTO OrderDetails (Id, OrderId, BookId, Quantity, UnitPrice, ReturnStatus) VALUES
-        (@OD1Id, @Order1Id, @Book1, 1, 125000, 'NONE'),
-        (@OD2Id, @Order1Id, @Book2, 1, 89000, 'NONE');
+        INSERT INTO OrderDetails (Id, OrderId, BookId, Quantity, UnitPrice, ReturnStatus, IsDeleted) VALUES
+        (@OD1Id, @Order1Id, @Book1, 1, 125000, 'NONE', 0),
+        (@OD2Id, @Order1Id, @Book2, 1, 89000, 'NONE', 0);
 
         -- Đơn 2: Đang chờ giao hàng (PENDING) để test GHN / Vận đơn
         INSERT INTO Orders (Id, UserId, TotalAmount, OrderStatus, ShippingAddress, Weight, Note, CreatedAt, IsDeleted) VALUES
         (@Order2Id, @Cust1, 250000, 'APPROVED', N'123 Nguyễn Huệ, Q1, TP.HCM', 1.0, N'Đóng gói cẩn thận', SYSDATETIMEOFFSET(), 0);
 
-        INSERT INTO OrderDetails (Id, OrderId, BookId, Quantity, UnitPrice, ReturnStatus) VALUES
-        (NEWID(), @Order2Id, @Book3, 1, 250000, 'NONE');
+        INSERT INTO OrderDetails (Id, OrderId, BookId, Quantity, UnitPrice, ReturnStatus, IsDeleted) VALUES
+        (NEWID(), @Order2Id, @Book3, 1, 250000, 'NONE', 0);
 
         -- Đơn 3: PENDING để test duyệt đơn & VNPAY
         INSERT INTO Orders (Id, UserId, TotalAmount, OrderStatus, ShippingAddress, Weight, Note, CreatedAt, IsDeleted) VALUES
         (@Order3Id, @Cust2, 125000, 'PENDING', N'456 Lê Lợi, Q1, TP.HCM', 0.5, N'Gọi trước khi giao', SYSDATETIMEOFFSET(), 0);
 
-        INSERT INTO OrderDetails (Id, OrderId, BookId, Quantity, UnitPrice, ReturnStatus) VALUES
-        (NEWID(), @Order3Id, @Book1, 1, 125000, 'NONE');
+        INSERT INTO OrderDetails (Id, OrderId, BookId, Quantity, UnitPrice, ReturnStatus, IsDeleted) VALUES
+        (NEWID(), @Order3Id, @Book1, 1, 125000, 'NONE', 0);
 
         -- Đánh giá Feedbacks (Test Suite 3.4)
         DECLARE @Shop1 UNIQUEIDENTIFIER = (SELECT TOP 1 Id FROM Shops WHERE ShopName = N'Nhà Sách Tri Thức Việt');
@@ -153,8 +156,8 @@ BEGIN
             (@Feedback1Id, @Shop1, @OD1Id, 5, N'Sách đóng gói rất đẹp, giao nhanh tuyệt vời!', 'BOOK', NULL, SYSDATETIMEOFFSET(), 0);
 
             -- Yêu cầu đổi trả mẫu (Test Suite 3.5 & 6.2)
-            INSERT INTO ReturnRequests (Id, OrderDetailId, ReasonType, DetailedReason, Status, RefundAmount, CreatedAt) VALUES
-            (NEWID(), @OD2Id, 'DAMAGED', N'Sách bị lỗi từ nhà in', 'PENDING', 89000, SYSDATETIMEOFFSET());
+            INSERT INTO ReturnRequests (Id, OrderDetailId, ReasonType, DetailedReason, Status, RefundAmount, CreatedAt, IsDeleted) VALUES
+            (NEWID(), @OD2Id, 'DAMAGED', N'Sách bị lỗi từ nhà in', 'PENDING', 89000, SYSDATETIMEOFFSET(), 0);
         END;
     END;
 END;
@@ -175,7 +178,7 @@ BEGIN
 
         INSERT INTO Messages (Id, ChatId, SenderId, Content, ImageUrl, IsRead, CreatedAt, IsDeleted) VALUES
         (NEWID(), @ChatId, @CustUser, N'Chào Shop, cuốn Đắc Nhân Tâm bản cao cấp còn sẵn hàng không ạ?', NULL, 1, DATEADD(MINUTE, -10, SYSDATETIMEOFFSET()), 0),
-        (NEWID(), @ChatId, (SELECT TOP 1 UserId FROM Shops WHERE Id = @Shop1Entity), N'Dạ chào bạn, sách bên mình luôn có sẵn và được bọc màng co cẩn thận bạn nhé!', NULL, 1, DATEADD(MINUTE, -5, SYSDATETIMEOFFSET()), 0),
+        (NEWID(), @ChatId, @Shop1Entity, N'Dạ chào bạn, sách bên mình luôn có sẵn và được bọc màng co cẩn thận bạn nhé!', NULL, 1, DATEADD(MINUTE, -5, SYSDATETIMEOFFSET()), 0),
         (NEWID(), @ChatId, @CustUser, N'Shop ơi kiểm tra giúp mình đơn hàng vừa đặt nhé!', NULL, 0, SYSDATETIMEOFFSET(), 0);
     END;
 END;

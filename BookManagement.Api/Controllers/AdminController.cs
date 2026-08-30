@@ -58,6 +58,16 @@ namespace BookManagement.Api.Controllers
             return Ok(ApiResponse<string>.SuccessResponse($"User status updated to {request.Status}."));
         }
 
+        /// Chức năng: Super Admin tạo tài khoản Quản trị viên (Admin / Staff) mới
+        [HttpPost("CreateAdmin")]
+        [Authorize(Roles = "SUPER_ADMIN")]
+        public async Task<IActionResult> CreateAdmin(CreateAdminRequest request)
+        {
+            var (adminId, adminRole) = User.GetUserInfo();
+            var result = await _adminService.CreateAdminAccountAsync(request);
+            return Ok(ApiResponse<UserResponse>.SuccessResponse(result, "Tạo tài khoản Quản trị viên thành công."));
+        }
+
         /// Chức năng: Lấy danh sách khiếu nại hoàn tiền
         [HttpGet("GetDisputes")]
         public async Task<IActionResult> GetDisputes(ReturnRequestStatus? status)

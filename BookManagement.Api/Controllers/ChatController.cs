@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using BookManagement.Api.Extensions;
+using BookManagement.Repository.Entities.Enums;
 using BookManagement.Service.Chat;
 using BookManagement.Service.Common;
 using Microsoft.AspNetCore.Authorization;
@@ -25,6 +26,7 @@ public class ChatController : ControllerBase
 
     /// Chức năng: Khách hàng xem danh sách hội thoại chat
     [HttpGet("GetUserConversations")]
+    [Authorize(Roles = "CUSTOMER,SHOP,ADMIN,SUPER_ADMIN")]
     public async Task<IActionResult> GetUserConversations()
     {
         var (userId, role) = User.GetUserInfo();
@@ -34,14 +36,18 @@ public class ChatController : ControllerBase
 
     /// Chức năng: Shop xem danh sách khách hàng chat với mình
     [HttpGet("GetShopConversations")]
-    public async Task<IActionResult> GetShopConversations(Guid shopId)
+    [Authorize(Roles = "SHOP,ADMIN,SUPER_ADMIN")]
+    public async Task<IActionResult> GetShopConversations([FromQuery] Guid? shopId = null)
     {
-        var conversations = await _chatService.GetShopChatThreadsAsync(shopId);
+        var (userId, role) = User.GetUserInfo();
+        var targetShopId = (role == UserRole.SHOP) ? userId : (shopId ?? userId);
+        var conversations = await _chatService.GetShopChatThreadsAsync(targetShopId);
         return Ok(ApiResponse.SuccessResponse(conversations));
     }
 
     /// Chức năng: Xem lịch sử tin nhắn của 1 phòng chat
     [HttpGet("GetConversationMessages")]
+    [Authorize(Roles = "CUSTOMER,SHOP,ADMIN,SUPER_ADMIN")]
     public async Task<IActionResult> GetConversationMessages(Guid chatId)
     {
         var (userId, role) = User.GetUserInfo();
@@ -51,6 +57,7 @@ public class ChatController : ControllerBase
 
     /// Chức năng: Gửi tin nhắn mới và bắn thông báo SignalR realtime
     [HttpPost("SendMessage")]
+    [Authorize(Roles = "CUSTOMER,SHOP,ADMIN,SUPER_ADMIN")]
     public async Task<IActionResult> SendMessage(SendMessageDto dto)
     {
         var (senderId, role) = User.GetUserInfo();

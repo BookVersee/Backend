@@ -29,3 +29,14 @@ public class UpdateDeliveryStatusRequest
 {
     public required string Status { get; set; }
 }
+
+public class CreateAdminRequest
+{
+    public string Username { get; set; } = null!;
+    public string Email { get; set; } = null!;
+    public string Password { get; set; } = null!;
+    public string? FullName { get; set; }
+    public string? Phone { get; set; }
+    public string? Address { get; set; }
+    public BookManagement.Repository.Entities.Enums.UserRole Role { get; set; } = BookManagement.Repository.Entities.Enums.UserRole.ADMIN;
+}

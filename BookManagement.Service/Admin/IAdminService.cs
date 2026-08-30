@@ -16,6 +16,7 @@ public interface IAdminService
     Task<PagedResult<UserResponse>> GetUsersAsync(UserFilterRequest filter);
     Task<UserDetailResponse> GetUserDetailAsync(Guid userId);
     Task UpdateUserStatusAsync(Guid userId, string status);
+    Task<UserResponse> CreateAdminAccountAsync(CreateAdminRequest request);
 
     // Dispute/Return Request Management
     Task<IEnumerable<DisputeResponse>> GetDisputesAsync(string? status = null);

@@ -33,7 +33,7 @@ namespace BookManagement.Api.Controllers
 
         /// Chức năng: Lọc danh sách người dùng phân trang
         [HttpGet("GetUsers")]
-        public async Task<IActionResult> GetUsers(UserFilterRequest filter)
+        public async Task<IActionResult> GetUsers([FromQuery] UserFilterRequest filter)
         {
             var (adminId, adminRole) = User.GetUserInfo();
             var users = await _adminService.GetUsersAsync(filter);

@@ -23,6 +23,7 @@ namespace BookManagement.Service.Auth
         private readonly AppDbContext _context;
         private readonly ITokenService _tokenService;
         private readonly GoogleAuthOptions _googleAuthOptions;
+        private readonly EmailOptions _emailOptions;
         private readonly IEmailService _emailService;
         private readonly IMemoryCache _memoryCache;
 
@@ -30,12 +31,14 @@ namespace BookManagement.Service.Auth
             AppDbContext context,
             ITokenService tokenService,
             IOptions<GoogleAuthOptions> googleAuthOptions,
+            IOptions<EmailOptions> emailOptions,
             IEmailService emailService,
             IMemoryCache memoryCache)
         {
             _context = context;
             _tokenService = tokenService;
             _googleAuthOptions = googleAuthOptions.Value;
+            _emailOptions = emailOptions.Value;
             _emailService = emailService;
             _memoryCache = memoryCache;
         }
@@ -241,11 +244,22 @@ namespace BookManagement.Service.Auth
             GoogleJsonWebSignature.Payload payload;
             try
             {
-                var settings = new GoogleJsonWebSignature.ValidationSettings();
+                var validAudiences = new List<string>();
                 if (!string.IsNullOrWhiteSpace(_googleAuthOptions.ClientId) && !_googleAuthOptions.ClientId.Contains("YOUR_GOOGLE_CLOUD"))
                 {
-                    settings.Audience = new[] { _googleAuthOptions.ClientId };
+                    validAudiences.Add(_googleAuthOptions.ClientId);
                 }
+                if (!string.IsNullOrWhiteSpace(_emailOptions.ClientId) && !validAudiences.Contains(_emailOptions.ClientId))
+                {
+                    validAudiences.Add(_emailOptions.ClientId);
+                }
+
+                var settings = new GoogleJsonWebSignature.ValidationSettings();
+                if (validAudiences.Count > 0)
+                {
+                    settings.Audience = validAudiences;
+                }
+
                 payload = await GoogleJsonWebSignature.ValidateAsync(request.IdToken, settings);
             }
             catch (Exception ex)
@@ -304,7 +318,7 @@ namespace BookManagement.Service.Auth
             };
         }
 
-        /// Chức năng: Gửi mã OTP khôi phục mật khẩu qua Email
+        /// Chức năng: Gửi mã OTP khôi phục mật khẩu qua Email (Google Cloud Gmail API)
         public async Task SendPasswordResetOtpAsync(string email)
         {
             if (string.IsNullOrWhiteSpace(email))
@@ -381,7 +395,7 @@ namespace BookManagement.Service.Auth
             }
 
             var verifiedKey = $"reset_verified_{user.Email.ToLower()}";
-            if (!_memoryCache.TryGetValue(verifiedKey, out bool isVerified) || !isVerified)
+            if (!_cacheVerified(verifiedKey))
             {
                 throw new InvalidOperationException("Phiên xác thực OTP không tồn tại hoặc đã hết hạn. Vui lòng thực hiện lại bước xác thực OTP.");
             }
@@ -391,6 +405,11 @@ namespace BookManagement.Service.Auth
             await _context.SaveChangesAsync();
 
             _memoryCache.Remove(verifiedKey);
+        }
+
+        private bool _cacheVerified(string verifiedKey)
+        {
+            return _memoryCache.TryGetValue(verifiedKey, out bool isVerified) && isVerified;
         }
 
         private static UserResponse MapToUserResponse(UserEntity user) => new UserResponse

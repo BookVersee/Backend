@@ -48,7 +48,7 @@ public class ShopController : ControllerBase
     /// Chức năng: Lấy danh sách tồn kho sách của Cửa hàng
     [HttpGet("GetShopInventory")]
     [Authorize(Roles = "SHOP")]
-    public async Task<IActionResult> GetShopInventory(BookQueryDto query)
+    public async Task<IActionResult> GetShopInventory([FromQuery] BookQueryDto query)
     {
         var (userId, role) = User.GetUserInfo();
         var result = await _shopService.GetShopBooksAsync(userId, query);
@@ -98,7 +98,7 @@ public class ShopController : ControllerBase
     /// Chức năng: Thống kê doanh thu Cửa hàng theo mốc thời gian
     [HttpGet("GetRevenueStatistics")]
     [Authorize(Roles = "SHOP")]
-    public async Task<IActionResult> GetRevenueStatistics(RevenueQueryRequest query)
+    public async Task<IActionResult> GetRevenueStatistics([FromQuery] RevenueQueryRequest query)
     {
         var (userId, role) = User.GetUserInfo();
         var result = await _shopService.GetShopRevenueAsync(userId, query);
@@ -108,7 +108,7 @@ public class ShopController : ControllerBase
     /// Chức năng: Lấy danh sách đánh giá từ khách hàng dành cho Cửa hàng
     [HttpGet("GetShopFeedbacks")]
     [Authorize(Roles = "SHOP")]
-    public async Task<IActionResult> GetShopFeedbacks(ShopFeedbackQueryRequest query)
+    public async Task<IActionResult> GetShopFeedbacks([FromQuery] ShopFeedbackQueryRequest query)
     {
         var (userId, role) = User.GetUserInfo();
         var result = await _shopService.GetShopFeedbacksAsync(userId, query);

@@ -22,7 +22,7 @@ namespace BookManagement.Api.Controllers
 
         /// Chức năng: Tìm kiếm và lọc danh sách sản phẩm sách
         [HttpGet("FindBooks")]
-        public async Task<IActionResult> FindBooks(BookQueryDto filter)
+        public async Task<IActionResult> FindBooks([FromQuery] BookQueryDto filter)
         {
             var result = await _bookService.FindBooksAsync(filter);
             return Ok(ApiResponse<PagedResponse<BookResponse>>.SuccessResponse(result));

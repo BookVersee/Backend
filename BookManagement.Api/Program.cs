@@ -143,7 +143,26 @@ using (var scope = app.Services.CreateScope())
             }
             else
             {
-                // Auto-sync schema changes for existing database
+                dbContext.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (
+                        SELECT 1 FROM sys.columns 
+                        WHERE object_id = OBJECT_ID(N'[Shops]') 
+                        AND name = 'ViolationCount'
+                    )
+                    BEGIN
+                        ALTER TABLE [Shops] ADD [ViolationCount] INT NOT NULL DEFAULT 0;
+                    END");
+
+                dbContext.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (
+                        SELECT 1 FROM sys.columns 
+                        WHERE object_id = OBJECT_ID(N'[Shops]') 
+                        AND name = 'LockedUntil'
+                    )
+                    BEGIN
+                        ALTER TABLE [Shops] ADD [LockedUntil] DATETIMEOFFSET NULL;
+                    END");
+
                 dbContext.Database.ExecuteSqlRaw(@"
                     IF NOT EXISTS (
                         SELECT 1 FROM sys.columns 
@@ -173,6 +192,33 @@ using (var scope = app.Services.CreateScope())
                     BEGIN
                         EXEC('CREATE UNIQUE NONCLUSTERED INDEX [IX_TransactionHistories_TransactionCode] ON [TransactionHistories]([TransactionCode]) WHERE [TransactionCode] IS NOT NULL;');
                     END");
+
+                // Auto-sync CreatedAt and UpdatedAt dynamically for ALL tables in SQL Server database
+                dbContext.Database.ExecuteSqlRaw(@"
+                    DECLARE @TableName NVARCHAR(255);
+                    DECLARE @Sql NVARCHAR(MAX);
+
+                    DECLARE table_cursor CURSOR FOR 
+                    SELECT name FROM sys.tables WHERE type = 'U' AND name NOT LIKE '__EF%';
+
+                    OPEN table_cursor;
+                    FETCH NEXT FROM table_cursor INTO @TableName;
+
+                    WHILE @@FETCH_STATUS = 0
+                    BEGIN
+                        SET @Sql = 'IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N''' + @TableName + ''') AND name = ''CreatedAt'') ' +
+                                   'BEGIN ALTER TABLE [' + @TableName + '] ADD [CreatedAt] DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(); END';
+                        EXEC sp_executesql @Sql;
+
+                        SET @Sql = 'IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N''' + @TableName + ''') AND name = ''UpdatedAt'') ' +
+                                   'BEGIN ALTER TABLE [' + @TableName + '] ADD [UpdatedAt] DATETIMEOFFSET NULL; END';
+                        EXEC sp_executesql @Sql;
+
+                        FETCH NEXT FROM table_cursor INTO @TableName;
+                    END;
+
+                    CLOSE table_cursor;
+                    DEALLOCATE table_cursor;");
             }
 
             // Ensure any user with username starting with 'admin' has ADMIN role in DB

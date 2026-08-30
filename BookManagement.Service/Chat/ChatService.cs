@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using BookManagement.Repository.Data;
 using BookManagement.Repository.Entities;
+using BookManagement.Repository.Entities.Enums;
 using ChatEntity = BookManagement.Repository.Entities.Chat;
 using Microsoft.EntityFrameworkCore;
 
@@ -84,7 +85,7 @@ namespace BookManagement.Service.Chat
 
             if (chat == null)
             {
-                throw new KeyNotFoundException("Chat thread not found.");
+                throw new KeyNotFoundException("Không tìm thấy cuộc trò chuyện này.");
             }
 
             var isCustomer = chat.UserId == requesterId;
@@ -92,7 +93,7 @@ namespace BookManagement.Service.Chat
 
             if (!isCustomer && !isShopOwner)
             {
-                throw new UnauthorizedAccessException("You are not authorized to view messages in this chat thread.");
+                throw new UnauthorizedAccessException("Bạn không có quyền truy cập đoạn chat này.");
             }
 
             var messages = await _db.Messages
@@ -129,6 +130,11 @@ namespace BookManagement.Service.Chat
         /// Chức năng: Gửi tin nhắn mới và bắn thông báo SignalR realtime
         public async Task<MessageDto> SendMessageAsync(Guid senderId, SendMessageDto dto)
         {
+            if (string.IsNullOrWhiteSpace(dto.Content) && string.IsNullOrWhiteSpace(dto.ImageUrl))
+            {
+                throw new ArgumentException("Nội dung tin nhắn hoặc hình ảnh không được để trống.");
+            }
+
             Guid targetUserId = senderId;
             Guid targetShopId = dto.ShopId ?? Guid.Empty;
 
@@ -158,7 +164,35 @@ namespace BookManagement.Service.Chat
 
             if (targetShopId == Guid.Empty)
             {
-                throw new ArgumentException("ShopId or ChatId is required.");
+                throw new ArgumentException("Thiếu thông tin Cửa hàng (ShopId) hoặc Phòng Chat (ChatId).");
+            }
+
+            // Kiểm tra và tự động bảo đảm bản ghi Shop tồn tại trong CSDL để tránh lỗi khóa ngoại (Foreign Key FK_Chats_Shops)
+            var shop = await _db.Shops.FirstOrDefaultAsync(s => s.Id == targetShopId);
+            if (shop == null)
+            {
+                var shopUser = await _db.Users.FirstOrDefaultAsync(u => u.Id == targetShopId);
+                if (shopUser == null)
+                {
+                    throw new KeyNotFoundException("Cửa hàng không tồn tại trên hệ thống.");
+                }
+
+                shop = new BookManagement.Repository.Entities.Shop
+                {
+                    Id = shopUser.Id,
+                    ShopName = shopUser.FullName ?? shopUser.Username,
+                    Condition = ShopCondition.OPEN,
+                    Rating = 0
+                };
+                await _db.Shops.AddAsync(shop);
+                await _db.SaveChangesAsync();
+            }
+
+            // Kiểm tra Người dùng gửi chat có tồn tại không
+            var userExists = await _db.Users.AnyAsync(u => u.Id == targetUserId);
+            if (!userExists)
+            {
+                throw new KeyNotFoundException("Tài khoản người dùng không tồn tại.");
             }
 
             var chat = await _db.Chats.FirstOrDefaultAsync(c => c.UserId == targetUserId && c.ShopId == targetShopId);
@@ -166,6 +200,7 @@ namespace BookManagement.Service.Chat
             {
                 chat = new ChatEntity
                 {
+                    Id = Guid.NewGuid(),
                     UserId = targetUserId,
                     ShopId = targetShopId,
                     CreatedAt = DateTimeOffset.UtcNow
@@ -176,10 +211,11 @@ namespace BookManagement.Service.Chat
 
             var message = new Message
             {
+                Id = Guid.NewGuid(),
                 ChatId = chat.Id,
                 SenderId = senderId,
-                Content = dto.Content,
-                ImageUrl = dto.ImageUrl,
+                Content = dto.Content?.Trim(),
+                ImageUrl = dto.ImageUrl?.Trim(),
                 IsRead = false,
                 CreatedAt = DateTimeOffset.UtcNow
             };
@@ -194,7 +230,7 @@ namespace BookManagement.Service.Chat
                 MessageId = message.Id,
                 ChatId = message.ChatId,
                 SenderId = message.SenderId,
-                Content = message.Content,
+                Content = message.Content ?? string.Empty,
                 ImageUrl = message.ImageUrl,
                 IsRead = message.IsRead,
                 CreatedAt = message.CreatedAt
@@ -202,7 +238,14 @@ namespace BookManagement.Service.Chat
 
             if (_realtimeNotifier != null)
             {
-                await _realtimeNotifier.BroadcastMessageAsync(chat.Id, messageDto);
+                try
+                {
+                    await _realtimeNotifier.BroadcastMessageAsync(chat.Id, messageDto);
+                }
+                catch
+                {
+                    // Bỏ qua lỗi SignalR realtime nếu client ngắt kết nối
+                }
             }
 
             return messageDto;

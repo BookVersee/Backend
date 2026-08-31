@@ -146,4 +146,17 @@ public class ShopController : ControllerBase
         await _shopService.ProcessReturnRequestAsync(userId, returnRequestId, dto);
         return Ok(ApiResponse.SuccessResponse(null, "Return request processed successfully"));
     }
+
+    /// Chức năng: Shop tạm ngừng kinh doanh (CLOSED) hoặc mở bán lại (OPEN)
+    [HttpPost("UpdateShopCondition")]
+    [Authorize(Roles = "SHOP")]
+    public async Task<IActionResult> UpdateShopCondition([FromBody] UpdateShopConditionDto dto)
+    {
+        var (userId, role) = User.GetUserInfo();
+        var result = await _shopService.UpdateShopConditionAsync(userId, dto);
+        var message = dto.Condition == ShopCondition.OPEN
+            ? "Cửa hàng đã mở bán hoạt động trở lại thành công."
+            : "Cửa hàng đã tạm ngừng kinh doanh thành công.";
+        return Ok(ApiResponse.SuccessResponse(result, message));
+    }
 }

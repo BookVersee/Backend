@@ -21,5 +21,6 @@ namespace BookManagement.Service.User
         Task<BookManagement.Service.Shop.ShopResponse> RegisterShopAsync(Guid userId, RegisterShopRequest request);
         Task LogoutAsync(Guid userId, string? refreshToken = null);
         Task DeactivateAccountAsync(Guid userId);
+        Task UpdateStatusUserAsync(Guid currentUserId, BookManagement.Repository.Entities.Enums.UserRole currentRole, UpdateStatusUserRequest request);
     }
 }

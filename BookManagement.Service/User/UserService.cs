@@ -298,6 +298,75 @@ namespace BookManagement.Service.User
             await _context.SaveChangesAsync();
         }
 
+        /// Chức năng: Cập nhật trạng thái người dùng (Có kiểm tra phân quyền Role)
+        public async Task UpdateStatusUserAsync(Guid currentUserId, UserRole currentRole, UpdateStatusUserRequest request)
+        {
+            var isAdmin = currentRole == UserRole.ADMIN || currentRole == UserRole.SUPER_ADMIN;
+            var targetUserId = isAdmin ? (request.UserId ?? currentUserId) : currentUserId;
+
+            if (!isAdmin && request.UserId.HasValue && request.UserId.Value != currentUserId)
+            {
+                throw new UnauthorizedAccessException("Bạn không có quyền cập nhật trạng thái của người dùng khác.");
+            }
+
+            var targetUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == targetUserId);
+            if (targetUser == null)
+            {
+                throw new KeyNotFoundException("Không tìm thấy người dùng.");
+            }
+
+            // Nếu tài khoản đang bị Admin khóa (LOCKED), chỉ Admin mới được mở lại
+            if (targetUser.Status == UserStatus.LOCKED && !isAdmin)
+            {
+                throw new InvalidOperationException("Tài khoản đang bị Admin khóa. Bạn không có quyền tự kích hoạt lại tài khoản.");
+            }
+
+            // User thường không có quyền set trạng thái LOCKED (chỉ có thể ACTIVE hoặc INACTIVE)
+            if (request.Status == UserStatus.LOCKED && !isAdmin)
+            {
+                throw new InvalidOperationException("Chỉ Quản trị viên mới có quyền Khóa (LOCKED) tài khoản.");
+            }
+
+            // Admin thường không thể khóa tài khoản SUPER_ADMIN
+            if (targetUser.Role == UserRole.SUPER_ADMIN && currentRole != UserRole.SUPER_ADMIN && request.Status == UserStatus.LOCKED)
+            {
+                throw new InvalidOperationException("Không thể khóa tài khoản Super Admin.");
+            }
+
+            targetUser.Status = request.Status;
+            targetUser.UpdatedAt = DateTimeOffset.UtcNow;
+
+            // Xử lý Shop liên quan nếu user là Shop
+            var shop = await _context.Shops.FirstOrDefaultAsync(s => s.Id == targetUserId || s.UserId == targetUserId);
+            if (shop != null)
+            {
+                if (request.Status == UserStatus.LOCKED || request.Status == UserStatus.INACTIVE)
+                {
+                    shop.Condition = ShopCondition.CLOSED;
+                }
+                else if (request.Status == UserStatus.ACTIVE && shop.Condition == ShopCondition.CLOSED)
+                {
+                    shop.Condition = ShopCondition.OPEN;
+                }
+                shop.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+
+            // Nếu trạng thái là LOCKED hoặc INACTIVE: thu hồi toàn bộ session đăng nhập
+            if (request.Status == UserStatus.LOCKED || request.Status == UserStatus.INACTIVE)
+            {
+                var activeSessions = await _context.UserSessions
+                    .Where(s => s.UserId == targetUserId && !s.IsRevoked)
+                    .ToListAsync();
+
+                foreach (var session in activeSessions)
+                {
+                    session.IsRevoked = true;
+                }
+            }
+
+            await _context.SaveChangesAsync();
+        }
+
         private static UserResponse MapToResponse(BookManagement.Repository.Entities.User user) => new UserResponse
         {
             Id = user.Id,

@@ -40,4 +40,11 @@ namespace BookManagement.Service.User
     {
         public string? RefreshToken { get; set; }
     }
+
+    public class UpdateStatusUserRequest
+    {
+        public Guid? UserId { get; set; }
+        public BookManagement.Repository.Entities.Enums.UserStatus Status { get; set; }
+        public string? Reason { get; set; }
+    }
 }

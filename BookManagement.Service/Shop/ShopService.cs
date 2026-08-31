@@ -87,23 +87,41 @@ namespace BookManagement.Service.Shop
         public async Task<ShopProfileDto> GetShopProfileAsync(Guid userIdOrShopId)
         {
             var shopId = await ResolveShopIdAsync(userIdOrShopId);
-            var shop = await _db.Shops
-                .Include(s => s.Books)
-                .FirstOrDefaultAsync(s => s.Id == shopId);
 
-            if (shop == null)
+            var conn = _db.Database.GetDbConnection();
+            if (conn.State != System.Data.ConnectionState.Open)
+                await conn.OpenAsync();
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT TOP 1 Id, ShopName, Condition, Rating, CreatedAt FROM Shops WHERE Id = @id OR UserId = @id";
+            var p = cmd.CreateParameter();
+            p.ParameterName = "@id";
+            p.Value = shopId;
+            cmd.Parameters.Add(p);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            if (!await reader.ReadAsync())
             {
                 throw new KeyNotFoundException("Shop not found.");
             }
 
+            var id = reader.GetGuid(0);
+            var shopName = reader.GetString(1);
+            var conditionStr = reader.GetString(2);
+            var rating = Convert.ToSingle(reader.GetValue(3));
+            var createdAt = reader.GetFieldValue<DateTimeOffset>(4);
+            reader.Close();
+
+            var totalBooks = await _db.Books.CountAsync(b => b.ShopId == id && b.Status != BookStatus.HIDDEN);
+
             return new ShopProfileDto
             {
-                ShopId = shop.Id,
-                ShopName = shop.ShopName,
-                Condition = shop.Condition.ToString(),
-                Rating = shop.Rating,
-                TotalBooks = shop.Books.Count(b => b.Status != BookStatus.HIDDEN),
-                CreatedAt = shop.CreatedAt
+                ShopId = id,
+                ShopName = shopName,
+                Condition = conditionStr,
+                Rating = rating,
+                TotalBooks = totalBooks,
+                CreatedAt = createdAt
             };
         }
 
@@ -812,6 +830,24 @@ namespace BookManagement.Service.Shop
             }
 
             await _db.SaveChangesAsync();
+        }
+
+        /// Chức năng: Shop tạm ngừng kinh doanh (CLOSED) hoặc mở bán lại (OPEN)
+        public async Task<ShopProfileDto> UpdateShopConditionAsync(Guid userIdOrShopId, UpdateShopConditionDto dto)
+        {
+            var shopId = await ResolveShopIdAsync(userIdOrShopId);
+            var profile = await GetShopProfileAsync(shopId);
+
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userIdOrShopId || u.Id == profile.ShopId);
+            if (user != null && user.Status == UserStatus.LOCKED)
+            {
+                throw new InvalidOperationException("Cửa hàng đang bị Admin tạm khóa do vi phạm, không thể tự cập nhật trạng thái mở bán. Vui lòng liên hệ Ban quản trị.");
+            }
+
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE Shops SET Condition = {dto.Condition.ToString()}, UpdatedAt = {DateTimeOffset.UtcNow} WHERE Id = {profile.ShopId}");
+
+            return await GetShopProfileAsync(shopId);
         }
     }
 }

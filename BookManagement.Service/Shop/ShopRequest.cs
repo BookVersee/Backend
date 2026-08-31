@@ -22,4 +22,9 @@ namespace BookManagement.Service.Shop
         public DateTime? ToDate { get; set; }
         public string? PeriodType { get; set; }
     }
+
+    public class UpdateShopConditionDto
+    {
+        public BookManagement.Repository.Entities.Enums.ShopCondition Condition { get; set; }
+    }
 }

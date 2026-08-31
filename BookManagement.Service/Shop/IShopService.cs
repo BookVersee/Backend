@@ -24,5 +24,6 @@ namespace BookManagement.Service.Shop
         Task<PagedResultDto<FeedbackDto>> GetShopFeedbacksAsync(Guid userIdOrShopId, ShopFeedbackQueryRequest query);
         Task<ResponseCreatedDto> CreateFeedbackResponseAsync(Guid userIdOrShopId, Guid feedbackId, FeedbackResponseRequestDto dto);
         Task ProcessReturnRequestAsync(Guid userIdOrShopId, Guid returnRequestId, ProcessReturnRequestDto dto);
+        Task<ShopProfileDto> UpdateShopConditionAsync(Guid userIdOrShopId, UpdateShopConditionDto dto);
     }
 }

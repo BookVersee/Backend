@@ -142,5 +142,15 @@ namespace BookManagement.Api.Controllers
             await _userService.DeactivateAccountAsync(userId);
             return Ok(ApiResponse<string>.SuccessResponse("Tài khoản của bạn đã được vô hiệu hóa / xóa thành công."));
         }
+
+        /// Chức năng: Cập nhật trạng thái người dùng (Có phân quyền theo Role)
+        [Authorize]
+        [HttpPost("UpdateStatusUser")]
+        public async Task<IActionResult> UpdateStatusUser([FromBody] UpdateStatusUserRequest request)
+        {
+            var (userId, role) = User.GetUserInfo();
+            await _userService.UpdateStatusUserAsync(userId, role, request);
+            return Ok(ApiResponse<string>.SuccessResponse($"Cập nhật trạng thái tài khoản thành công sang {request.Status}."));
+        }
     }
 }

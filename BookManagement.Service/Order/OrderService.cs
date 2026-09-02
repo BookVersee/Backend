@@ -13,10 +13,17 @@ namespace BookManagement.Service.Order
     public class OrderService : IOrderService
     {
         private readonly AppDbContext _context;
+        private readonly IOrderRealtimeNotifier? _orderNotifier;
+        private readonly BookManagement.Service.Notification.INotificationRealtimeNotifier? _notificationNotifier;
 
-        public OrderService(AppDbContext context)
+        public OrderService(
+            AppDbContext context,
+            IOrderRealtimeNotifier? orderNotifier = null,
+            BookManagement.Service.Notification.INotificationRealtimeNotifier? notificationNotifier = null)
         {
             _context = context;
+            _orderNotifier = orderNotifier;
+            _notificationNotifier = notificationNotifier;
         }
 
         private IQueryable<BookManagement.Repository.Entities.Order> GetFullOrderQuery()
@@ -209,7 +216,52 @@ namespace BookManagement.Service.Order
                     await tx.CommitAsync();
 
                     var createdOrder = await GetFullOrderQuery().FirstOrDefaultAsync(o => o.Id == order.Id);
-                    return MapToResponse(createdOrder ?? order);
+                    var responseDto = MapToResponse(createdOrder ?? order);
+
+                    // Bắn Realtime thông báo Đơn hàng mới tới các Shop liên quan
+                    if (_orderNotifier != null)
+                    {
+                        try
+                        {
+                            var shopIds = responseDto.OrderDetails
+                                .Select(od => od.BookId)
+                                .Join(_context.Books, bId => bId, b => b.Id, (bId, b) => b.ShopId)
+                                .Distinct()
+                                .ToList();
+
+                            foreach (var shopId in shopIds)
+                            {
+                                await _orderNotifier.SendNewOrderAlertAsync(shopId, responseDto);
+                            }
+                        }
+                        catch
+                        {
+                            // Tránh crash nếu SignalR gặp lỗi
+                        }
+                    }
+
+                    // Bắn Realtime quả chuông cho người mua
+                    if (_notificationNotifier != null)
+                    {
+                        try
+                        {
+                            await _notificationNotifier.SendNotificationAsync(userId, new BookManagement.Service.Notification.NotificationResponse
+                            {
+                                Id = buyerNotification.Id,
+                                UserId = buyerNotification.UserId,
+                                Type = buyerNotification.Type.ToString(),
+                                ReferenceId = buyerNotification.ReferenceId,
+                                Content = buyerNotification.Content ?? string.Empty,
+                                IsRead = false,
+                                CreatedAt = buyerNotification.CreatedAt
+                            });
+                        }
+                        catch
+                        {
+                        }
+                    }
+
+                    return responseDto;
                 }
                 catch
                 {
@@ -256,6 +308,17 @@ namespace BookManagement.Service.Order
             };
             await _context.Notifications.AddAsync(notification);
             await _context.SaveChangesAsync();
+
+            if (_orderNotifier != null)
+            {
+                try
+                {
+                    await _orderNotifier.SendOrderStatusChangedAsync(userId, order.Id, OrderStatus.CANCELLED.ToString(), "Đơn hàng đã được hủy thành công.");
+                }
+                catch
+                {
+                }
+            }
         }
 
         /// Chức năng: Gửi yêu cầu khiếu nại trả hàng / hoàn tiền cho sản phẩm

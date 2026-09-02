@@ -8,6 +8,8 @@ using DeliveryEntity = BookManagement.Repository.Entities.Delivery;
 using BookManagement.Repository.Entities.Enums;
 using Microsoft.EntityFrameworkCore;
 
+using BookManagement.Service.Order;
+
 namespace BookManagement.Service.Shipping;
 
 /// Vị trí: Domain Service - Thực thi logic nghiệp vụ hệ thống, tích hợp đơn vị Giao Hàng Nhanh (GHN) và lưu DbContext.
@@ -15,11 +17,13 @@ public class ShippingService : IShippingService
 {
     private readonly AppDbContext _db;
     private readonly GhnService _ghnService;
+    private readonly IOrderRealtimeNotifier? _orderNotifier;
 
-    public ShippingService(AppDbContext db, GhnService ghnService)
+    public ShippingService(AppDbContext db, GhnService ghnService, IOrderRealtimeNotifier? orderNotifier = null)
     {
         _db = db;
         _ghnService = ghnService;
+        _orderNotifier = orderNotifier;
     }
 
     /// Chức năng: Tạo vận đơn giao hàng qua API Giao Hàng Nhanh (GHN)
@@ -75,6 +79,22 @@ public class ShippingService : IShippingService
         order.UpdatedAt = DateTimeOffset.UtcNow;
 
         await _db.SaveChangesAsync();
+
+        if (_orderNotifier != null)
+        {
+            try
+            {
+                await _orderNotifier.SendOrderStatusChangedAsync(
+                    order.UserId, 
+                    order.Id, 
+                    OrderStatus.SHIPPING.ToString(), 
+                    $"Đơn hàng #{order.Id} đã được tạo vận đơn GHN ({delivery.TrackingNumber}) và đang chờ lấy hàng.");
+            }
+            catch
+            {
+            }
+        }
+
         return delivery;
     }
 
@@ -164,7 +184,33 @@ public class ShippingService : IShippingService
                 break;
         }
 
-        if (order != null) order.UpdatedAt = DateTimeOffset.UtcNow;
-        await _db.SaveChangesAsync();
+        if (order != null)
+        {
+            order.UpdatedAt = DateTimeOffset.UtcNow;
+            await _db.SaveChangesAsync();
+
+            if (_orderNotifier != null)
+            {
+                try
+                {
+                    string statusMsg = statusKey switch
+                    {
+                        "delivering" => $"Đơn hàng #{order.Id} đang trên đường giao tới bạn.",
+                        "delivered" => $"Đơn hàng #{order.Id} đã được giao thành công!",
+                        "return" => $"Đơn hàng #{order.Id} đã chuyển trạng thái hoàn trả.",
+                        _ => $"Đơn hàng #{order.Id} đã được cập nhật trạng thái vận chuyển: {delivery.Status}."
+                    };
+
+                    await _orderNotifier.SendOrderStatusChangedAsync(order.UserId, order.Id, order.OrderStatus.ToString(), statusMsg);
+                }
+                catch
+                {
+                }
+            }
+        }
+        else
+        {
+            await _db.SaveChangesAsync();
+        }
     }
 }

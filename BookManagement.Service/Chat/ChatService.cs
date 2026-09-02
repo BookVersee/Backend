@@ -6,6 +6,7 @@ using BookManagement.Repository.Data;
 using BookManagement.Repository.Entities;
 using BookManagement.Repository.Entities.Enums;
 using ChatEntity = BookManagement.Repository.Entities.Chat;
+using ShopEntity = BookManagement.Repository.Entities.Shop;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookManagement.Service.Chat
@@ -168,23 +169,30 @@ namespace BookManagement.Service.Chat
             }
 
             // Kiểm tra và tự động bảo đảm bản ghi Shop tồn tại trong CSDL để tránh lỗi khóa ngoại (Foreign Key FK_Chats_Shops)
-            var shop = await _db.Shops.FirstOrDefaultAsync(s => s.Id == targetShopId);
-            if (shop == null)
+            var resolvedShopIds = await _db.Database
+                .SqlQueryRaw<Guid>("SELECT Id FROM Shops WHERE UserId = {0} OR Id = {0}", targetShopId)
+                .ToListAsync();
+
+            if (resolvedShopIds.Any())
             {
-                var shopUser = await _db.Users.FirstOrDefaultAsync(u => u.Id == targetShopId);
+                targetShopId = resolvedShopIds.First();
+            }
+            else
+            {
+                var shopUser = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == targetShopId);
                 if (shopUser == null)
                 {
                     throw new KeyNotFoundException("Cửa hàng không tồn tại trên hệ thống.");
                 }
 
-                var shopName = shopUser.FullName ?? shopUser.Username;
-                var createdAt = DateTimeOffset.UtcNow;
+                var shopName = shopUser.FullName ?? shopUser.Username ?? "Cửa hàng";
                 await _db.Database.ExecuteSqlInterpolatedAsync(
-                    $"IF NOT EXISTS (SELECT 1 FROM Shops WHERE Id = {targetShopId}) INSERT INTO Shops (Id, ShopName, Condition, Rating, ViolationCount, CreatedAt) VALUES ({targetShopId}, {shopName}, 'OPEN', 0, 0, {createdAt});");
+                    $"IF NOT EXISTS (SELECT 1 FROM Shops WHERE Id = {targetShopId}) INSERT INTO Shops (Id, ShopName, Condition, Rating, ViolationCount) VALUES ({targetShopId}, {shopName}, 'OPEN', 5, 0);");
+                targetShopId = shopUser.Id;
             }
 
             // Kiểm tra Người dùng gửi chat có tồn tại không
-            var userExists = await _db.Users.AnyAsync(u => u.Id == targetUserId);
+            var userExists = await _db.Users.AsNoTracking().AnyAsync(u => u.Id == targetUserId);
             if (!userExists)
             {
                 throw new KeyNotFoundException("Tài khoản người dùng không tồn tại.");

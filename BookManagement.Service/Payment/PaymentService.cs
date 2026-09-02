@@ -10,6 +10,8 @@ using System.Collections.Concurrent;
 using System.Threading;
 using PaymentEntity = BookManagement.Repository.Entities.Payment;
 
+using BookManagement.Service.Order;
+
 namespace BookManagement.Service.Payment;
 
 /// Vị trí: Domain Service - Thực thi logic nghiệp vụ hệ thống, tích toán cổng thanh toán MoMo Sandbox và lưu DbContext.
@@ -17,12 +19,20 @@ public class PaymentService : IPaymentService
 {
     private readonly AppDbContext _db;
     private readonly MomoService _momoService;
+    private readonly IPaymentRealtimeNotifier? _paymentNotifier;
+    private readonly IOrderRealtimeNotifier? _orderNotifier;
     private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> _paymentLocks = new();
 
-    public PaymentService(AppDbContext db, MomoService momoService)
+    public PaymentService(
+        AppDbContext db, 
+        MomoService momoService,
+        IPaymentRealtimeNotifier? paymentNotifier = null,
+        IOrderRealtimeNotifier? orderNotifier = null)
     {
         _db = db;
         _momoService = momoService;
+        _paymentNotifier = paymentNotifier;
+        _orderNotifier = orderNotifier;
     }
 
     /// Chức năng: Khởi tạo URL thanh toán và mã QR MoMo Sandbox
@@ -144,6 +154,35 @@ public class PaymentService : IPaymentService
 
                     await _db.SaveChangesAsync();
                     await tx.CommitAsync();
+
+                    if (_paymentNotifier != null)
+                    {
+                        try
+                        {
+                            bool isSuccess = req.ResultCode == 0;
+                            string msg = isSuccess ? "Thanh toán MoMo thành công." : "Thanh toán MoMo thất bại hoặc bị hủy.";
+                            await _paymentNotifier.SendPaymentResultAsync(payment.OrderId.ToString(), isSuccess, msg, transIdStr);
+                        }
+                        catch
+                        {
+                        }
+                    }
+
+                    if (req.ResultCode == 0 && payment.Order != null && _orderNotifier != null)
+                    {
+                        try
+                        {
+                            await _orderNotifier.SendOrderStatusChangedAsync(
+                                payment.Order.UserId,
+                                payment.Order.Id,
+                                OrderStatus.PAID.ToString(),
+                                "Đơn hàng đã được thanh toán MoMo thành công.");
+                        }
+                        catch
+                        {
+                        }
+                    }
+
                     return (0, "Confirm Success");
                 }
                 catch

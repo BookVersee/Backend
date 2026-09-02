@@ -88,8 +88,12 @@ builder.Services.AddHttpClient<GhnService>();
 
 // 6. Real-Time SignalR Notifiers & Middlewares
 builder.Services.AddScoped<IChatRealtimeNotifier, ChatRealtimeNotifier>();
+builder.Services.AddScoped<INotificationRealtimeNotifier, NotificationRealtimeNotifier>();
+builder.Services.AddScoped<IOrderRealtimeNotifier, OrderRealtimeNotifier>();
+builder.Services.AddScoped<IPaymentRealtimeNotifier, PaymentRealtimeNotifier>();
+
 builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
-// builder.Services.AddHostedService<OrderExpirationBackgroundService>(); // Tắt chạy ngầm theo yêu cầu người dùng
+builder.Services.AddHostedService<OrderExpirationBackgroundService>();
 
 builder.Services.AddCors(options =>
 {
@@ -272,5 +276,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<ChatHub>("/hubs/chat");
+app.MapHub<NotificationHub>("/hubs/notifications");
+app.MapHub<AppHub>("/hubs/app");
 
 app.Run();

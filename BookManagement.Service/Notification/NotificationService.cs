@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using BookManagement.Repository.Data;
+using BookManagement.Repository.Entities.Enums;
 using Microsoft.EntityFrameworkCore;
 using NotificationEntity = BookManagement.Repository.Entities.Notification;
 
@@ -12,10 +13,47 @@ namespace BookManagement.Service.Notification;
 public class NotificationService : INotificationService
 {
     private readonly AppDbContext _context;
+    private readonly INotificationRealtimeNotifier? _realtimeNotifier;
 
-    public NotificationService(AppDbContext context)
+    public NotificationService(AppDbContext context, INotificationRealtimeNotifier? realtimeNotifier = null)
     {
         _context = context;
+        _realtimeNotifier = realtimeNotifier;
+    }
+
+    /// Chức năng: Tạo mới thông báo trong DB và bắn Realtime tức thì tới quả chuông của người dùng
+    public async Task<NotificationResponse> CreateAndSendNotificationAsync(Guid userId, NotificationType type, Guid? referenceId, string content, string? imageUrl = null)
+    {
+        var entity = new NotificationEntity
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            Type = type,
+            ReferenceId = referenceId,
+            Content = content,
+            ImageUrl = imageUrl,
+            IsRead = false,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+        _context.Notifications.Add(entity);
+        await _context.SaveChangesAsync();
+
+        var response = MapToResponse(entity);
+
+        if (_realtimeNotifier != null)
+        {
+            try
+            {
+                await _realtimeNotifier.SendNotificationAsync(userId, response);
+            }
+            catch
+            {
+                // Bỏ qua lỗi kết nối realtime nếu client không online
+            }
+        }
+
+        return response;
     }
 
     /// Chức năng: Lấy danh sách toàn bộ thông báo cá nhân của người dùng

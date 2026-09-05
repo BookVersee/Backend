@@ -1,0 +1,10 @@
+**/.git
+**/.gitignore
+**/.vs
+**/.vscode
+**/bin
+**/obj
+**/*.user
+baocao.docx
+seed_data.sql
+setup-db.ps1

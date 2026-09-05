@@ -161,6 +161,16 @@ using (var scope = app.Services.CreateScope())
                     IF NOT EXISTS (
                         SELECT 1 FROM sys.columns 
                         WHERE object_id = OBJECT_ID(N'[Shops]') 
+                        AND name = 'UserId'
+                    )
+                    BEGIN
+                        ALTER TABLE [Shops] ADD [UserId] UNIQUEIDENTIFIER NULL;
+                    END");
+
+                dbContext.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (
+                        SELECT 1 FROM sys.columns 
+                        WHERE object_id = OBJECT_ID(N'[Shops]') 
                         AND name = 'LockedUntil'
                     )
                     BEGIN

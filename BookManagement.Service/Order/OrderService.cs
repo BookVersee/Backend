@@ -108,12 +108,12 @@ namespace BookManagement.Service.Order
                         .ThenInclude(b => b.Shop)
                 .FirstOrDefaultAsync(c => c.UserId == userId);
 
-            if (cart == null || !cart.CartBookDetails.Any())
+            if (cart == null || !cart.CartBookDetails.Any(cbd => !cbd.IsDeleted))
             {
                 throw new InvalidOperationException("Giỏ hàng của bạn đang trống. Vui lòng thêm sản phẩm trước khi thanh toán.");
             }
 
-            var itemsToOrder = cart.CartBookDetails.AsQueryable();
+            var itemsToOrder = cart.CartBookDetails.Where(cbd => !cbd.IsDeleted).AsQueryable();
             if (request.SelectedCartItemIds != null && request.SelectedCartItemIds.Any())
             {
                 itemsToOrder = itemsToOrder.Where(cbd => request.SelectedCartItemIds.Contains(cbd.Id));
@@ -271,12 +271,13 @@ namespace BookManagement.Service.Order
             });
         }
 
-        /// Chức năng: Hủy đơn hàng PENDING và hoàn trả tồn kho sản phẩm
+        /// Chức năng: Hủy đơn hàng PENDING và hoàn trả tồn kho sản phẩm + giỏ hàng
         public async Task CancelOrderAsync(Guid userId, Guid orderId)
         {
             var order = await _context.Orders
                 .Include(o => o.OrderDetails)
                     .ThenInclude(od => od.Book)
+                .Include(o => o.Payments)
                 .FirstOrDefaultAsync(o => o.Id == orderId);
 
             if (order == null || order.UserId != userId) throw new KeyNotFoundException("Order not found.");
@@ -287,13 +288,28 @@ namespace BookManagement.Service.Order
 
             foreach (var detail in order.OrderDetails)
             {
-                if (detail.Book != null)
+                await _context.Database.ExecuteSqlInterpolatedAsync(
+                    $"UPDATE Books SET StockQuantity = StockQuantity + {detail.Quantity}, Status = CASE WHEN Status = 'EMPTY' THEN 'ACTIVE' ELSE Status END, UpdatedAt = {DateTimeOffset.UtcNow} WHERE Id = {detail.BookId}");
+            }
+
+            foreach (var payment in order.Payments.Where(p => p.Status == PaymentStatus.PENDING))
+            {
+                payment.Status = PaymentStatus.FAILED;
+                payment.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+
+            // Hoàn trả các sản phẩm về giỏ hàng (IsDeleted = false) cho người mua
+            var userCart = await _context.Carts
+                .Include(c => c.CartBookDetails)
+                .FirstOrDefaultAsync(c => c.UserId == userId);
+
+            if (userCart != null)
+            {
+                var orderBookIds = order.OrderDetails.Select(od => od.BookId).ToHashSet();
+                foreach (var cbd in userCart.CartBookDetails.Where(cbd => orderBookIds.Contains(cbd.BookId) && cbd.IsDeleted))
                 {
-                    detail.Book.StockQuantity += detail.Quantity;
-                    if (detail.Book.Status == BookStatus.EMPTY && detail.Book.StockQuantity > 0)
-                    {
-                        detail.Book.Status = BookStatus.ACTIVE;
-                    }
+                    cbd.IsDeleted = false;
+                    cbd.UpdatedAt = DateTimeOffset.UtcNow;
                 }
             }
 
@@ -303,7 +319,7 @@ namespace BookManagement.Service.Order
                 UserId = userId,
                 Type = NotificationType.ORDER_UPDATE,
                 ReferenceId = order.Id,
-                Content = $"Đơn hàng #{order.Id} đã được hủy thành công. Tồn kho sản phẩm đã được hoàn trả.",
+                Content = $"Đơn hàng #{order.Id} đã được hủy thành công. Tồn kho sản phẩm và giỏ hàng đã được hoàn trả.",
                 CreatedAt = DateTimeOffset.UtcNow
             };
             await _context.Notifications.AddAsync(notification);

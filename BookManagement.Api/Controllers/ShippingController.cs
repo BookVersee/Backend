@@ -33,6 +33,15 @@ public class ShippingController : ControllerBase
         return Ok(ApiResponse.SuccessResponse(result, "GHN shipping order created successfully"));
     }
 
+    /// Chức năng: Tạo vận đơn thu hồi/trả hàng qua đơn vị Giao Hàng Nhanh (GHN)
+    [HttpPost("CreateReturnGhnOrder/{returnRequestId}")]
+    [Authorize(Roles = "SHOP,ADMIN,SUPER_ADMIN")]
+    public async Task<IActionResult> CreateReturnGhnOrder([FromRoute] Guid returnRequestId)
+    {
+        var result = await _shippingService.CreateReturnGhnOrderAsync(returnRequestId);
+        return Ok(ApiResponse.SuccessResponse(result, "GHN return shipping order created successfully"));
+    }
+
     /// Chức năng: Webhook tiếp nhận tự động cập nhật trạng thái vận đơn từ GHN
     [HttpPost("GhnWebhook")]
     [AllowAnonymous]

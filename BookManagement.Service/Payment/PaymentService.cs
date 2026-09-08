@@ -148,8 +148,51 @@ public class PaymentService : IPaymentService
                     else
                     {
                         payment.Status = PaymentStatus.FAILED;
-                        payment.TransactionCode = transIdStr;
+                        if (req.TransId > 0)
+                        {
+                            payment.TransactionCode = transIdStr;
+                        }
                         payment.UpdatedAt = DateTimeOffset.UtcNow;
+
+                        var order = payment.Order;
+                        if (order != null)
+                        {
+                            order.OrderStatus = OrderStatus.CANCELLED;
+                            order.UpdatedAt = DateTimeOffset.UtcNow;
+
+                            var orderDetails = await _db.OrderDetails.Where(od => od.OrderId == order.Id).ToListAsync();
+                            foreach (var detail in orderDetails)
+                            {
+                                await _db.Database.ExecuteSqlInterpolatedAsync(
+                                    $"UPDATE Books SET StockQuantity = StockQuantity + {detail.Quantity}, Status = CASE WHEN Status = 'EMPTY' THEN 'ACTIVE' ELSE Status END, UpdatedAt = {DateTimeOffset.UtcNow} WHERE Id = {detail.BookId}");
+                            }
+
+                            // Hoàn trả các mục sách về giỏ hàng (IsDeleted = false) cho người dùng
+                            var userCart = await _db.Carts
+                                .Include(c => c.CartBookDetails)
+                                .FirstOrDefaultAsync(c => c.UserId == order.UserId);
+
+                            if (userCart != null)
+                            {
+                                var orderBookIds = orderDetails.Select(od => od.BookId).ToHashSet();
+                                foreach (var cbd in userCart.CartBookDetails.Where(cbd => orderBookIds.Contains(cbd.BookId) && cbd.IsDeleted))
+                                {
+                                    cbd.IsDeleted = false;
+                                    cbd.UpdatedAt = DateTimeOffset.UtcNow;
+                                }
+                            }
+
+                            var failNotification = new BookManagement.Repository.Entities.Notification
+                            {
+                                Id = Guid.NewGuid(),
+                                UserId = order.UserId,
+                                Type = NotificationType.ORDER_UPDATE,
+                                ReferenceId = order.Id,
+                                Content = $"Giao dịch thanh toán MoMo cho đơn hàng #{order.Id} không thành công hoặc đã bị hủy. Các sản phẩm đã được hoàn trả lại giỏ hàng của bạn.",
+                                CreatedAt = DateTimeOffset.UtcNow
+                            };
+                            _db.Notifications.Add(failNotification);
+                        }
                     }
 
                     await _db.SaveChangesAsync();
@@ -160,7 +203,7 @@ public class PaymentService : IPaymentService
                         try
                         {
                             bool isSuccess = req.ResultCode == 0;
-                            string msg = isSuccess ? "Thanh toán MoMo thành công." : "Thanh toán MoMo thất bại hoặc bị hủy.";
+                            string msg = isSuccess ? "Thanh toán MoMo thành công." : "Thanh toán MoMo thất bại hoặc bị hủy. Giỏ hàng đã được hoàn trả.";
                             await _paymentNotifier.SendPaymentResultAsync(payment.OrderId.ToString(), isSuccess, msg, transIdStr);
                         }
                         catch
@@ -168,15 +211,26 @@ public class PaymentService : IPaymentService
                         }
                     }
 
-                    if (req.ResultCode == 0 && payment.Order != null && _orderNotifier != null)
+                    if (payment.Order != null && _orderNotifier != null)
                     {
                         try
                         {
-                            await _orderNotifier.SendOrderStatusChangedAsync(
-                                payment.Order.UserId,
-                                payment.Order.Id,
-                                OrderStatus.PAID.ToString(),
-                                "Đơn hàng đã được thanh toán MoMo thành công.");
+                            if (req.ResultCode == 0)
+                            {
+                                await _orderNotifier.SendOrderStatusChangedAsync(
+                                    payment.Order.UserId,
+                                    payment.Order.Id,
+                                    OrderStatus.PAID.ToString(),
+                                    "Đơn hàng đã được thanh toán MoMo thành công.");
+                            }
+                            else
+                            {
+                                await _orderNotifier.SendOrderStatusChangedAsync(
+                                    payment.Order.UserId,
+                                    payment.Order.Id,
+                                    OrderStatus.CANCELLED.ToString(),
+                                    "Đơn hàng đã bị hủy do thanh toán MoMo thất bại hoặc bị hủy. Các sản phẩm đã được hoàn trả về giỏ hàng.");
+                            }
                         }
                         catch
                         {
@@ -411,6 +465,59 @@ public class PaymentService : IPaymentService
                 });
             }
 
+            if (queryRes != null && queryRes.ResultCode != 0 && queryRes.ResultCode != 1000 && queryRes.ResultCode != 8000)
+            {
+                var strategy = _db.Database.CreateExecutionStrategy();
+                return await strategy.ExecuteAsync(async () =>
+                {
+                    using var tx = await _db.Database.BeginTransactionAsync();
+                    try
+                    {
+                        string transIdStr = queryRes.TransId > 0 ? queryRes.TransId.ToString() : (payment.TransactionCode ?? "");
+                        payment.Status = PaymentStatus.FAILED;
+                        if (queryRes.TransId > 0)
+                        {
+                            payment.TransactionCode = transIdStr;
+                        }
+                        payment.UpdatedAt = DateTimeOffset.UtcNow;
+
+                        order.OrderStatus = OrderStatus.CANCELLED;
+                        order.UpdatedAt = DateTimeOffset.UtcNow;
+
+                        var orderDetails = await _db.OrderDetails.Where(od => od.OrderId == order.Id).ToListAsync();
+                        foreach (var detail in orderDetails)
+                        {
+                            await _db.Database.ExecuteSqlInterpolatedAsync(
+                                $"UPDATE Books SET StockQuantity = StockQuantity + {detail.Quantity}, Status = CASE WHEN Status = 'EMPTY' THEN 'ACTIVE' ELSE Status END, UpdatedAt = {DateTimeOffset.UtcNow} WHERE Id = {detail.BookId}");
+                        }
+
+                        // Hoàn trả các sản phẩm về giỏ hàng (IsDeleted = false) cho người mua
+                        var userCart = await _db.Carts
+                            .Include(c => c.CartBookDetails)
+                            .FirstOrDefaultAsync(c => c.UserId == order.UserId);
+
+                        if (userCart != null)
+                        {
+                            var orderBookIds = orderDetails.Select(od => od.BookId).ToHashSet();
+                            foreach (var cbd in userCart.CartBookDetails.Where(cbd => orderBookIds.Contains(cbd.BookId) && cbd.IsDeleted))
+                            {
+                                cbd.IsDeleted = false;
+                                cbd.UpdatedAt = DateTimeOffset.UtcNow;
+                            }
+                        }
+
+                        await _db.SaveChangesAsync();
+                        await tx.CommitAsync();
+                        return (false, $"Giao dịch thanh toán thất bại ({queryRes.Message}). Giỏ hàng đã được hoàn trả.", transIdStr);
+                    }
+                    catch
+                    {
+                        await tx.RollbackAsync();
+                        throw;
+                    }
+                });
+            }
+
             return (false, queryRes != null ? $"Giao dịch chưa thanh toán hoặc thất bại ({queryRes.Message})." : "Không thể tra cứu thông tin giao dịch từ MoMo.", null);
         }
         finally
@@ -445,6 +552,11 @@ public class PaymentService : IPaymentService
                     {
                         continue;
                     }
+                    if (order.OrderStatus == OrderStatus.CANCELLED)
+                    {
+                        cancelledCount++;
+                        continue;
+                    }
                 }
                 catch
                 {
@@ -472,13 +584,28 @@ public class PaymentService : IPaymentService
                             $"UPDATE Books SET StockQuantity = StockQuantity + {detail.Quantity}, Status = CASE WHEN Status = 'EMPTY' THEN 'ACTIVE' ELSE Status END, UpdatedAt = {DateTimeOffset.UtcNow} WHERE Id = {detail.BookId}");
                     }
 
+                    // Hoàn trả giỏ hàng cho người mua
+                    var userCart = await _db.Carts
+                        .Include(c => c.CartBookDetails)
+                        .FirstOrDefaultAsync(c => c.UserId == order.UserId);
+
+                    if (userCart != null)
+                    {
+                        var orderBookIds = order.OrderDetails.Select(od => od.BookId).ToHashSet();
+                        foreach (var cbd in userCart.CartBookDetails.Where(cbd => orderBookIds.Contains(cbd.BookId) && cbd.IsDeleted))
+                        {
+                            cbd.IsDeleted = false;
+                            cbd.UpdatedAt = DateTimeOffset.UtcNow;
+                        }
+                    }
+
                     var notification = new BookManagement.Repository.Entities.Notification
                     {
                         Id = Guid.NewGuid(),
                         UserId = order.UserId,
                         Type = NotificationType.ORDER_UPDATE,
                         ReferenceId = order.Id,
-                        Content = $"Đơn hàng #{order.Id} đã tự động hủy do quá hạn thanh toán ({expiryMinutes} phút). Số lượng sản phẩm đã được hoàn trả về kho.",
+                        Content = $"Đơn hàng #{order.Id} đã tự động hủy do quá hạn thanh toán ({expiryMinutes} phút). Số lượng sản phẩm và giỏ hàng đã được hoàn trả.",
                         CreatedAt = DateTimeOffset.UtcNow
                     };
                     _db.Notifications.Add(notification);
@@ -487,9 +614,10 @@ public class PaymentService : IPaymentService
                     await tx.CommitAsync();
                     cancelledCount++;
                 }
-                catch
+                catch (Exception)
                 {
                     await tx.RollbackAsync();
+                    throw;
                 }
             });
         }

@@ -44,7 +44,11 @@ builder.Services.AddMemoryCache();
 
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(connectionString, sqlServerOptions => sqlServerOptions.EnableRetryOnFailure()));
+    options.UseSqlServer(connectionString, sqlServerOptions =>
+    {
+        sqlServerOptions.EnableRetryOnFailure();
+        sqlServerOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+    }));
 
 // 2. Add Custom Extensions (JWT & Swagger)
 builder.Services.AddJwtServices(builder.Configuration);
@@ -175,6 +179,16 @@ using (var scope = app.Services.CreateScope())
                     )
                     BEGIN
                         ALTER TABLE [Shops] ADD [LockedUntil] DATETIMEOFFSET NULL;
+                    END");
+
+                dbContext.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (
+                        SELECT 1 FROM sys.columns 
+                        WHERE object_id = OBJECT_ID(N'[Shops]') 
+                        AND name = 'UserId'
+                    )
+                    BEGIN
+                        ALTER TABLE [Shops] ADD [UserId] UNIQUEIDENTIFIER NULL;
                     END");
 
                 dbContext.Database.ExecuteSqlRaw(@"

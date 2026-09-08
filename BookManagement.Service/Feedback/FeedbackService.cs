@@ -57,9 +57,9 @@ namespace BookManagement.Service.Feedback
                 throw new UnauthorizedAccessException("You can only submit feedback for your own orders.");
             }
 
-            if (orderDetail.Order.OrderStatus != OrderStatus.DELIVERED)
+            if (orderDetail.Order.OrderStatus != OrderStatus.DELIVERED && orderDetail.Order.OrderStatus != OrderStatus.COMPLETED)
             {
-                throw new InvalidOperationException("Feedback can only be submitted for delivered orders.");
+                throw new InvalidOperationException("Feedback can only be submitted for delivered or completed orders.");
             }
 
             var existingFeedback = await _context.Feedbacks.FirstOrDefaultAsync(f => f.OrderDetailId == request.OrderDetailId);

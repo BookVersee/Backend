@@ -10,16 +10,20 @@ using BookManagement.Service.Shop;
 using BookManagement.Service.User;
 using Microsoft.EntityFrameworkCore;
 
+using BookManagement.Service.Shipping;
+
 namespace BookManagement.Service.Admin;
 
 /// Vị trí: Domain Service - Thực thi logic nghiệp vụ hệ thống, tính toán và truy vấn trực tiếp DbContext.
 public class AdminService : IAdminService
 {
     private readonly AppDbContext _context;
+    private readonly IShippingService? _shippingService;
 
-    public AdminService(AppDbContext context)
+    public AdminService(AppDbContext context, IShippingService? shippingService = null)
     {
         _context = context;
+        _shippingService = shippingService;
     }
 
     /// Chức năng: Tìm kiếm và lọc danh sách tài khoản người dùng phân trang
@@ -248,6 +252,22 @@ public class AdminService : IAdminService
         {
             dispute.OrderDetail.ReturnStatus = request.ApproveRefund ? ReturnStatus.PROCESSING : ReturnStatus.REJECTED;
 
+            string trackingInfo = string.Empty;
+            if (request.ApproveRefund && _shippingService != null)
+            {
+                try
+                {
+                    var returnDelivery = await _shippingService.CreateReturnGhnOrderAsync(dispute.Id);
+                    if (returnDelivery != null && !string.IsNullOrEmpty(returnDelivery.TrackingNumber))
+                    {
+                        trackingInfo = $" Đã tạo vận đơn thu hồi GHN ({returnDelivery.TrackingNumber}).";
+                    }
+                }
+                catch
+                {
+                }
+            }
+
             if (dispute.OrderDetail.Order != null)
             {
                 var buyerNotification = new BookManagement.Repository.Entities.Notification
@@ -257,7 +277,7 @@ public class AdminService : IAdminService
                     Type = NotificationType.ORDER_UPDATE,
                     ReferenceId = dispute.Id,
                     Content = request.ApproveRefund
-                        ? $"Ban quản trị (Admin) đã chấp nhận khiếu nại trả hàng cuốn '{dispute.OrderDetail.Book?.Title}'. Yêu cầu hoàn tiền đang được xử lý."
+                        ? $"Ban quản trị (Admin) đã chấp nhận khiếu nại trả hàng cuốn '{dispute.OrderDetail.Book?.Title}'.{trackingInfo} Shipper GHN sẽ liên hệ lấy hàng."
                         : $"Ban quản trị (Admin) đã từ chối khiếu nại trả hàng cuốn '{dispute.OrderDetail.Book?.Title}'. Ghi chú: {request.AdminResolutionNote ?? "Không đủ bằng chứng"}.",
                     CreatedAt = DateTimeOffset.UtcNow
                 };

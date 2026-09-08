@@ -54,7 +54,7 @@ public class ShippingService : IShippingService
             throw new UnauthorizedAccessException("Shop does not have permission to create shipping order for this order.");
         }
 
-        if (await _db.Deliveries.AnyAsync(d => d.OrderId == order.Id))
+        if (await _db.Deliveries.AnyAsync(d => d.OrderId == order.Id && d.CarrierName != "GHN_RETURN"))
         {
             throw new InvalidOperationException($"Delivery already exists for Order #{order.Id}.");
         }
@@ -98,6 +98,93 @@ public class ShippingService : IShippingService
         return delivery;
     }
 
+    /// Chức năng: Tạo vận đơn trả hàng / thu hồi qua API Giao Hàng Nhanh (GHN) khi yêu cầu trả hàng được duyệt
+    public async Task<DeliveryEntity> CreateReturnGhnOrderAsync(Guid returnRequestId)
+    {
+        var returnReq = await _db.ReturnRequests
+            .Include(rr => rr.OrderDetail)
+                .ThenInclude(od => od.Book)
+            .Include(rr => rr.OrderDetail)
+                .ThenInclude(od => od.Order)
+                    .ThenInclude(o => o.User)
+            .FirstOrDefaultAsync(rr => rr.Id == returnRequestId);
+
+        if (returnReq == null)
+        {
+            throw new KeyNotFoundException("Return request not found.");
+        }
+
+        var order = returnReq.OrderDetail?.Order;
+        if (order == null)
+        {
+            throw new InvalidOperationException("Associated order not found for this return request.");
+        }
+
+        // Kiểm tra xem đã có vận đơn trả hàng cho order này chưa để tránh tạo trùng
+        var existingReturnDelivery = await _db.Deliveries
+            .FirstOrDefaultAsync(d => d.OrderId == order.Id && (d.CarrierName == "GHN_RETURN" || (d.TrackingNumber != null && d.TrackingNumber.StartsWith("GHN_RET"))));
+
+        if (existingReturnDelivery != null)
+        {
+            return existingReturnDelivery;
+        }
+
+        var shopId = returnReq.OrderDetail?.Book?.ShopId;
+        var shop = shopId.HasValue 
+            ? await _db.Shops.FirstOrDefaultAsync(s => s.Id == shopId.Value) 
+            : null;
+
+        if (shop == null)
+        {
+            shop = new BookManagement.Repository.Entities.Shop
+            {
+                Id = shopId ?? Guid.NewGuid(),
+                ShopName = "Shop BookVerse",
+                Address = "72 Thành Thái, Phường 14, Quận 10, Hồ Chí Minh",
+                Phone = "0901234567"
+            };
+        }
+
+        var (orderCode, totalFee) = await _ghnService.CreateReturnShippingOrderAsync(shop, order, returnReq);
+
+        var returnDelivery = new DeliveryEntity
+        {
+            OrderId = order.Id,
+            TrackingNumber = orderCode,
+            CarrierName = "GHN_RETURN",
+            ShipFee = totalFee,
+            Status = DeliveryStatus.PENDING,
+            EstimatedDelivery = DateTime.UtcNow.AddDays(3)
+        };
+
+        _db.Deliveries.Add(returnDelivery);
+
+        if (returnReq.OrderDetail != null)
+        {
+            returnReq.OrderDetail.ReturnStatus = ReturnStatus.SHIPPED;
+        }
+        returnReq.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await _db.SaveChangesAsync();
+
+        if (_orderNotifier != null)
+        {
+            try
+            {
+                await _orderNotifier.SendOrderStatusChangedAsync(
+                    order.UserId,
+                    order.Id,
+                    order.OrderStatus.ToString(),
+                    $"Yêu cầu hoàn trả sách '{returnReq.OrderDetail?.Book?.Title}' đã được tạo vận đơn thu hồi GHN ({returnDelivery.TrackingNumber}). Shipper GHN sẽ liên hệ lấy hàng.");
+            }
+            catch
+            {
+            }
+        }
+
+        return returnDelivery;
+    }
+
     /// Chức năng: Xử lý Webhook tự động cập nhật trạng thái vận đơn từ GHN
     public async Task ProcessGhnWebhookAsync(GhnWebhookPayload payload)
     {
@@ -106,12 +193,92 @@ public class ShippingService : IShippingService
         var delivery = await _db.Deliveries
             .Include(d => d.Order)
                 .ThenInclude(o => o.Payments)
+            .Include(d => d.Order)
+                .ThenInclude(o => o.OrderDetails)
+                    .ThenInclude(od => od.Book)
+            .Include(d => d.Order)
+                .ThenInclude(o => o.OrderDetails)
+                    .ThenInclude(od => od.ReturnRequest)
             .FirstOrDefaultAsync(d => d.TrackingNumber == payload.OrderCode);
 
         if (delivery == null) return;
 
+        var isReturnDelivery = delivery.CarrierName == "GHN_RETURN" || (delivery.TrackingNumber != null && delivery.TrackingNumber.StartsWith("GHN_RET"));
         var statusKey = payload.Status?.ToLowerInvariant();
         var order = delivery.Order;
+
+        if (isReturnDelivery)
+        {
+            switch (statusKey)
+            {
+                case "picking":
+                case "storing":
+                    delivery.Status = DeliveryStatus.PENDING;
+                    break;
+                case "delivering":
+                    delivery.Status = DeliveryStatus.TRANSIT;
+                    if (order?.OrderDetails != null)
+                    {
+                        foreach (var od in order.OrderDetails.Where(od => od.ReturnRequest != null && od.ReturnRequest.Status == ReturnRequestStatus.APPROVED))
+                        {
+                            od.ReturnStatus = ReturnStatus.SHIPPED;
+                        }
+                    }
+                    break;
+                case "delivered":
+                    delivery.Status = DeliveryStatus.DELIVERED;
+                    delivery.ActualDeliveredAt = payload.Time ?? DateTime.UtcNow;
+                    if (order?.OrderDetails != null)
+                    {
+                        foreach (var od in order.OrderDetails.Where(od => od.ReturnRequest != null && od.ReturnRequest.Status == ReturnRequestStatus.APPROVED))
+                        {
+                            od.ReturnStatus = ReturnStatus.DELIVERED;
+                            if (od.Book != null)
+                            {
+                                od.Book.StockQuantity += od.Quantity;
+                                if (od.Book.Status == BookStatus.EMPTY && od.Book.StockQuantity > 0)
+                                {
+                                    od.Book.Status = BookStatus.ACTIVE;
+                                }
+                            }
+                        }
+                    }
+                    break;
+                case "return":
+                case "cancel":
+                    delivery.Status = DeliveryStatus.RETURNED;
+                    break;
+            }
+
+            if (order != null)
+            {
+                order.UpdatedAt = DateTimeOffset.UtcNow;
+                await _db.SaveChangesAsync();
+
+                if (_orderNotifier != null)
+                {
+                    try
+                    {
+                        string statusMsg = statusKey switch
+                        {
+                            "delivering" => $"Đơn hoàn trả (#{delivery.TrackingNumber}) đang được shipper GHN vận chuyển về Shop.",
+                            "delivered" => $"Shop đã nhận lại hàng hoàn trả (#{delivery.TrackingNumber}) thành công từ GHN. Hệ thống sẽ tiến hành hoàn tiền cho bạn.",
+                            _ => $"Vận đơn hoàn trả #{delivery.TrackingNumber} đã được cập nhật trạng thái: {delivery.Status}."
+                        };
+
+                        await _orderNotifier.SendOrderStatusChangedAsync(order.UserId, order.Id, order.OrderStatus.ToString(), statusMsg);
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+            else
+            {
+                await _db.SaveChangesAsync();
+            }
+            return;
+        }
 
         switch (statusKey)
         {

@@ -13,16 +13,20 @@ using BookManagement.Repository.Entities.Enums;
 using BookEntity = BookManagement.Repository.Entities.Book;
 using Microsoft.EntityFrameworkCore;
 
+using BookManagement.Service.Shipping;
+
 namespace BookManagement.Service.Shop
 {
     /// Vị trí: Domain Service - Thực thi logic nghiệp vụ hệ thống, quản lý Cửa hàng, gian hàng và kho hàng trong DbContext.
     public class ShopService : IShopService
     {
         private readonly AppDbContext _db;
+        private readonly IShippingService? _shippingService;
 
-        public ShopService(AppDbContext db)
+        public ShopService(AppDbContext db, IShippingService? shippingService = null)
         {
             _db = db;
+            _shippingService = shippingService;
         }
 
         private async Task<Guid> ResolveShopIdAsync(Guid userIdOrShopId)
@@ -804,16 +808,35 @@ namespace BookManagement.Service.Shop
             {
                 returnReq.Status = ReturnRequestStatus.APPROVED;
                 returnReq.OrderDetail.ReturnStatus = ReturnStatus.PROCESSING;
-                notificationContent = $"Yêu cầu trả hàng cho cuốn '{returnReq.OrderDetail.Book?.Title}' đã được Shop chấp nhận. Đang xử lý hoàn tiền.";
+                returnReq.UpdatedAt = DateTimeOffset.UtcNow;
+                await _db.SaveChangesAsync();
+
+                string trackingInfo = string.Empty;
+                if (_shippingService != null)
+                {
+                    try
+                    {
+                        var returnDelivery = await _shippingService.CreateReturnGhnOrderAsync(returnReq.Id);
+                        if (returnDelivery != null && !string.IsNullOrEmpty(returnDelivery.TrackingNumber))
+                        {
+                            trackingInfo = $" Đã tạo vận đơn thu hồi GHN ({returnDelivery.TrackingNumber}). Shipper GHN sẽ sớm liên hệ lấy hàng.";
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                notificationContent = $"Yêu cầu trả hàng cho cuốn '{returnReq.OrderDetail.Book?.Title}' đã được Shop chấp nhận.{trackingInfo}";
             }
             else
             {
                 returnReq.Status = ReturnRequestStatus.REJECTED;
                 returnReq.OrderDetail.ReturnStatus = ReturnStatus.REJECTED;
+                returnReq.UpdatedAt = DateTimeOffset.UtcNow;
                 notificationContent = $"Yêu cầu trả hàng cho cuốn '{returnReq.OrderDetail.Book?.Title}' đã bị Shop từ chối. Bạn có thể gửi Khiếu nại lên Admin nếu không đồng ý.";
+                await _db.SaveChangesAsync();
             }
-
-            returnReq.UpdatedAt = DateTimeOffset.UtcNow;
 
             if (returnReq.OrderDetail?.Order != null)
             {
@@ -827,9 +850,8 @@ namespace BookManagement.Service.Shop
                     CreatedAt = DateTimeOffset.UtcNow
                 };
                 await _db.Notifications.AddAsync(notification);
+                await _db.SaveChangesAsync();
             }
-
-            await _db.SaveChangesAsync();
         }
 
         /// Chức năng: Shop tạm ngừng kinh doanh (CLOSED) hoặc mở bán lại (OPEN)

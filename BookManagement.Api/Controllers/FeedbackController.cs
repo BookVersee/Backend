@@ -33,7 +33,7 @@ namespace BookManagement.Api.Controllers
         /// Chức năng: Gửi đánh giá và chấm sao cho sản phẩm sách đã mua (Chỉ dành cho Khách hàng đã mua hàng)
         [Authorize(Roles = "CUSTOMER,SHOP")]
         [HttpPost("WriteFeedback")]
-        public async Task<IActionResult> WriteFeedback(CreateFeedbackRequest request)
+        public async Task<IActionResult> WriteFeedback([FromBody] CreateFeedbackRequest request)
         {
             var (userId, role) = User.GetUserInfo();
             var feedback = await _feedbackService.CreateFeedbackAsync(userId, request);
@@ -43,7 +43,7 @@ namespace BookManagement.Api.Controllers
         /// Chức năng: Báo cáo phản hồi của Shop bị vi phạm lên Admin (Dành cho Khách hàng sở hữu bài đánh giá)
         [Authorize(Roles = "CUSTOMER,SHOP")]
         [HttpPost("ReportResponse")]
-        public async Task<IActionResult> ReportResponse(Guid responseId, ReportResponseRequest request)
+        public async Task<IActionResult> ReportResponse(Guid responseId, [FromBody] ReportResponseRequest request)
         {
             var (userId, role) = User.GetUserInfo();
             await _feedbackService.ReportResponseAsync(userId, responseId, request);

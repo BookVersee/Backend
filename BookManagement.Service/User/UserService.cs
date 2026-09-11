@@ -174,7 +174,23 @@ namespace BookManagement.Service.User
             var existingShop = await _context.Shops.FirstOrDefaultAsync(s => s.Id == userId);
             if (existingShop != null)
             {
-                throw new InvalidOperationException("Account already has a shop or a pending shop registration application.");
+                if (existingShop.Condition == ShopCondition.LOCKED)
+                {
+                    var lockedInfo = existingShop.LockedUntil.HasValue ? $"đến {existingShop.LockedUntil:dd/MM/yyyy HH:mm:ss}" : "vĩnh viễn";
+                    throw new InvalidOperationException($"Cửa hàng của bạn hiện đang bị tạm khóa ({lockedInfo}). Không thể đăng ký lại.");
+                }
+
+                if (existingShop.Condition == ShopCondition.DELETED)
+                {
+                    throw new InvalidOperationException("Cửa hàng của bạn đã bị xóa / cấm kinh doanh vĩnh viễn. Không thể đăng ký mở shop mới.");
+                }
+
+                if (existingShop.Condition == ShopCondition.CLOSED)
+                {
+                    throw new InvalidOperationException("Tài khoản của bạn đã có cửa hàng ở trạng thái tạm đóng (CLOSED). Vui lòng sử dụng tính năng mở lại cửa hàng thay vì đăng ký mới.");
+                }
+
+                throw new InvalidOperationException("Tài khoản của bạn đã có thông tin cửa hàng trên hệ thống.");
             }
 
             var shop = new BookManagement.Repository.Entities.Shop

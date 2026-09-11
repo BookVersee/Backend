@@ -17,5 +17,6 @@ namespace BookManagement.Repository.Entities
         public ICollection<Book> Books { get; set; } = new List<Book>();
         public ICollection<Feedback> Feedbacks { get; set; } = new List<Feedback>();
         public ICollection<Response> Responses { get; set; } = new List<Response>();
+        public ICollection<Escrow> Escrows { get; set; } = new List<Escrow>();
     }
 }

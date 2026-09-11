@@ -5,6 +5,7 @@ using BookManagement.Api.Filters;
 using BookManagement.Api.Hubs;
 using BookManagement.Api.Middlewares;
 using BookManagement.Repository.Data;
+using BookManagement.Repository.Entities.Enums;
 using BookManagement.Service.Admin;
 using BookManagement.Service.Auth;
 using BookManagement.Service.Book;
@@ -23,6 +24,8 @@ using BookManagement.Service.Payment;
 using BookManagement.Service.Shipping;
 using BookManagement.Service.Shop;
 using BookManagement.Service.User;
+using BookManagement.Service.Wallet;
+using BookManagement.Service.Report;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -96,8 +99,18 @@ builder.Services.AddScoped<INotificationRealtimeNotifier, NotificationRealtimeNo
 builder.Services.AddScoped<IOrderRealtimeNotifier, OrderRealtimeNotifier>();
 builder.Services.AddScoped<IPaymentRealtimeNotifier, PaymentRealtimeNotifier>();
 
+builder.Services.AddScoped<IWalletService, WalletService>();
+builder.Services.AddScoped<IReportService, ReportService>();
+
 builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
 builder.Services.AddHostedService<OrderExpirationBackgroundService>();
+builder.Services.AddHostedService<ReturnAndEscrowBackgroundService>();
+
+var renderPort = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrEmpty(renderPort))
+{
+    builder.WebHost.UseUrls($"http://*:{renderPort}");
+}
 
 builder.Services.AddCors(options =>
 {
@@ -106,7 +119,7 @@ builder.Services.AddCors(options =>
         policy.SetIsOriginAllowed(origin =>
             {
                 var host = new Uri(origin).Host;
-                return host == "localhost" || host.EndsWith(".vercel.app");
+                return host == "localhost" || host.EndsWith(".vercel.app") || host.EndsWith(".onrender.com") || host.EndsWith(".render.com");
             })
             .AllowAnyHeader()
             .AllowAnyMethod()
@@ -240,6 +253,87 @@ using (var scope = app.Services.CreateScope())
                         EXEC('CREATE UNIQUE NONCLUSTERED INDEX [IX_TransactionHistories_TransactionCode] ON [TransactionHistories]([TransactionCode]) WHERE [TransactionCode] IS NOT NULL;');
                     END");
 
+                dbContext.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = N'Wallets')
+                    BEGIN
+                        CREATE TABLE [Wallets] (
+                            [Id] UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+                            [UserId] UNIQUEIDENTIFIER NOT NULL,
+                            [Balance] DECIMAL(14,2) NOT NULL DEFAULT 0,
+                            [HeldBalance] DECIMAL(14,2) NOT NULL DEFAULT 0,
+                            [IsDeleted] BIT NOT NULL DEFAULT 0,
+                            [CreatedAt] DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
+                            [UpdatedAt] DATETIMEOFFSET NULL,
+                            CONSTRAINT [FK_Wallets_Users_UserId] FOREIGN KEY ([UserId]) REFERENCES [Users] ([Id]) ON DELETE CASCADE
+                        );
+                        CREATE UNIQUE NONCLUSTERED INDEX [IX_Wallets_UserId] ON [Wallets]([UserId]);
+                    END");
+
+                dbContext.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = N'Escrows')
+                    BEGIN
+                        CREATE TABLE [Escrows] (
+                            [Id] UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+                            [OrderId] UNIQUEIDENTIFIER NOT NULL,
+                            [ShopId] UNIQUEIDENTIFIER NOT NULL,
+                            [Amount] DECIMAL(14,2) NOT NULL,
+                            [PlatformFee] DECIMAL(14,2) NOT NULL,
+                            [NetShopEarnings] DECIMAL(14,2) NOT NULL,
+                            [ReleaseDate] DATETIMEOFFSET NOT NULL,
+                            [Status] NVARCHAR(30) NOT NULL DEFAULT 'HOLDING',
+                            [IsDeleted] BIT NOT NULL DEFAULT 0,
+                            [CreatedAt] DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
+                            [UpdatedAt] DATETIMEOFFSET NULL,
+                            CONSTRAINT [FK_Escrows_Orders_OrderId] FOREIGN KEY ([OrderId]) REFERENCES [Orders] ([Id]),
+                            CONSTRAINT [FK_Escrows_Shops_ShopId] FOREIGN KEY ([ShopId]) REFERENCES [Shops] ([Id])
+                        );
+                        CREATE NONCLUSTERED INDEX [IX_Escrows_ShopId] ON [Escrows]([ShopId]);
+                        CREATE NONCLUSTERED INDEX [IX_Escrows_OrderId] ON [Escrows]([OrderId]);
+                    END");
+
+                dbContext.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = N'Reports')
+                    BEGIN
+                        CREATE TABLE [Reports] (
+                            [Id] UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+                            [ReporterId] UNIQUEIDENTIFIER NOT NULL,
+                            [TargetId] UNIQUEIDENTIFIER NOT NULL,
+                            [ReportType] NVARCHAR(30) NOT NULL,
+                            [Reason] NVARCHAR(500) NOT NULL,
+                            [Status] NVARCHAR(30) NOT NULL DEFAULT 'PENDING',
+                            [AdminNote] NVARCHAR(500) NULL,
+                            [ResolvedByAdminId] UNIQUEIDENTIFIER NULL,
+                            [IsDeleted] BIT NOT NULL DEFAULT 0,
+                            [CreatedAt] DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
+                            [UpdatedAt] DATETIMEOFFSET NULL,
+                            CONSTRAINT [FK_Reports_Users_ReporterId] FOREIGN KEY ([ReporterId]) REFERENCES [Users] ([Id]),
+                            CONSTRAINT [FK_Reports_Users_ResolvedByAdminId] FOREIGN KEY ([ResolvedByAdminId]) REFERENCES [Users] ([Id])
+                        );
+                        CREATE NONCLUSTERED INDEX [IX_Reports_ReporterId] ON [Reports]([ReporterId]);
+                    END");
+
+                dbContext.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[ReturnRequests]') AND name = 'AdminId')
+                    BEGIN
+                        ALTER TABLE [ReturnRequests] ADD [AdminId] UNIQUEIDENTIFIER NULL;
+                    END
+                    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[ReturnRequests]') AND name = 'AdminNote')
+                    BEGIN
+                        ALTER TABLE [ReturnRequests] ADD [AdminNote] NVARCHAR(MAX) NULL;
+                    END
+                    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[ReturnRequests]') AND name = 'ShopRespondedAt')
+                    BEGIN
+                        ALTER TABLE [ReturnRequests] ADD [ShopRespondedAt] DATETIMEOFFSET NULL;
+                    END
+                    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[ReturnRequests]') AND name = 'EscalatedAt')
+                    BEGIN
+                        ALTER TABLE [ReturnRequests] ADD [EscalatedAt] DATETIMEOFFSET NULL;
+                    END
+                    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[ReturnRequests]') AND name = 'ResolvedAt')
+                    BEGIN
+                        ALTER TABLE [ReturnRequests] ADD [ResolvedAt] DATETIMEOFFSET NULL;
+                    END");
+
                 // Auto-sync CreatedAt and UpdatedAt dynamically for ALL tables in SQL Server database
                 dbContext.Database.ExecuteSqlRaw(@"
                     DECLARE @TableName NVARCHAR(255);
@@ -253,6 +347,10 @@ using (var scope = app.Services.CreateScope())
 
                     WHILE @@FETCH_STATUS = 0
                     BEGIN
+                        SET @Sql = 'IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N''' + @TableName + ''') AND name = ''IsDeleted'') ' +
+                                   'BEGIN ALTER TABLE [' + @TableName + '] ADD [IsDeleted] BIT NOT NULL DEFAULT 0; END';
+                        EXEC sp_executesql @Sql;
+
                         SET @Sql = 'IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N''' + @TableName + ''') AND name = ''CreatedAt'') ' +
                                    'BEGIN ALTER TABLE [' + @TableName + '] ADD [CreatedAt] DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(); END';
                         EXEC sp_executesql @Sql;
@@ -270,6 +368,29 @@ using (var scope = app.Services.CreateScope())
 
             // Ensure any user with username starting with 'admin' has ADMIN role in DB
             dbContext.Database.ExecuteSqlRaw("UPDATE Users SET Role = 'ADMIN' WHERE LOWER(Username) LIKE 'admin%'");
+
+            // Sync User.Role with Shop.Condition for all existing shops in database
+            var closedShopIds = await dbContext.Shops.Where(s => s.Condition == ShopCondition.CLOSED || s.Condition == ShopCondition.LOCKED || s.Condition == ShopCondition.DELETED).Select(s => s.Id).ToListAsync();
+            if (closedShopIds.Any())
+            {
+                var usersToCustomer = await dbContext.Users.Where(u => closedShopIds.Contains(u.Id) && u.Role == UserRole.SHOP).ToListAsync();
+                foreach (var u in usersToCustomer)
+                {
+                    u.Role = UserRole.CUSTOMER;
+                }
+                await dbContext.SaveChangesAsync();
+            }
+
+            var openShopIds = await dbContext.Shops.Where(s => s.Condition == ShopCondition.OPEN).Select(s => s.Id).ToListAsync();
+            if (openShopIds.Any())
+            {
+                var usersToShop = await dbContext.Users.Where(u => openShopIds.Contains(u.Id) && u.Role == UserRole.CUSTOMER).ToListAsync();
+                foreach (var u in usersToShop)
+                {
+                    u.Role = UserRole.SHOP;
+                }
+                await dbContext.SaveChangesAsync();
+            }
         }
     }
     catch (Exception ex)

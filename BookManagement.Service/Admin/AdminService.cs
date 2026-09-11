@@ -12,6 +12,9 @@ using Microsoft.EntityFrameworkCore;
 
 using BookManagement.Service.Shipping;
 
+using BookManagement.Service.Wallet;
+using BookManagement.Service.Email;
+
 namespace BookManagement.Service.Admin;
 
 /// Vị trí: Domain Service - Thực thi logic nghiệp vụ hệ thống, tính toán và truy vấn trực tiếp DbContext.
@@ -19,11 +22,15 @@ public class AdminService : IAdminService
 {
     private readonly AppDbContext _context;
     private readonly IShippingService? _shippingService;
+    private readonly IWalletService? _walletService;
+    private readonly IEmailService? _emailService;
 
-    public AdminService(AppDbContext context, IShippingService? shippingService = null)
+    public AdminService(AppDbContext context, IShippingService? shippingService = null, IWalletService? walletService = null, IEmailService? emailService = null)
     {
         _context = context;
         _shippingService = shippingService;
+        _walletService = walletService;
+        _emailService = emailService;
     }
 
     /// Chức năng: Tìm kiếm và lọc danh sách tài khoản người dùng phân trang
@@ -136,10 +143,12 @@ public class AdminService : IAdminService
             if (newStatus == UserStatus.LOCKED)
             {
                 shop.Condition = ShopCondition.CLOSED;
+                user.Role = UserRole.CUSTOMER;
             }
             else if (newStatus == UserStatus.ACTIVE && shop.Condition == ShopCondition.CLOSED)
             {
                 shop.Condition = ShopCondition.OPEN;
+                user.Role = UserRole.SHOP;
             }
         }
 
@@ -227,13 +236,13 @@ public class AdminService : IAdminService
             .FirstOrDefaultAsync(rr => rr.Id == disputeId);
 
         if (dispute == null)
-            throw new Exception("Dispute not found");
+            throw new KeyNotFoundException("Dispute not found");
 
         return MapToDisputeResponse(dispute);
     }
 
     /// Chức năng: Admin phán quyết đồng ý hoặc từ chối khiếu nại tranh chấp trả hàng
-    public async Task ResolveDisputeAsync(Guid disputeId, ResolveDisputeRequest request)
+    public async Task ResolveDisputeAsync(Guid adminId, Guid disputeId, ResolveDisputeRequest request)
     {
         var dispute = await _context.ReturnRequests
             .Include(rr => rr.OrderDetail)
@@ -245,12 +254,24 @@ public class AdminService : IAdminService
         if (dispute == null)
             throw new KeyNotFoundException("Dispute not found.");
 
-        dispute.Status = request.ApproveRefund ? ReturnRequestStatus.APPROVED : ReturnRequestStatus.REJECTED;
+        dispute.AdminId = adminId;
+        dispute.AdminNote = request.AdminResolutionNote;
+        dispute.ResolvedAt = DateTimeOffset.UtcNow;
+        dispute.Status = request.ApproveRefund ? ReturnRequestStatus.ADMIN_APPROVED : ReturnRequestStatus.ADMIN_REJECTED;
         dispute.UpdatedAt = DateTimeOffset.UtcNow;
 
         if (dispute.OrderDetail != null)
         {
-            dispute.OrderDetail.ReturnStatus = request.ApproveRefund ? ReturnStatus.PROCESSING : ReturnStatus.REJECTED;
+            dispute.OrderDetail.ReturnStatus = request.ApproveRefund ? ReturnStatus.REFUNDED : ReturnStatus.REJECTED;
+
+            if (request.ApproveRefund && _walletService != null && dispute.OrderDetail.Order != null)
+            {
+                await _walletService.RefundEscrowAsync(dispute.OrderDetail.Order.Id);
+            }
+            else if (!request.ApproveRefund && _walletService != null && dispute.OrderDetail.Order != null)
+            {
+                await _walletService.ReleaseEscrowAsync(dispute.OrderDetail.Order.Id);
+            }
 
             string trackingInfo = string.Empty;
             if (request.ApproveRefund && _shippingService != null)
@@ -277,7 +298,7 @@ public class AdminService : IAdminService
                     Type = NotificationType.ORDER_UPDATE,
                     ReferenceId = dispute.Id,
                     Content = request.ApproveRefund
-                        ? $"Ban quản trị (Admin) đã chấp nhận khiếu nại trả hàng cuốn '{dispute.OrderDetail.Book?.Title}'.{trackingInfo} Shipper GHN sẽ liên hệ lấy hàng."
+                        ? $"Ban quản trị (Admin) đã chấp nhận khiếu nại trả hàng cuốn '{dispute.OrderDetail.Book?.Title}'.{trackingInfo} Tiền đã được hoàn lại vào ví điện tử của bạn."
                         : $"Ban quản trị (Admin) đã từ chối khiếu nại trả hàng cuốn '{dispute.OrderDetail.Book?.Title}'. Ghi chú: {request.AdminResolutionNote ?? "Không đủ bằng chứng"}.",
                     CreatedAt = DateTimeOffset.UtcNow
                 };
@@ -426,17 +447,25 @@ public class AdminService : IAdminService
         };
     }
 
-    /// Chức năng: Khóa Cửa hàng vi phạm và hủy các phiên làm việc
-    public async Task LockShopAsync(Guid shopId, LockShopRequest request)
+    /// Chức năng: Khóa tạm thời Cửa hàng vi phạm (ShopCondition = LOCKED), giữ tài khoản Customer ACTIVE
+    public async Task LockShopAsync(Guid adminId, Guid shopId, LockShopRequest request)
     {
         var shop = await _context.Shops.FirstOrDefaultAsync(s => s.Id == shopId);
         if (shop == null)
             throw new KeyNotFoundException("Shop not found.");
 
-        shop.Condition = ShopCondition.CLOSED;
-        shop.Status = UserStatus.LOCKED;
-        var shopSessions = await _context.UserSessions.Where(us => us.UserId == shop.Id && !us.IsRevoked).ToListAsync();
-        foreach (var s in shopSessions) s.IsRevoked = true;
+        shop.Condition = ShopCondition.LOCKED;
+        int durationDays = (request.LockDurationDays.HasValue && request.LockDurationDays.Value > 0) ? request.LockDurationDays.Value : 30;
+        shop.LockedUntil = DateTimeOffset.UtcNow.AddDays(durationDays);
+
+        // Customer user account status stays ACTIVE!
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == shop.Id);
+        if (user != null)
+        {
+            user.Role = UserRole.CUSTOMER;
+        }
+        var durationStr = $"đến ngày {shop.LockedUntil:dd/MM/yyyy HH:mm:ss}";
+        var lockReasonContent = $"[THÔNG BÁO TẠM KHÓA CỬA HÀNG ({durationStr})] Xin chào {user?.FullName ?? shop.ShopName}, Ban quản trị hệ thống xin thông báo gian hàng '{shop.ShopName}' của bạn đã bị tạm khóa ({durationStr}). Lý do khóa: {request.Reason}. (Ghi chú: Tài khoản người mua hàng Customer của bạn vẫn hoạt động bình thường).";
 
         var notification = new BookManagement.Repository.Entities.Notification
         {
@@ -444,10 +473,70 @@ public class AdminService : IAdminService
             UserId = shop.Id,
             Type = NotificationType.SYSTEM,
             ReferenceId = shop.Id,
-            Content = $"Cửa hàng '{shop.ShopName}' của bạn đã bị Ban quản trị (Admin) tạm khóa. Ghi chú: {request.Reason ?? "Vi phạm tiêu chuẩn cộng đồng"}.",
+            Content = lockReasonContent,
+            IsRead = false,
             CreatedAt = DateTimeOffset.UtcNow
         };
         await _context.Notifications.AddAsync(notification);
+
+        if (_emailService != null && user != null && !string.IsNullOrEmpty(user.Email))
+        {
+            string htmlBody = $@"
+                <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #E5E7EB; border-radius: 8px;'>
+                    <h2 style='color: #DC2626;'>Thông Báo Tạm Khóa Cửa Hàng ({durationStr})</h2>
+                    <p>Xin chào <strong>{user.FullName ?? shop.ShopName}</strong>,</p>
+                    <p>Ban quản trị hệ thống xin thông báo gian hàng <strong>{shop.ShopName}</strong> của bạn đã bị tạm khóa ({durationStr}).</p>
+                    <p><strong>Lý do khóa:</strong> {request.Reason}</p>
+                    <p style='color: #059669;'><em>Ghi chú: Tài khoản người mua hàng (Customer) của bạn vẫn hoạt động bình thường.</em></p>
+                </div>";
+            try { await _emailService.SendEmailAsync(user.Email, $"Thông Báo Tạm Khóa Cửa Hàng - BookManagement", htmlBody); } catch {}
+        }
+
+        await _context.SaveChangesAsync();
+    }
+
+    /// Chức năng: Admin xóa/cấm kinh doanh vĩnh viễn Cửa hàng (ShopCondition = DELETED)
+    public async Task DeleteShopAsync(Guid adminId, Guid shopId, string reason)
+    {
+        var shop = await _context.Shops.FirstOrDefaultAsync(s => s.Id == shopId);
+        if (shop == null)
+            throw new KeyNotFoundException("Không tìm thấy Cửa hàng.");
+
+        shop.Condition = ShopCondition.DELETED;
+        shop.LockedUntil = null; // Banned forever
+        shop.UpdatedAt = DateTimeOffset.UtcNow;
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == shop.Id);
+        if (user != null)
+        {
+            user.Role = UserRole.CUSTOMER;
+            user.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
+        var notification = new BookManagement.Repository.Entities.Notification
+        {
+            Id = Guid.NewGuid(),
+            UserId = shop.Id,
+            Type = NotificationType.SYSTEM,
+            ReferenceId = shop.Id,
+            Content = $"[THÔNG BÁO XÓA CỬA HÀNG VĨNH VIỄN] Xin chào {user?.FullName ?? shop.ShopName}, Ban quản trị hệ thống xin thông báo gian hàng '{shop.ShopName}' của bạn đã bị XÓA/CẤM KINH DOANH VĨNH VIỄN. Lý do: {reason}. (Ghi chú: Tài khoản người mua hàng Customer của bạn vẫn hoạt động bình thường).",
+            IsRead = false,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        await _context.Notifications.AddAsync(notification);
+
+        if (_emailService != null && user != null && !string.IsNullOrEmpty(user.Email))
+        {
+            string htmlBody = $@"
+                <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #E5E7EB; border-radius: 8px;'>
+                    <h2 style='color: #DC2626;'>Thông Báo Xóa Cửa Hàng Vĩnh Viễn</h2>
+                    <p>Xin chào <strong>{user.FullName ?? shop.ShopName}</strong>,</p>
+                    <p>Ban quản trị hệ thống xin thông báo gian hàng <strong>{shop.ShopName}</strong> của bạn đã bị <strong>XÓA/CẤM KINH DOANH VĨNH VIỄN</strong>.</p>
+                    <p><strong>Lý do:</strong> {reason}</p>
+                    <p style='color: #059669;'><em>Ghi chú: Tài khoản người mua hàng (Customer) của bạn vẫn duy trì hoạt động bình thường.</em></p>
+                </div>";
+            try { await _emailService.SendEmailAsync(user.Email, "Thông Báo Xóa Cửa Hàng Vĩnh Viễn - BookManagement", htmlBody); } catch {}
+        }
 
         await _context.SaveChangesAsync();
     }
@@ -761,9 +850,14 @@ public class AdminService : IAdminService
         }
         else if (shop.ViolationCount >= 3)
         {
-            shop.Condition = ShopCondition.CLOSED;
+            shop.Condition = ShopCondition.LOCKED;
             shop.LockedUntil = DateTimeOffset.UtcNow.AddMonths(1);
-            shop.Status = UserStatus.LOCKED;
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == shop.Id);
+            if (user != null)
+            {
+                user.Role = UserRole.CUSTOMER;
+                user.Status = UserStatus.ACTIVE;
+            }
             shop.UpdatedAt = DateTimeOffset.UtcNow;
             var lockedSessions = await _context.UserSessions.Where(us => us.UserId == shop.Id && !us.IsRevoked).ToListAsync();
             foreach (var s in lockedSessions) s.IsRevoked = true;

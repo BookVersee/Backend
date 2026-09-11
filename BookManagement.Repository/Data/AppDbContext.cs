@@ -33,6 +33,9 @@ namespace BookManagement.Repository.Data
         public DbSet<Message> Messages { get; set; } = null!;
         public DbSet<Notification> Notifications { get; set; } = null!;
         public DbSet<UserSession> UserSessions { get; set; } = null!;
+        public DbSet<Wallet> Wallets { get; set; } = null!;
+        public DbSet<Escrow> Escrows { get; set; } = null!;
+        public DbSet<Report> Reports { get; set; } = null!;
 
         public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         {
@@ -417,6 +420,70 @@ namespace BookManagement.Repository.Data
                     .WithMany(u => u.UserSessions)
                     .HasForeignKey(us => us.UserId)
                     .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // 19. Wallet
+            modelBuilder.Entity<Wallet>(builder =>
+            {
+                builder.HasKey(w => w.Id);
+                builder.Property(w => w.Balance).HasPrecision(14, 2);
+                builder.Property(w => w.HeldBalance).HasPrecision(14, 2);
+
+                builder.HasIndex(w => w.UserId).IsUnique();
+
+                builder.HasOne(w => w.User)
+                    .WithOne(u => u.Wallet)
+                    .HasForeignKey<Wallet>(w => w.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // 20. Escrow
+            modelBuilder.Entity<Escrow>(builder =>
+            {
+                builder.HasKey(e => e.Id);
+                builder.Property(e => e.Amount).HasPrecision(14, 2);
+                builder.Property(e => e.PlatformFee).HasPrecision(14, 2);
+                builder.Property(e => e.NetShopEarnings).HasPrecision(14, 2);
+
+                builder.Property(e => e.Status)
+                    .HasConversion<string>()
+                    .HasMaxLength(30);
+
+                builder.HasOne(e => e.Order)
+                    .WithMany()
+                    .HasForeignKey(e => e.OrderId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                builder.HasOne(e => e.Shop)
+                    .WithMany(s => s.Escrows)
+                    .HasForeignKey(e => e.ShopId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // 21. Report
+            modelBuilder.Entity<Report>(builder =>
+            {
+                builder.HasKey(r => r.Id);
+                builder.Property(r => r.Reason).IsRequired().HasMaxLength(500);
+                builder.Property(r => r.AdminNote).HasMaxLength(500);
+
+                builder.Property(r => r.ReportType)
+                    .HasConversion<string>()
+                    .HasMaxLength(30);
+
+                builder.Property(r => r.Status)
+                    .HasConversion<string>()
+                    .HasMaxLength(30);
+
+                builder.HasOne(r => r.Reporter)
+                    .WithMany(u => u.ReportsSubmitted)
+                    .HasForeignKey(r => r.ReporterId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                builder.HasOne(r => r.ResolvedByAdmin)
+                    .WithMany()
+                    .HasForeignKey(r => r.ResolvedByAdminId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
         }
     }

@@ -28,7 +28,7 @@ public class ShopController : ControllerBase
 
     /// Chức năng: Xem thông tin hồ sơ Cửa hàng cá nhân
     [HttpGet("GetMyProfile")]
-    [Authorize(Roles = "SHOP")]
+    [Authorize(Roles = "SHOP,CUSTOMER")]
     public async Task<IActionResult> GetShopProfile()
     {
         var (userId, role) = User.GetUserInfo();
@@ -149,7 +149,7 @@ public class ShopController : ControllerBase
 
     /// Chức năng: Shop tạm ngừng kinh doanh (CLOSED) hoặc mở bán lại (OPEN)
     [HttpPost("UpdateShopCondition")]
-    [Authorize(Roles = "SHOP")]
+    [Authorize(Roles = "SHOP,CUSTOMER")]
     public async Task<IActionResult> UpdateShopCondition([FromBody] UpdateShopConditionDto dto)
     {
         var (userId, role) = User.GetUserInfo();

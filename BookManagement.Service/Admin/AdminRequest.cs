@@ -23,6 +23,7 @@ public class ResolveDisputeRequest
 public class LockShopRequest
 {
     public required string Reason { get; set; }
+    public int? LockDurationDays { get; set; }
 }
 
 public class UpdateDeliveryStatusRequest

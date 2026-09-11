@@ -21,7 +21,7 @@ public interface IAdminService
     // Dispute/Return Request Management
     Task<IEnumerable<DisputeResponse>> GetDisputesAsync(string? status = null);
     Task<DisputeResponse> GetDisputeDetailAsync(Guid disputeId);
-    Task ResolveDisputeAsync(Guid disputeId, ResolveDisputeRequest request);
+    Task ResolveDisputeAsync(Guid adminId, Guid disputeId, ResolveDisputeRequest request);
 
     // Order Monitoring
     Task<PagedResult<OrderResponse>> GetAllOrdersAsync(int page = 1, int pageSize = 10);
@@ -35,7 +35,8 @@ public interface IAdminService
 
     // Shop Management
     Task<PagedResult<ShopResponse>> GetAllShopsAsync(int page = 1, int pageSize = 10);
-    Task LockShopAsync(Guid shopId, LockShopRequest request);
+    Task LockShopAsync(Guid adminId, Guid shopId, LockShopRequest request);
+    Task DeleteShopAsync(Guid adminId, Guid shopId, string reason);
 
     // Dashboard & Statistics
     Task<DashboardStatisticsResponse> GetDashboardStatisticsAsync(string period = "month");

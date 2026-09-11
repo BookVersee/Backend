@@ -21,11 +21,13 @@ namespace BookManagement.Repository.Entities
 
         // Navigation Properties
         public Cart? Cart { get; set; }
+        public Wallet? Wallet { get; set; }
         public ICollection<Order> Orders { get; set; } = new List<Order>();
         public ICollection<Notification> Notifications { get; set; } = new List<Notification>();
         public ICollection<TransactionHistory> TransactionHistories { get; set; } = new List<TransactionHistory>();
         public ICollection<UserSession> UserSessions { get; set; } = new List<UserSession>();
         public ICollection<Chat> Chats { get; set; } = new List<Chat>();
         public ICollection<Message> SentMessages { get; set; } = new List<Message>();
+        public ICollection<Report> ReportsSubmitted { get; set; } = new List<Report>();
     }
 }

@@ -96,7 +96,7 @@ namespace BookManagement.Api.Controllers
         public async Task<IActionResult> ResolveDispute(Guid disputeId, ResolveDisputeRequest request)
         {
             var (adminId, adminRole) = User.GetUserInfo();
-            await _adminService.ResolveDisputeAsync(disputeId, request);
+            await _adminService.ResolveDisputeAsync(adminId, disputeId, request);
             return Ok(ApiResponse<string>.SuccessResponse("Dispute resolved successfully."));
         }
 
@@ -195,8 +195,17 @@ namespace BookManagement.Api.Controllers
         public async Task<IActionResult> LockShop(Guid shopId, LockShopRequest request)
         {
             var (adminId, adminRole) = User.GetUserInfo();
-            await _adminService.LockShopAsync(shopId, request);
-            return Ok(ApiResponse<string>.SuccessResponse($"Shop status updated to CLOSED."));
+            await _adminService.LockShopAsync(adminId, shopId, request);
+            return Ok(ApiResponse<string>.SuccessResponse($"Trạng thái Cửa hàng đã chuyển sang LOCKED. (Role chuyển thành CUSTOMER)."));
+        }
+
+        /// Chức năng: Xóa / Cấm kinh doanh vĩnh viễn Cửa hàng
+        [HttpDelete("DeleteShop")]
+        public async Task<IActionResult> DeleteShop(Guid shopId, [FromQuery] string reason)
+        {
+            var (adminId, adminRole) = User.GetUserInfo();
+            await _adminService.DeleteShopAsync(adminId, shopId, reason ?? "Ban quản trị gỡ bỏ / cấm kinh doanh vĩnh viễn");
+            return Ok(ApiResponse<string>.SuccessResponse("Đã xóa và cấm kinh doanh cửa hàng vĩnh viễn (Trạng thái DELETED, Role chuyển thành CUSTOMER)."));
         }
 
         /// Chức năng: Thống kê chỉ số Dashboard Admin

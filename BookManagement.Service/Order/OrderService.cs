@@ -361,6 +361,12 @@ namespace BookManagement.Service.Order
                 throw new InvalidOperationException("Chỉ có thể gửi yêu cầu trả hàng/hoàn tiền sau khi đơn hàng đã được giao thành công.");
             }
 
+            var deliveredDate = orderDetail.Order.Deliveries.FirstOrDefault(d => d.ActualDeliveredAt.HasValue)?.ActualDeliveredAt ?? orderDetail.Order.UpdatedAt ?? orderDetail.Order.CreatedAt;
+            if (DateTimeOffset.UtcNow - deliveredDate > TimeSpan.FromDays(5))
+            {
+                throw new InvalidOperationException("Quá thời hạn 5 ngày kể từ khi giao hàng thành công. Hệ thống không tiếp nhận yêu cầu trả hàng nữa.");
+            }
+
             if (orderDetail.ReturnStatus != ReturnStatus.NONE)
             {
                 throw new InvalidOperationException("Yêu cầu trả hàng cho sản phẩm này đã được gửi trước đó.");
@@ -388,7 +394,7 @@ namespace BookManagement.Service.Order
                 UserId = userId,
                 Type = NotificationType.ORDER_UPDATE,
                 ReferenceId = returnRequest.Id,
-                Content = $"Yêu cầu trả hàng cho cuốn '{orderDetail.Book?.Title}' đã được gửi tới Shop. Vui lòng chờ phản hồi.",
+                Content = $"Yêu cầu trả hàng cho cuốn '{orderDetail.Book?.Title}' đã được gửi tới Shop. Vui lòng chờ phản hồi trong vòng 3 ngày.",
                 CreatedAt = DateTimeOffset.UtcNow
             };
             await _context.Notifications.AddAsync(buyerNotification);
@@ -402,7 +408,7 @@ namespace BookManagement.Service.Order
                     UserId = shopUserId.Value,
                     Type = NotificationType.ORDER_UPDATE,
                     ReferenceId = returnRequest.Id,
-                    Content = $"Khách hàng gửi yêu cầu trả hàng cho sản phẩm '{orderDetail.Book?.Title}' (Đơn hàng #{orderDetail.OrderId}). Vui lòng xử lý.",
+                    Content = $"Khách hàng gửi yêu cầu trả hàng cho sản phẩm '{orderDetail.Book?.Title}' (Đơn hàng #{orderDetail.OrderId}). Vui lòng xử lý trong vòng 3 ngày.",
                     CreatedAt = DateTimeOffset.UtcNow
                 };
                 await _context.Notifications.AddAsync(shopNotification);
@@ -423,7 +429,7 @@ namespace BookManagement.Service.Order
             };
         }
 
-        /// Chức năng: Gửi khiếu nại lên Admin khi Shop từ chối yêu cầu trả hàng
+        /// Chức năng: Gửi khiếu nại lên Admin khi Shop từ chối yêu cầu trả hàng (trong vòng 3 ngày)
         public async Task EscalateReturnRequestAsync(Guid userId, Guid returnRequestId, string? reason)
         {
             var returnReq = await _context.ReturnRequests
@@ -436,12 +442,18 @@ namespace BookManagement.Service.Order
                 throw new KeyNotFoundException("Không tìm thấy yêu cầu trả hàng.");
             }
 
-            if (returnReq.Status != ReturnRequestStatus.REJECTED)
+            if (returnReq.Status != ReturnRequestStatus.SHOP_REJECTED && returnReq.Status != ReturnRequestStatus.REJECTED)
             {
                 throw new InvalidOperationException("Chỉ có thể gửi khiếu nại lên Admin khi yêu cầu trả hàng bị Shop từ chối.");
             }
 
-            returnReq.Status = ReturnRequestStatus.PENDING;
+            if (returnReq.ShopRespondedAt.HasValue && DateTimeOffset.UtcNow - returnReq.ShopRespondedAt.Value > TimeSpan.FromDays(3))
+            {
+                throw new InvalidOperationException("Đã quá thời hạn 3 ngày kể từ khi Shop từ chối. Bạn không thể gửi khiếu nại lên Admin.");
+            }
+
+            returnReq.Status = ReturnRequestStatus.ESCALATED;
+            returnReq.EscalatedAt = DateTimeOffset.UtcNow;
             returnReq.DetailedReason = (returnReq.DetailedReason ?? "") + $" | [KHIẾU NẠI ADMIN: {reason}]";
             returnReq.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -451,7 +463,7 @@ namespace BookManagement.Service.Order
                 UserId = userId,
                 Type = NotificationType.SYSTEM,
                 ReferenceId = returnReq.Id,
-                Content = $"Yêu cầu khiếu nại của bạn cho sản phẩm đã được gửi lên Ban quản trị (Admin) xử lý.",
+                Content = $"Yêu cầu khiếu nại của bạn cho sản phẩm đã được gửi lên Ban quản trị (Admin) xử lý trong vòng 1 ngày.",
                 CreatedAt = DateTimeOffset.UtcNow
             };
             await _context.Notifications.AddAsync(notification);

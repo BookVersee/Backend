@@ -15,6 +15,8 @@ using Microsoft.EntityFrameworkCore;
 
 using BookManagement.Service.Shipping;
 
+using BookManagement.Service.Wallet;
+
 namespace BookManagement.Service.Shop
 {
     /// Vị trí: Domain Service - Thực thi logic nghiệp vụ hệ thống, quản lý Cửa hàng, gian hàng và kho hàng trong DbContext.
@@ -22,48 +24,109 @@ namespace BookManagement.Service.Shop
     {
         private readonly AppDbContext _db;
         private readonly IShippingService? _shippingService;
+        private readonly IWalletService? _walletService;
 
-        public ShopService(AppDbContext db, IShippingService? shippingService = null)
+        public ShopService(AppDbContext db, IShippingService? shippingService = null, IWalletService? walletService = null)
         {
             _db = db;
             _shippingService = shippingService;
+            _walletService = walletService;
         }
 
         private async Task<Guid> ResolveShopIdAsync(Guid userIdOrShopId)
         {
-            var shopIds = await _db.Database
-                .SqlQueryRaw<Guid>("SELECT Id FROM Shops WHERE UserId = {0} OR Id = {0}", userIdOrShopId)
-                .ToListAsync();
-            if (!shopIds.Any())
+            var shop = await _db.Shops.FirstOrDefaultAsync(s => s.Id == userIdOrShopId);
+            if (shop != null)
             {
-                throw new KeyNotFoundException("Shop not found for the specified user or shop id.");
+                if (shop.Condition != ShopCondition.OPEN)
+                {
+                    throw new InvalidOperationException($"Cửa hàng hiện đang ở trạng thái {shop.Condition}. Không thể thực hiện các thao tác bán hàng của Shop.");
+                }
+                return shop.Id;
             }
-            return shopIds.First();
+
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userIdOrShopId);
+            if (user != null && (user.Role == UserRole.SHOP || user.Role == UserRole.ADMIN || user.Role == UserRole.SUPER_ADMIN))
+            {
+                var userShop = await _db.Shops.FirstOrDefaultAsync(s => s.Id == user.Id);
+                if (userShop != null && userShop.Condition != ShopCondition.OPEN)
+                {
+                    throw new InvalidOperationException($"Cửa hàng hiện đang ở trạng thái {userShop.Condition}. Không thể thực hiện các thao tác bán hàng của Shop.");
+                }
+                return user.Id;
+            }
+
+            throw new KeyNotFoundException("Shop not found for the specified user or shop id.");
         }
 
-        /// Chức năng: Đăng ký tạo thông tin Cửa hàng bán sách mới
+        /// Chức năng: Đăng ký tạo thông tin Cửa hàng bán sách mới (Shop kế thừa User)
         public async Task<ShopRegisterResponseDto> RegisterShopAsync(Guid userId, ShopRegisterDto dto)
         {
             var existingShop = await _db.Shops.FirstOrDefaultAsync(s => s.Id == userId);
             if (existingShop != null)
             {
-                throw new InvalidOperationException("User already registered a shop.");
+                if (existingShop.Condition == ShopCondition.LOCKED)
+                {
+                    var lockedInfo = existingShop.LockedUntil.HasValue ? $"đến {existingShop.LockedUntil:dd/MM/yyyy HH:mm:ss}" : "vĩnh viễn";
+                    throw new InvalidOperationException($"Cửa hàng của bạn hiện đang bị tạm khóa ({lockedInfo}). Không thể đăng ký lại.");
+                }
+
+                if (existingShop.Condition == ShopCondition.DELETED)
+                {
+                    throw new InvalidOperationException("Cửa hàng của bạn đã bị xóa / cấm kinh doanh vĩnh viễn. Không thể đăng ký mở shop mới.");
+                }
+
+                if (existingShop.Condition == ShopCondition.CLOSED)
+                {
+                    throw new InvalidOperationException("Tài khoản của bạn đã có cửa hàng ở trạng thái tạm đóng (CLOSED). Vui lòng sử dụng tính năng 'Mở lại cửa hàng' (UpdateShopCondition -> OPEN) thay vì đăng ký mới.");
+                }
+
+                throw new InvalidOperationException("Tài khoản của bạn đã có thông tin cửa hàng trên hệ thống.");
             }
 
             var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId);
-            if (user != null)
+            if (user == null)
             {
-                user.Role = UserRole.SHOP;
-                user.Address = dto.Address ?? user.Address;
-                user.QrImageUrl = dto.QrImageUrl ?? user.QrImageUrl;
-                user.UpdatedAt = DateTimeOffset.UtcNow;
+                throw new KeyNotFoundException("User not found.");
             }
+
+            if (user.Status != UserStatus.ACTIVE)
+            {
+                throw new InvalidOperationException("Tài khoản người dùng đang bị khóa hoặc ngưng hoạt động, không thể đăng ký mở shop.");
+            }
+
+            user.Role = UserRole.SHOP;
+            user.Address = dto.Address ?? user.Address;
+            user.QrImageUrl = dto.QrImageUrl ?? user.QrImageUrl;
+            user.UpdatedAt = DateTimeOffset.UtcNow;
 
             var shopName = dto.ShopName.Trim();
             var createdAt = DateTimeOffset.UtcNow;
 
-            await _db.Database.ExecuteSqlInterpolatedAsync(
-                $"IF NOT EXISTS (SELECT 1 FROM Shops WHERE Id = {userId}) INSERT INTO Shops (Id, ShopName, Condition, Rating, ViolationCount, CreatedAt) VALUES ({userId}, {shopName}, 'OPEN', 0, 0, {createdAt});");
+            var conn = _db.Database.GetDbConnection();
+            if (conn.State != System.Data.ConnectionState.Open)
+                await conn.OpenAsync();
+
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO \"Shops\" (\"Id\", \"ShopName\", \"Condition\", \"Rating\", \"ViolationCount\", \"CreatedAt\") VALUES (@id, @shopName, 'OPEN', 0, 0, @createdAt);";
+                var p1 = cmd.CreateParameter(); p1.ParameterName = "@id"; p1.Value = userId; cmd.Parameters.Add(p1);
+                var p2 = cmd.CreateParameter(); p2.ParameterName = "@shopName"; p2.Value = shopName; cmd.Parameters.Add(p2);
+                var p3 = cmd.CreateParameter(); p3.ParameterName = "@createdAt"; p3.Value = createdAt; cmd.Parameters.Add(p3);
+                try
+                {
+                    await cmd.ExecuteNonQueryAsync();
+                }
+                catch
+                {
+                    using var cmdFallback = conn.CreateCommand();
+                    cmdFallback.CommandText = "INSERT INTO Shops (Id, ShopName, Condition, Rating, ViolationCount, CreatedAt) VALUES (@id, @shopName, 'OPEN', 0, 0, @createdAt);";
+                    var f1 = cmdFallback.CreateParameter(); f1.ParameterName = "@id"; f1.Value = userId; cmdFallback.Parameters.Add(f1);
+                    var f2 = cmdFallback.CreateParameter(); f2.ParameterName = "@shopName"; f2.Value = shopName; cmdFallback.Parameters.Add(f2);
+                    var f3 = cmdFallback.CreateParameter(); f3.ParameterName = "@createdAt"; f3.Value = createdAt; cmdFallback.Parameters.Add(f3);
+                    await cmdFallback.ExecuteNonQueryAsync();
+                }
+            }
 
             _db.Notifications.Add(new BookManagement.Repository.Entities.Notification
             {
@@ -90,42 +153,31 @@ namespace BookManagement.Service.Shop
         /// Chức năng: Xem thông tin hồ sơ lý lịch Cửa hàng
         public async Task<ShopProfileDto> GetShopProfileAsync(Guid userIdOrShopId)
         {
-            var shopId = await ResolveShopIdAsync(userIdOrShopId);
+            var shop = await _db.Shops.FirstOrDefaultAsync(s => s.Id == userIdOrShopId);
+            if (shop == null)
+            {
+                var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userIdOrShopId);
+                if (user != null)
+                {
+                    shop = await _db.Shops.FirstOrDefaultAsync(s => s.Id == user.Id);
+                }
+            }
 
-            var conn = _db.Database.GetDbConnection();
-            if (conn.State != System.Data.ConnectionState.Open)
-                await conn.OpenAsync();
-
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT TOP 1 Id, ShopName, Condition, Rating, CreatedAt FROM Shops WHERE Id = @id OR UserId = @id";
-            var p = cmd.CreateParameter();
-            p.ParameterName = "@id";
-            p.Value = shopId;
-            cmd.Parameters.Add(p);
-
-            using var reader = await cmd.ExecuteReaderAsync();
-            if (!await reader.ReadAsync())
+            if (shop == null)
             {
                 throw new KeyNotFoundException("Shop not found.");
             }
 
-            var id = reader.GetGuid(0);
-            var shopName = reader.GetString(1);
-            var conditionStr = reader.GetString(2);
-            var rating = Convert.ToSingle(reader.GetValue(3));
-            var createdAt = reader.GetFieldValue<DateTimeOffset>(4);
-            reader.Close();
-
-            var totalBooks = await _db.Books.CountAsync(b => b.ShopId == id && b.Status != BookStatus.HIDDEN);
+            var totalBooks = await _db.Books.CountAsync(b => b.ShopId == shop.Id && b.Status != BookStatus.HIDDEN);
 
             return new ShopProfileDto
             {
-                ShopId = id,
-                ShopName = shopName,
-                Condition = conditionStr,
-                Rating = rating,
+                ShopId = shop.Id,
+                ShopName = shop.ShopName,
+                Condition = shop.Condition.ToString(),
+                Rating = shop.Rating,
                 TotalBooks = totalBooks,
-                CreatedAt = createdAt
+                CreatedAt = shop.CreatedAt
             };
         }
 
@@ -628,6 +680,12 @@ namespace BookManagement.Service.Shop
                 order.UpdatedAt = DateTimeOffset.UtcNow;
 
                 await _db.SaveChangesAsync();
+
+                if (targetStatus == OrderStatus.DELIVERED && _walletService != null)
+                {
+                    await _walletService.CreateEscrowForOrderAsync(order.Id, shopId, order.TotalAmount);
+                }
+
                 await tx.CommitAsync();
             });
         }
@@ -802,14 +860,19 @@ namespace BookManagement.Service.Shop
             bool isApprove = (dto.IsApproved.HasValue && dto.IsApproved.Value)
                 || (dto.Status != null && dto.Status.Equals("APPROVED", StringComparison.OrdinalIgnoreCase));
 
+            returnReq.ShopRespondedAt = DateTimeOffset.UtcNow;
+            returnReq.UpdatedAt = DateTimeOffset.UtcNow;
             string notificationContent;
 
             if (isApprove)
             {
-                returnReq.Status = ReturnRequestStatus.APPROVED;
-                returnReq.OrderDetail.ReturnStatus = ReturnStatus.PROCESSING;
-                returnReq.UpdatedAt = DateTimeOffset.UtcNow;
-                await _db.SaveChangesAsync();
+                returnReq.Status = ReturnRequestStatus.SHOP_APPROVED;
+                returnReq.OrderDetail.ReturnStatus = ReturnStatus.REFUNDED;
+
+                if (_walletService != null && returnReq.OrderDetail.Order != null)
+                {
+                    await _walletService.RefundEscrowAsync(returnReq.OrderDetail.OrderId);
+                }
 
                 string trackingInfo = string.Empty;
                 if (_shippingService != null)
@@ -827,14 +890,14 @@ namespace BookManagement.Service.Shop
                     }
                 }
 
-                notificationContent = $"Yêu cầu trả hàng cho cuốn '{returnReq.OrderDetail.Book?.Title}' đã được Shop chấp nhận.{trackingInfo}";
+                notificationContent = $"Yêu cầu trả hàng cho cuốn '{returnReq.OrderDetail.Book?.Title}' đã được Shop chấp nhận. Tiền đã được hoàn về ví điện tử của bạn.{trackingInfo}";
+                await _db.SaveChangesAsync();
             }
             else
             {
-                returnReq.Status = ReturnRequestStatus.REJECTED;
+                returnReq.Status = ReturnRequestStatus.SHOP_REJECTED;
                 returnReq.OrderDetail.ReturnStatus = ReturnStatus.REJECTED;
-                returnReq.UpdatedAt = DateTimeOffset.UtcNow;
-                notificationContent = $"Yêu cầu trả hàng cho cuốn '{returnReq.OrderDetail.Book?.Title}' đã bị Shop từ chối. Bạn có thể gửi Khiếu nại lên Admin nếu không đồng ý.";
+                notificationContent = $"Yêu cầu trả hàng cho cuốn '{returnReq.OrderDetail.Book?.Title}' đã bị Shop từ chối. Bạn có 3 ngày để gửi Khiếu nại lên Admin.";
                 await _db.SaveChangesAsync();
             }
 
@@ -854,22 +917,67 @@ namespace BookManagement.Service.Shop
             }
         }
 
-        /// Chức năng: Shop tạm ngừng kinh doanh (CLOSED) hoặc mở bán lại (OPEN)
+        /// Chức năng: Shop tạm ngừng kinh doanh (CLOSED), mở bán lại (OPEN), hoặc xóa shop (DELETED)
         public async Task<ShopProfileDto> UpdateShopConditionAsync(Guid userIdOrShopId, UpdateShopConditionDto dto)
         {
-            var shopId = await ResolveShopIdAsync(userIdOrShopId);
-            var profile = await GetShopProfileAsync(shopId);
+            var shop = await _db.Shops.FirstOrDefaultAsync(s => s.Id == userIdOrShopId);
+            if (shop == null)
+            {
+                var userObj = await _db.Users.FirstOrDefaultAsync(u => u.Id == userIdOrShopId);
+                if (userObj != null)
+                {
+                    shop = await _db.Shops.FirstOrDefaultAsync(s => s.Id == userObj.Id);
+                }
+            }
 
-            var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userIdOrShopId || u.Id == profile.ShopId);
+            if (shop == null)
+            {
+                throw new KeyNotFoundException("Cửa hàng không tồn tại.");
+            }
+
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == shop.Id);
             if (user != null && user.Status == UserStatus.LOCKED)
             {
                 throw new InvalidOperationException("Cửa hàng đang bị Admin tạm khóa do vi phạm, không thể tự cập nhật trạng thái mở bán. Vui lòng liên hệ Ban quản trị.");
             }
 
-            await _db.Database.ExecuteSqlInterpolatedAsync(
-                $"UPDATE Shops SET Condition = {dto.Condition.ToString()}, UpdatedAt = {DateTimeOffset.UtcNow} WHERE Id = {profile.ShopId}");
+            if (user != null && user.Status == UserStatus.INACTIVE)
+            {
+                throw new InvalidOperationException("Tài khoản người dùng đang ngưng hoạt động (INACTIVE), shop không thể mở bán.");
+            }
 
-            return await GetShopProfileAsync(shopId);
+            if (shop.Condition == ShopCondition.LOCKED && dto.Condition == ShopCondition.OPEN)
+            {
+                if (shop.LockedUntil.HasValue && shop.LockedUntil.Value > DateTimeOffset.UtcNow)
+                {
+                    throw new InvalidOperationException($"Cửa hàng đang trong thời gian bị tạm khóa do vi phạm (đến {shop.LockedUntil:dd/MM/yyyy HH:mm:ss}), không thể tự mở lại.");
+                }
+            }
+
+            if (shop.Condition == ShopCondition.DELETED)
+            {
+                throw new InvalidOperationException("Cửa hàng đã bị xóa, không thể thay đổi trạng thái.");
+            }
+
+            shop.Condition = dto.Condition;
+
+            if (user != null)
+            {
+                if (dto.Condition == ShopCondition.OPEN)
+                {
+                    user.Role = UserRole.SHOP;
+                }
+                else if (dto.Condition == ShopCondition.CLOSED || dto.Condition == ShopCondition.LOCKED || dto.Condition == ShopCondition.DELETED)
+                {
+                    user.Role = UserRole.CUSTOMER;
+                }
+                user.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+
+            shop.UpdatedAt = DateTimeOffset.UtcNow;
+            await _db.SaveChangesAsync();
+
+            return await GetShopProfileAsync(shop.Id);
         }
     }
 }

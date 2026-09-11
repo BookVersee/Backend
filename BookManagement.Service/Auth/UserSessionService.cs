@@ -84,6 +84,43 @@ namespace BookManagement.Service.Auth
             };
         }
 
+        private async Task SyncUserRoleWithShopAsync(UserEntity user)
+        {
+            if (user == null || user.Role == UserRole.ADMIN || user.Role == UserRole.SUPER_ADMIN || user.Role == UserRole.DELIVER)
+                return;
+
+            var shop = await _context.Shops.FirstOrDefaultAsync(s => s.Id == user.Id);
+            if (shop != null)
+            {
+                var now = DateTimeOffset.UtcNow;
+                if (shop.Condition == ShopCondition.LOCKED && shop.LockedUntil.HasValue && shop.LockedUntil.Value <= now)
+                {
+                    shop.Condition = ShopCondition.OPEN;
+                    shop.LockedUntil = null;
+                    shop.ViolationCount = 0;
+                    user.Role = UserRole.SHOP;
+                    if (user.Status == UserStatus.LOCKED) user.Status = UserStatus.ACTIVE;
+                    await _context.SaveChangesAsync();
+                }
+                else if (shop.Condition == ShopCondition.CLOSED || shop.Condition == ShopCondition.LOCKED || shop.Condition == ShopCondition.DELETED)
+                {
+                    if (user.Role != UserRole.CUSTOMER)
+                    {
+                        user.Role = UserRole.CUSTOMER;
+                        await _context.SaveChangesAsync();
+                    }
+                }
+                else if (shop.Condition == ShopCondition.OPEN)
+                {
+                    if (user.Role != UserRole.SHOP)
+                    {
+                        user.Role = UserRole.SHOP;
+                        await _context.SaveChangesAsync();
+                    }
+                }
+            }
+        }
+
         /// Chức năng: Kiểm tra thông tin tài khoản và cấp Token đăng nhập
         public async Task<TokenResponse> LoginAsync(LoginRequest request, string? ipAddress = null, string? deviceInfo = null)
         {
@@ -99,26 +136,12 @@ namespace BookManagement.Service.Auth
                 throw new UnauthorizedAccessException("Tài khoản của bạn đã ngưng hoạt động hoặc đã bị xóa.");
             }
 
+            // Sync user role with shop condition on login
+            await SyncUserRoleWithShopAsync(user);
+
             if (user.Status == UserStatus.LOCKED)
             {
-                var shop = await _context.Shops.FirstOrDefaultAsync(s => s.Id == user.Id);
-                if (shop != null && shop.LockedUntil.HasValue)
-                {
-                    if (shop.LockedUntil.Value > DateTimeOffset.UtcNow)
-                    {
-                        throw new UnauthorizedAccessException($"Cửa hàng và tài khoản của bạn đang bị tạm khóa 1 tháng do vi phạm quá 3 lần. Thời điểm mở khóa tự động: {shop.LockedUntil.Value:dd/MM/yyyy HH:mm}.");
-                    }
-
-                    // Đã hết thời hạn khóa 1 tháng -> Tự động mở khóa lại cho Shop
-                    shop.Condition = ShopCondition.OPEN;
-                    shop.ViolationCount = 0;
-                    user.Status = UserStatus.ACTIVE;
-                    await _context.SaveChangesAsync();
-                }
-                else
-                {
-                    throw new UnauthorizedAccessException("Account is locked by administrator.");
-                }
+                throw new UnauthorizedAccessException("Account is locked by administrator.");
             }
 
             var accessToken = _tokenService.GenerateAccessToken(user);
@@ -198,6 +221,8 @@ namespace BookManagement.Service.Auth
             var user = session.User;
             if (user == null || user.Status == UserStatus.LOCKED)
                 throw new UnauthorizedAccessException("User is inactive or locked.");
+
+            await SyncUserRoleWithShopAsync(user);
 
             session.IsRevoked = true;
             await _context.SaveChangesAsync();

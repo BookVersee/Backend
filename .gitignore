@@ -480,3 +480,7 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+# Ignore appsettings secrets for deployment
+BookManagement.Api/appsettings.json
+BookManagement.Api/appsettings.*.json
+

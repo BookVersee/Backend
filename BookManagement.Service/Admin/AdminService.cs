@@ -1,0 +1,878 @@
+using BookManagement.Repository.Abstractions;
+using BookManagement.Repository.Data;
+using BookManagement.Repository.Entities;
+using BookManagement.Repository.Entities.Enums;
+using BookManagement.Service.Book;
+using BookManagement.Service.Common;
+using BookManagement.Service.Delivery;
+using BookManagement.Service.Order;
+using BookManagement.Service.Shop;
+using BookManagement.Service.User;
+using Microsoft.EntityFrameworkCore;
+
+using BookManagement.Service.Shipping;
+
+using BookManagement.Service.Wallet;
+using BookManagement.Service.Email;
+
+namespace BookManagement.Service.Admin;
+
+/// Vị trí: Domain Service - Thực thi logic nghiệp vụ hệ thống, tính toán và truy vấn trực tiếp DbContext.
+public class AdminService : IAdminService
+{
+    private readonly AppDbContext _context;
+    private readonly IShippingService? _shippingService;
+    private readonly IWalletService? _walletService;
+    private readonly IEmailService? _emailService;
+
+    public AdminService(AppDbContext context, IShippingService? shippingService = null, IWalletService? walletService = null, IEmailService? emailService = null)
+    {
+        _context = context;
+        _shippingService = shippingService;
+        _walletService = walletService;
+        _emailService = emailService;
+    }
+
+    /// Chức năng: Tìm kiếm và lọc danh sách tài khoản người dùng phân trang
+    public async Task<PagedResult<UserResponse>> GetUsersAsync(UserFilterRequest filter)
+    {
+        var query = _context.Users.AsNoTracking().AsQueryable();
+
+        if (filter.Role.HasValue)
+            query = query.Where(u => u.Role == filter.Role.Value);
+
+        if (filter.Status.HasValue)
+            query = query.Where(u => u.Status == filter.Status.Value);
+
+        if (!string.IsNullOrWhiteSpace(filter.Keyword))
+        {
+            var kw = filter.Keyword.Trim().ToLower();
+            query = query.Where(u => u.Username.ToLower().Contains(kw) ||
+                                     u.Email.ToLower().Contains(kw) ||
+                                     (u.FullName != null && u.FullName.ToLower().Contains(kw)));
+        }
+
+        var totalCount = await query.CountAsync();
+        var page = filter.Page < 1 ? 1 : filter.Page;
+        var pageSize = filter.PageSize < 1 ? 10 : filter.PageSize;
+
+        var items = await query.OrderByDescending(u => u.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResult<UserResponse>
+        {
+            Items = items.Select(MapToUserResponse),
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
+        };
+    }
+
+    /// Chức năng: Xem thông tin chi tiết tài khoản người dùng, đơn hàng và lịch sử giao dịch
+    public async Task<UserDetailResponse> GetUserDetailAsync(Guid id)
+    {
+        var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == id);
+
+        if (user == null)
+            throw new KeyNotFoundException("User or Shop not found.");
+
+        var orders = await _context.Orders
+            .Include(o => o.OrderDetails)
+                .ThenInclude(od => od.Book)
+            .Include(o => o.Deliveries)
+            .AsNoTracking()
+            .Where(o => o.UserId == user.Id)
+            .OrderByDescending(o => o.CreatedAt)
+            .ToListAsync();
+        var transactions = await _context.TransactionHistories.AsNoTracking().Where(t => t.UserId == user.Id).ToListAsync();
+
+        var shop = user as BookManagement.Repository.Entities.Shop;
+
+        return new UserDetailResponse
+        {
+            Id = user.Id,
+            Username = user.Username,
+            Email = user.Email,
+            FullName = user.FullName,
+            Phone = user.Phone,
+            Address = user.Address,
+            Role = user.Role.ToString(),
+            Status = user.Status.ToString(),
+            ShopId = shop?.Id,
+            ShopName = shop?.ShopName,
+            ShopStatus = shop?.Condition.ToString(),
+            CreatedAt = user.CreatedAt,
+            RecentOrders = orders.Select(o => new OrderSummaryResponse
+            {
+                Id = o.Id,
+                UserId = o.UserId,
+                TotalAmount = o.TotalAmount,
+                Status = o.OrderStatus.ToString(),
+                ShippingAddress = o.ShippingAddress,
+                CreatedAt = o.CreatedAt
+            }).ToList(),
+            FinancialTransactions = transactions.Select(t => new TransactionSummaryResponse
+            {
+                Id = t.Id,
+                UserId = t.UserId,
+                ReferenceType = t.ReferenceType.ToString(),
+                ReferenceId = t.ReferenceId,
+                TransactionType = t.TransactionType.ToString(),
+                Amount = t.Amount,
+                TransactionCode = t.TransactionCode ?? string.Empty,
+                Description = t.Description,
+                CreatedAt = t.CreatedAt
+            }).ToList()
+        };
+    }
+
+    /// Chức năng: Cập nhật trạng thái khóa/mở tài khoản người dùng và thu hồi phiên đăng nhập
+    public async Task UpdateUserStatusAsync(Guid userId, string status)
+    {
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId);
+        if (user == null)
+            throw new KeyNotFoundException("User not found.");
+
+        var newStatus = (UserStatus)Enum.Parse(typeof(UserStatus), status);
+        user.Status = newStatus;
+
+        if (user is BookManagement.Repository.Entities.Shop shop)
+        {
+            if (newStatus == UserStatus.LOCKED)
+            {
+                shop.Condition = ShopCondition.CLOSED;
+                user.Role = UserRole.CUSTOMER;
+            }
+            else if (newStatus == UserStatus.ACTIVE && shop.Condition == ShopCondition.CLOSED)
+            {
+                shop.Condition = ShopCondition.OPEN;
+                user.Role = UserRole.SHOP;
+            }
+        }
+
+        if (user.Status == UserStatus.LOCKED)
+        {
+            var sessions = await _context.UserSessions.Where(us => us.UserId == userId && !us.IsRevoked).ToListAsync();
+            foreach (var s in sessions) s.IsRevoked = true;
+        }
+
+        await _context.SaveChangesAsync();
+    }
+
+    /// Chức năng: Super Admin tạo tài khoản Quản trị viên (Admin / Staff) mới
+    public async Task<UserResponse> CreateAdminAccountAsync(CreateAdminRequest request)
+    {
+        var username = request.Username.Trim();
+        var email = request.Email.Trim().ToLower();
+
+        if (await _context.Users.AnyAsync(u => u.Username == username))
+            throw new InvalidOperationException("Username is already taken.");
+
+        if (await _context.Users.AnyAsync(u => u.Email == email))
+            throw new InvalidOperationException("Email is already registered.");
+
+        var user = new BookManagement.Repository.Entities.User
+        {
+            Id = Guid.NewGuid(),
+            Username = username,
+            Email = email,
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+            FullName = request.FullName,
+            Phone = request.Phone,
+            Address = request.Address,
+            Role = request.Role == UserRole.SUPER_ADMIN ? UserRole.SUPER_ADMIN : UserRole.ADMIN,
+            Status = UserStatus.ACTIVE,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+        await _context.Users.AddAsync(user);
+        await _context.SaveChangesAsync();
+
+        return new UserResponse
+        {
+            Id = user.Id,
+            Username = user.Username,
+            Email = user.Email,
+            FullName = user.FullName,
+            Phone = user.Phone,
+            Address = user.Address,
+            Role = user.Role,
+            Status = user.Status,
+            CreatedAt = user.CreatedAt
+        };
+    }
+
+    /// Chức năng: Lấy danh sách các tranh chấp/khiếu nại trả hàng
+    public async Task<IEnumerable<DisputeResponse>> GetDisputesAsync(string? status = null)
+    {
+        IQueryable<BookManagement.Repository.Entities.ReturnRequest> query = _context.ReturnRequests.AsNoTracking()
+            .Include(rr => rr.OrderDetail)
+            .ThenInclude(od => od.Order)
+            .ThenInclude(o => o.User)
+            .Include(rr => rr.OrderDetail)
+            .ThenInclude(od => od.Book)
+            .ThenInclude(b => b.Shop);
+
+        if (!string.IsNullOrEmpty(status))
+            query = query.Where(rr => rr.Status == (ReturnRequestStatus)Enum.Parse(typeof(ReturnRequestStatus), status));
+
+        var disputes = await query.OrderByDescending(rr => rr.CreatedAt).ToListAsync();
+        return disputes.Select(MapToDisputeResponse);
+    }
+
+    /// Chức năng: Xem chi tiết 1 vụ tranh chấp khiếu nại trả hàng
+    public async Task<DisputeResponse> GetDisputeDetailAsync(Guid disputeId)
+    {
+        var dispute = await _context.ReturnRequests
+            .AsNoTracking()
+            .Include(rr => rr.OrderDetail)
+            .ThenInclude(od => od.Order)
+            .ThenInclude(o => o.User)
+            .Include(rr => rr.OrderDetail)
+            .ThenInclude(od => od.Book)
+            .ThenInclude(b => b.Shop)
+            .FirstOrDefaultAsync(rr => rr.Id == disputeId);
+
+        if (dispute == null)
+            throw new KeyNotFoundException("Dispute not found");
+
+        return MapToDisputeResponse(dispute);
+    }
+
+    /// Chức năng: Admin phán quyết đồng ý hoặc từ chối khiếu nại tranh chấp trả hàng
+    public async Task ResolveDisputeAsync(Guid adminId, Guid disputeId, ResolveDisputeRequest request)
+    {
+        var dispute = await _context.ReturnRequests
+            .Include(rr => rr.OrderDetail)
+                .ThenInclude(od => od.Order)
+            .Include(rr => rr.OrderDetail)
+                .ThenInclude(od => od.Book)
+            .FirstOrDefaultAsync(rr => rr.Id == disputeId);
+
+        if (dispute == null)
+            throw new KeyNotFoundException("Dispute not found.");
+
+        dispute.AdminId = adminId;
+        dispute.AdminNote = request.AdminResolutionNote;
+        dispute.ResolvedAt = DateTimeOffset.UtcNow;
+        dispute.Status = request.ApproveRefund ? ReturnRequestStatus.ADMIN_APPROVED : ReturnRequestStatus.ADMIN_REJECTED;
+        dispute.UpdatedAt = DateTimeOffset.UtcNow;
+
+        if (dispute.OrderDetail != null)
+        {
+            dispute.OrderDetail.ReturnStatus = request.ApproveRefund ? ReturnStatus.REFUNDED : ReturnStatus.REJECTED;
+
+            if (request.ApproveRefund && _walletService != null && dispute.OrderDetail.Order != null)
+            {
+                await _walletService.RefundEscrowAsync(dispute.OrderDetail.Order.Id);
+            }
+            else if (!request.ApproveRefund && _walletService != null && dispute.OrderDetail.Order != null)
+            {
+                await _walletService.ReleaseEscrowAsync(dispute.OrderDetail.Order.Id);
+            }
+
+            string trackingInfo = string.Empty;
+            if (request.ApproveRefund && _shippingService != null)
+            {
+                try
+                {
+                    var returnDelivery = await _shippingService.CreateReturnGhnOrderAsync(dispute.Id);
+                    if (returnDelivery != null && !string.IsNullOrEmpty(returnDelivery.TrackingNumber))
+                    {
+                        trackingInfo = $" Đã tạo vận đơn thu hồi GHN ({returnDelivery.TrackingNumber}).";
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            if (dispute.OrderDetail.Order != null)
+            {
+                var buyerNotification = new BookManagement.Repository.Entities.Notification
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = dispute.OrderDetail.Order.UserId,
+                    Type = NotificationType.ORDER_UPDATE,
+                    ReferenceId = dispute.Id,
+                    Content = request.ApproveRefund
+                        ? $"Ban quản trị (Admin) đã chấp nhận khiếu nại trả hàng cuốn '{dispute.OrderDetail.Book?.Title}'.{trackingInfo} Tiền đã được hoàn lại vào ví điện tử của bạn."
+                        : $"Ban quản trị (Admin) đã từ chối khiếu nại trả hàng cuốn '{dispute.OrderDetail.Book?.Title}'. Ghi chú: {request.AdminResolutionNote ?? "Không đủ bằng chứng"}.",
+                    CreatedAt = DateTimeOffset.UtcNow
+                };
+                await _context.Notifications.AddAsync(buyerNotification);
+            }
+
+            if (request.ApproveRefund && dispute.OrderDetail.Book != null && dispute.OrderDetail.Book.ShopId != Guid.Empty)
+            {
+                var shop = await _context.Shops.FirstOrDefaultAsync(s => s.Id == dispute.OrderDetail.Book.ShopId);
+                if (shop != null)
+                {
+                    await HandleShopViolationAsync(shop, "Bị Admin phán quyết thua khiếu nại trả hàng");
+                }
+            }
+        }
+
+        await _context.SaveChangesAsync();
+    }
+
+    /// Chức năng: Lấy danh sách toàn bộ đơn hàng trong hệ thống phân trang
+    public async Task<PagedResult<OrderResponse>> GetAllOrdersAsync(int page = 1, int pageSize = 10)
+    {
+        var query = _context.Orders.AsNoTracking();
+        var totalCount = await query.CountAsync();
+
+        var items = await query
+            .OrderByDescending(o => o.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResult<OrderResponse>
+        {
+            Items = items.Select(MapToOrderResponse),
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
+        };
+    }
+
+    /// Chức năng: Lọc danh sách đơn hàng theo trạng thái phân trang
+    public async Task<PagedResult<OrderResponse>> GetOrdersByStatusAsync(string status, int page = 1, int pageSize = 10)
+    {
+        var orderStatus = (OrderStatus)Enum.Parse(typeof(OrderStatus), status);
+        var query = _context.Orders.AsNoTracking().Where(o => o.OrderStatus == orderStatus);
+        var totalCount = await query.CountAsync();
+
+        var items = await query
+            .OrderByDescending(o => o.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResult<OrderResponse>
+        {
+            Items = items.Select(MapToOrderResponse),
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
+        };
+    }
+
+    /// Chức năng: Admin xem chi tiết 1 đơn hàng bất kỳ trong hệ thống
+    public async Task<OrderResponse> GetOrderDetailAsync(Guid orderId)
+    {
+        var order = await _context.Orders.AsNoTracking().FirstOrDefaultAsync(o => o.Id == orderId);
+        if (order == null)
+            throw new Exception("Order not found");
+
+        return MapToOrderResponse(order);
+    }
+
+    /// Chức năng: Lấy danh sách toàn bộ sản phẩm sách phân trang
+    public async Task<PagedResult<BookResponse>> GetAllBooksAsync(int page = 1, int pageSize = 10)
+    {
+        var query = _context.Books.AsNoTracking();
+        var totalCount = await query.CountAsync();
+
+        var items = await query
+            .OrderBy(b => b.Title)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResult<BookResponse>
+        {
+            Items = items.Select(MapToBookResponse),
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
+        };
+    }
+
+    /// Chức năng: Lọc danh sách sản phẩm sách theo trạng thái phân trang
+    public async Task<PagedResult<BookResponse>> GetBooksByStatusAsync(string status, int page = 1, int pageSize = 10)
+    {
+        var bookStatus = (BookStatus)Enum.Parse(typeof(BookStatus), status);
+        var query = _context.Books.AsNoTracking().Where(b => b.Status == bookStatus);
+        var totalCount = await query.CountAsync();
+
+        var items = await query
+            .OrderBy(b => b.Title)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResult<BookResponse>
+        {
+            Items = items.Select(MapToBookResponse),
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
+        };
+    }
+
+    /// Chức năng: Gỡ ẩn sản phẩm sách vi phạm khỏi hệ thống
+    public async Task HideBookAsync(Guid bookId)
+    {
+        var book = await _context.Books.FirstOrDefaultAsync(b => b.Id == bookId);
+        if (book == null)
+            throw new KeyNotFoundException("Book not found");
+
+        book.Status = BookStatus.HIDDEN;
+        book.UpdatedAt = DateTimeOffset.UtcNow;
+        await _context.SaveChangesAsync();
+    }
+
+    /// Chức năng: Lấy danh sách toàn bộ Cửa hàng trong hệ thống phân trang
+    public async Task<PagedResult<ShopResponse>> GetAllShopsAsync(int page = 1, int pageSize = 10)
+    {
+        var query = _context.Shops.AsNoTracking();
+        var totalCount = await query.CountAsync();
+
+        var items = await query
+            .OrderByDescending(s => s.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResult<ShopResponse>
+        {
+            Items = items.Select(MapToShopResponse),
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
+        };
+    }
+
+    /// Chức năng: Khóa tạm thời Cửa hàng vi phạm (ShopCondition = LOCKED), giữ tài khoản Customer ACTIVE
+    public async Task LockShopAsync(Guid adminId, Guid shopId, LockShopRequest request)
+    {
+        var shop = await _context.Shops.FirstOrDefaultAsync(s => s.Id == shopId);
+        if (shop == null)
+            throw new KeyNotFoundException("Shop not found.");
+
+        shop.Condition = ShopCondition.LOCKED;
+        int durationDays = (request.LockDurationDays.HasValue && request.LockDurationDays.Value > 0) ? request.LockDurationDays.Value : 30;
+        shop.LockedUntil = DateTimeOffset.UtcNow.AddDays(durationDays);
+
+        // Customer user account status stays ACTIVE!
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == shop.Id);
+        if (user != null)
+        {
+            user.Role = UserRole.CUSTOMER;
+        }
+        var durationStr = $"đến ngày {shop.LockedUntil:dd/MM/yyyy HH:mm:ss}";
+        var lockReasonContent = $"[THÔNG BÁO TẠM KHÓA CỬA HÀNG ({durationStr})] Xin chào {user?.FullName ?? shop.ShopName}, Ban quản trị hệ thống xin thông báo gian hàng '{shop.ShopName}' của bạn đã bị tạm khóa ({durationStr}). Lý do khóa: {request.Reason}. (Ghi chú: Tài khoản người mua hàng Customer của bạn vẫn hoạt động bình thường).";
+
+        var notification = new BookManagement.Repository.Entities.Notification
+        {
+            Id = Guid.NewGuid(),
+            UserId = shop.Id,
+            Type = NotificationType.SYSTEM,
+            ReferenceId = shop.Id,
+            Content = lockReasonContent,
+            IsRead = false,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        await _context.Notifications.AddAsync(notification);
+
+        if (_emailService != null && user != null && !string.IsNullOrEmpty(user.Email))
+        {
+            string htmlBody = $@"
+                <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #E5E7EB; border-radius: 8px;'>
+                    <h2 style='color: #DC2626;'>Thông Báo Tạm Khóa Cửa Hàng ({durationStr})</h2>
+                    <p>Xin chào <strong>{user.FullName ?? shop.ShopName}</strong>,</p>
+                    <p>Ban quản trị hệ thống xin thông báo gian hàng <strong>{shop.ShopName}</strong> của bạn đã bị tạm khóa ({durationStr}).</p>
+                    <p><strong>Lý do khóa:</strong> {request.Reason}</p>
+                    <p style='color: #059669;'><em>Ghi chú: Tài khoản người mua hàng (Customer) của bạn vẫn hoạt động bình thường.</em></p>
+                </div>";
+            try { await _emailService.SendEmailAsync(user.Email, $"Thông Báo Tạm Khóa Cửa Hàng - BookManagement", htmlBody); } catch {}
+        }
+
+        await _context.SaveChangesAsync();
+    }
+
+    /// Chức năng: Admin xóa/cấm kinh doanh vĩnh viễn Cửa hàng (ShopCondition = DELETED)
+    public async Task DeleteShopAsync(Guid adminId, Guid shopId, string reason)
+    {
+        var shop = await _context.Shops.FirstOrDefaultAsync(s => s.Id == shopId);
+        if (shop == null)
+            throw new KeyNotFoundException("Không tìm thấy Cửa hàng.");
+
+        shop.Condition = ShopCondition.DELETED;
+        shop.LockedUntil = null; // Banned forever
+        shop.UpdatedAt = DateTimeOffset.UtcNow;
+
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == shop.Id);
+        if (user != null)
+        {
+            user.Role = UserRole.CUSTOMER;
+            user.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
+        var notification = new BookManagement.Repository.Entities.Notification
+        {
+            Id = Guid.NewGuid(),
+            UserId = shop.Id,
+            Type = NotificationType.SYSTEM,
+            ReferenceId = shop.Id,
+            Content = $"[THÔNG BÁO XÓA CỬA HÀNG VĨNH VIỄN] Xin chào {user?.FullName ?? shop.ShopName}, Ban quản trị hệ thống xin thông báo gian hàng '{shop.ShopName}' của bạn đã bị XÓA/CẤM KINH DOANH VĨNH VIỄN. Lý do: {reason}. (Ghi chú: Tài khoản người mua hàng Customer của bạn vẫn hoạt động bình thường).",
+            IsRead = false,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        await _context.Notifications.AddAsync(notification);
+
+        if (_emailService != null && user != null && !string.IsNullOrEmpty(user.Email))
+        {
+            string htmlBody = $@"
+                <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #E5E7EB; border-radius: 8px;'>
+                    <h2 style='color: #DC2626;'>Thông Báo Xóa Cửa Hàng Vĩnh Viễn</h2>
+                    <p>Xin chào <strong>{user.FullName ?? shop.ShopName}</strong>,</p>
+                    <p>Ban quản trị hệ thống xin thông báo gian hàng <strong>{shop.ShopName}</strong> của bạn đã bị <strong>XÓA/CẤM KINH DOANH VĨNH VIỄN</strong>.</p>
+                    <p><strong>Lý do:</strong> {reason}</p>
+                    <p style='color: #059669;'><em>Ghi chú: Tài khoản người mua hàng (Customer) của bạn vẫn duy trì hoạt động bình thường.</em></p>
+                </div>";
+            try { await _emailService.SendEmailAsync(user.Email, "Thông Báo Xóa Cửa Hàng Vĩnh Viễn - BookManagement", htmlBody); } catch {}
+        }
+
+        await _context.SaveChangesAsync();
+    }
+
+    /// Chức năng: Thống kê các chỉ số tổng quan trên Dashboard Admin
+    public async Task<DashboardStatisticsResponse> GetDashboardStatisticsAsync(string period = "month")
+    {
+        var validStatuses = new[] { OrderStatus.PAID, OrderStatus.SHIPPING, OrderStatus.DELIVERING, OrderStatus.DELIVERED };
+        var totalOrders = await _context.Orders.CountAsync();
+        var totalUsers = await _context.Users.CountAsync();
+        var activeShops = await _context.Shops.CountAsync(s => s.Condition == ShopCondition.OPEN);
+        var totalRevenue = await _context.Orders
+            .Where(o => validStatuses.Contains(o.OrderStatus))
+            .SumAsync(o => (decimal?)o.TotalAmount) ?? 0m;
+        var disputesCount = await _context.ReturnRequests.CountAsync(rr => rr.Status == ReturnRequestStatus.PENDING);
+
+        return new DashboardStatisticsResponse
+        {
+            TotalOrders = totalOrders,
+            TotalUsers = totalUsers,
+            ActiveShops = activeShops,
+            TotalRevenue = totalRevenue,
+            DisputesCount = disputesCount
+        };
+    }
+
+    /// Chức năng: Thống kê báo cáo doanh thu toàn sàn
+    public async Task<RevenueReportResponse> GetRevenueReportAsync(string period = "month")
+    {
+        var validStatuses = new[] { OrderStatus.PAID, OrderStatus.SHIPPING, OrderStatus.DELIVERING, OrderStatus.DELIVERED };
+        var orders = await _context.Orders
+            .AsNoTracking()
+            .Where(o => validStatuses.Contains(o.OrderStatus))
+            .ToListAsync();
+        var totalRevenue = orders.Sum(o => o.TotalAmount);
+        var avgOrderValue = orders.Count > 0 ? totalRevenue / orders.Count : 0;
+
+        return new RevenueReportResponse
+        {
+            Period = period,
+            TotalRevenue = totalRevenue,
+            AvgOrderValue = avgOrderValue,
+            OrderCount = orders.Count
+        };
+    }
+
+    /// Chức năng: Lấy danh sách Top các sách bán chạy nhất toàn hệ thống
+    public async Task<IEnumerable<TopSellingBooksResponse>> GetTopSellingBooksAsync(int limit = 10)
+    {
+        var topBooks = await _context.OrderDetails
+            .AsNoTracking()
+            .GroupBy(od => od.BookId)
+            .Select(g => new
+            {
+                BookId = g.Key,
+                SoldCount = g.Sum(od => od.Quantity),
+                TotalRevenue = g.Sum(od => od.UnitPrice * od.Quantity)
+            })
+            .OrderByDescending(x => x.SoldCount)
+            .Take(limit)
+            .ToListAsync();
+
+        var bookIds = topBooks.Select(tb => tb.BookId).ToList();
+        var books = await _context.Books
+            .AsNoTracking()
+            .Where(b => bookIds.Contains(b.Id))
+            .ToListAsync();
+
+        return topBooks.Select(tb => new TopSellingBooksResponse
+        {
+            Id = tb.BookId,
+            Title = books.FirstOrDefault(b => b.Id == tb.BookId)?.Title ?? "Unknown",
+            SoldCount = tb.SoldCount,
+            TotalRevenue = tb.TotalRevenue
+        });
+    }
+
+    /// Chức năng: Lấy danh sách vận đơn giao hàng trong hệ thống phân trang
+    public async Task<PagedResult<DeliveryResponse>> GetDeliveriesAsync(string? status, int page = 1, int pageSize = 10)
+    {
+        var query = _context.Deliveries.AsNoTracking();
+
+        if (!string.IsNullOrEmpty(status))
+            query = query.Where(d => d.Status == (DeliveryStatus)Enum.Parse(typeof(DeliveryStatus), status));
+
+        var totalCount = await query.CountAsync();
+        var items = await query
+            .OrderByDescending(d => d.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync();
+
+        return new PagedResult<DeliveryResponse>
+        {
+            Items = items.Select(MapToDeliveryResponse),
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
+        };
+    }
+
+    /// Chức năng: Admin xem chi tiết 1 vận đơn giao hàng
+    public async Task<DeliveryResponse> GetDeliveryDetailAsync(Guid deliveryId)
+    {
+        var delivery = await _context.Deliveries.AsNoTracking().FirstOrDefaultAsync(d => d.Id == deliveryId);
+        if (delivery == null)
+            throw new Exception("Delivery not found");
+
+        return MapToDeliveryResponse(delivery);
+    }
+
+    private static UserResponse MapToUserResponse(BookManagement.Repository.Entities.User user)
+    {
+        return new UserResponse
+        {
+            Id = user.Id,
+            Username = user.Username,
+            Email = user.Email,
+            FullName = user.FullName,
+            Phone = user.Phone,
+            Address = user.Address,
+            Role = user.Role,
+            Status = user.Status,
+            CreatedAt = user.CreatedAt
+        };
+    }
+
+    private static DisputeResponse MapToDisputeResponse(BookManagement.Repository.Entities.ReturnRequest rr) => new()
+    {
+        ReturnRequestId = rr.Id,
+        OrderDetailId = rr.OrderDetailId,
+        OrderId = rr.OrderDetail.OrderId,
+        CustomerName = rr.OrderDetail?.Order?.User?.FullName ?? "Customer",
+        ShopName = rr.OrderDetail?.Book?.Shop?.ShopName ?? "Shop",
+        ReasonType = rr.ReasonType.ToString(),
+        DetailedReason = rr.DetailedReason ?? string.Empty,
+        EvidenceImageUrl = rr.ImageUrl,
+        Status = rr.Status.ToString(),
+        RefundAmount = rr.RefundAmount,
+        CreatedAt = rr.CreatedAt
+    };
+
+    private static OrderResponse MapToOrderResponse(BookManagement.Repository.Entities.Order order) => new()
+    {
+        Id = order.Id,
+        UserId = order.UserId,
+        OrderStatus = order.OrderStatus,
+        TotalAmount = order.TotalAmount,
+        ShippingAddress = order.ShippingAddress,
+        CreatedAt = order.CreatedAt
+    };
+
+    private static BookResponse MapToBookResponse(BookManagement.Repository.Entities.Book book) => new()
+    {
+        Id = book.Id,
+        Title = book.Title,
+        Author = book.Author,
+        Price = book.Price,
+        ImageUrl = book.ImageUrl,
+        Status = book.Status
+    };
+
+    private static ShopResponse MapToShopResponse(BookManagement.Repository.Entities.Shop shop) => new()
+    {
+        Id = shop.Id,
+        UserId = shop.Id,
+        ShopName = shop.ShopName,
+        Condition = shop.Condition,
+        Rating = shop.Rating
+    };
+
+    private static DeliveryResponse MapToDeliveryResponse(BookManagement.Repository.Entities.Delivery delivery) => new()
+    {
+        Id = delivery.Id,
+        OrderId = delivery.OrderId,
+        TrackingNumber = delivery.TrackingNumber ?? string.Empty,
+        Status = delivery.Status.ToString(),
+        EstimatedDelivery = delivery.EstimatedDelivery,
+        ActualDeliveredAt = delivery.ActualDeliveredAt
+    };
+
+    /// Chức năng: Lấy danh sách các phản hồi của Shop bị người dùng báo cáo vi phạm
+    public async Task<IEnumerable<ReportedResponseDto>> GetReportedResponsesAsync()
+    {
+        var notifications = await _context.Notifications
+            .AsNoTracking()
+            .Include(n => n.User)
+            .Where(n => n.Type == NotificationType.SYSTEM && n.Content != null && n.Content.Contains("User reported shop response"))
+            .OrderByDescending(n => n.CreatedAt)
+            .ToListAsync();
+
+        var result = new List<ReportedResponseDto>();
+
+        foreach (var n in notifications)
+        {
+            var content = n.Content ?? "";
+            var parts = content.Split(new[] { "User reported shop response ", ":" }, StringSplitOptions.RemoveEmptyEntries);
+            Guid responseId = Guid.Empty;
+            string reason = content;
+
+            if (parts.Length >= 2 && Guid.TryParse(parts[0].Trim(), out var parsedId))
+            {
+                responseId = parsedId;
+                reason = string.Join(":", parts.Skip(1)).Trim();
+            }
+
+            var responseObj = responseId != Guid.Empty
+                ? await _context.Responses
+                    .AsNoTracking()
+                    .Include(r => r.Shop)
+                    .Include(r => r.Feedback)
+                    .FirstOrDefaultAsync(r => r.Id == responseId)
+                : null;
+
+            result.Add(new ReportedResponseDto
+            {
+                NotificationId = n.Id,
+                ResponseId = responseId != Guid.Empty ? responseId : null,
+                CustomerUsername = n.User?.Username ?? n.UserId.ToString(),
+                ShopName = responseObj?.Shop?.ShopName,
+                FeedbackContent = responseObj?.Feedback?.Content,
+                ResponseContent = responseObj?.Content,
+                ReportReason = reason,
+                CreatedAt = n.CreatedAt
+            });
+        }
+
+        return result;
+    }
+
+    /// Chức năng: Kiểm duyệt xử lý gỡ phản hồi vi phạm của Shop và tính vi phạm
+    public async Task ModerateShopResponseAsync(Guid responseId, bool isDelete, string? adminNote)
+    {
+        var response = await _context.Responses
+            .Include(r => r.Shop)
+            .Include(r => r.Feedback)
+                .ThenInclude(f => f.OrderDetail)
+                    .ThenInclude(od => od.Order)
+            .FirstOrDefaultAsync(r => r.Id == responseId);
+
+        if (response == null)
+        {
+            throw new KeyNotFoundException("Không tìm thấy phản hồi của Shop.");
+        }
+
+        if (isDelete)
+        {
+            response.IsDeleted = true;
+            response.UpdatedAt = DateTimeOffset.UtcNow;
+
+            if (response.Shop != null)
+            {
+                await HandleShopViolationAsync(response.Shop, "Admin xóa phản hồi do vi phạm tiêu chuẩn cộng đồng");
+            }
+
+            var customerUserId = response.Feedback?.OrderDetail?.Order?.UserId;
+            if (customerUserId.HasValue && customerUserId.Value != Guid.Empty)
+            {
+                var customerNotification = new BookManagement.Repository.Entities.Notification
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = customerUserId.Value,
+                    Type = NotificationType.SYSTEM,
+                    ReferenceId = response.FeedbackId,
+                    Content = $"Ban quản trị (Admin) đã xử lý gỡ bỏ phản hồi của Cửa hàng trên bài đánh giá của bạn do vi phạm tiêu chuẩn cộng đồng.",
+                    IsRead = false,
+                    CreatedAt = DateTimeOffset.UtcNow
+                };
+                await _context.Notifications.AddAsync(customerNotification);
+            }
+        }
+
+        await _context.SaveChangesAsync();
+    }
+
+    /// Chức năng: Xử lý ghi nhận vi phạm cho Shop theo 3 nấc phạt (Cảnh báo -> Tạm khóa 1 tháng)
+    private async Task HandleShopViolationAsync(BookManagement.Repository.Entities.Shop shop, string violationReason)
+    {
+        if (shop == null || shop.Id == Guid.Empty) return;
+
+        shop.ViolationCount += 1;
+        shop.UpdatedAt = DateTimeOffset.UtcNow;
+
+        if (shop.ViolationCount == 1)
+        {
+            var warning1 = new BookManagement.Repository.Entities.Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = shop.Id,
+                Type = NotificationType.SYSTEM,
+                ReferenceId = shop.Id,
+                Content = $"CẢNH BÁO VI PHẠM (1/3): Cửa hàng '{shop.ShopName}' của bạn vừa ghi nhận 1 lần vi phạm ({violationReason}). Nếu tái phạm đủ 3 lần, Cửa hàng sẽ bị hệ thống tự động tạm khóa 1 tháng!",
+                IsRead = false,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            await _context.Notifications.AddAsync(warning1);
+        }
+        else if (shop.ViolationCount == 2)
+        {
+            var warning2 = new BookManagement.Repository.Entities.Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = shop.Id,
+                Type = NotificationType.SYSTEM,
+                ReferenceId = shop.Id,
+                Content = $"CẢNH BÁO VI PHẠM NGHIÊM TRỌNG (2/3): Cửa hàng '{shop.ShopName}' của bạn đã ghi nhận 2 lần vi phạm ({violationReason}). Thêm 1 lần vi phạm nữa, Cửa hàng sẽ bị hệ thống tự động tạm khóa 1 tháng!",
+                IsRead = false,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            await _context.Notifications.AddAsync(warning2);
+        }
+        else if (shop.ViolationCount >= 3)
+        {
+            shop.Condition = ShopCondition.LOCKED;
+            shop.LockedUntil = DateTimeOffset.UtcNow.AddMonths(1);
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == shop.Id);
+            if (user != null)
+            {
+                user.Role = UserRole.CUSTOMER;
+                user.Status = UserStatus.ACTIVE;
+            }
+            shop.UpdatedAt = DateTimeOffset.UtcNow;
+            var lockedSessions = await _context.UserSessions.Where(us => us.UserId == shop.Id && !us.IsRevoked).ToListAsync();
+            foreach (var s in lockedSessions) s.IsRevoked = true;
+
+            var lockWarning = new BookManagement.Repository.Entities.Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = shop.Id,
+                Type = NotificationType.SYSTEM,
+                ReferenceId = shop.Id,
+                Content = $"THÔNG BÁO TẠM KHÓA CỬA HÀNG (3/3): Cửa hàng '{shop.ShopName}' đã cán mốc 3 lần vi phạm tiêu chuẩn cộng đồng ({violationReason}). Hệ thống đã tự động tạm khóa Cửa hàng 1 tháng (Tạm dừng đến ngày {shop.LockedUntil.Value:dd/MM/yyyy HH:mm}).",
+                IsRead = false,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            await _context.Notifications.AddAsync(lockWarning);
+        }
+    }
+}

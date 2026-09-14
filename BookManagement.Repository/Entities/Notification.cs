@@ -12,7 +12,7 @@ namespace BookManagement.Repository.Entities
         public string? Content { get; set; }
         public string? ImageUrl { get; set; }
         public bool IsRead { get; set; } = false;
-        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
         public DateTimeOffset? UpdatedAt { get; set; }
 
         // Navigation Properties

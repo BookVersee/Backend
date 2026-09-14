@@ -3,6 +3,10 @@ namespace BookManagement.Repository.Entities.Enums
     public enum TransactionType
     {
         IN,
-        OUT
+        OUT,
+        ESCROW_RELEASE,
+        WITHDRAWAL,
+        REFUND,
+        DEPOSIT
     }
 }

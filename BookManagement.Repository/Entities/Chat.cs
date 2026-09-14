@@ -8,7 +8,7 @@ namespace BookManagement.Repository.Entities
     {
         public Guid UserId { get; set; }
         public Guid ShopId { get; set; }
-        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
         public DateTimeOffset? UpdatedAt { get; set; }
 
         // Navigation Properties

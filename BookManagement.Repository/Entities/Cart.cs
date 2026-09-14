@@ -7,7 +7,7 @@ namespace BookManagement.Repository.Entities
     public class Cart : BaseEntity<Guid>, IAuditableEntity
     {
         public Guid UserId { get; set; }
-        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
         public DateTimeOffset? UpdatedAt { get; set; }
 
         // Navigation Properties

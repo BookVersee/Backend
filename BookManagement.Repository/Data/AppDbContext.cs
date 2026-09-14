@@ -18,6 +18,7 @@ namespace BookManagement.Repository.Data
         public DbSet<Shop> Shops { get; set; } = null!;
         public DbSet<Category> Categories { get; set; } = null!;
         public DbSet<Book> Books { get; set; } = null!;
+        public DbSet<BookImage> BookImages { get; set; } = null!;
         public DbSet<Cart> Carts { get; set; } = null!;
         public DbSet<CartBookDetail> CartBookDetails { get; set; } = null!;
         public DbSet<Order> Orders { get; set; } = null!;
@@ -32,6 +33,9 @@ namespace BookManagement.Repository.Data
         public DbSet<Message> Messages { get; set; } = null!;
         public DbSet<Notification> Notifications { get; set; } = null!;
         public DbSet<UserSession> UserSessions { get; set; } = null!;
+        public DbSet<Wallet> Wallets { get; set; } = null!;
+        public DbSet<Escrow> Escrows { get; set; } = null!;
+        public DbSet<Report> Reports { get; set; } = null!;
 
         public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         {
@@ -54,11 +58,10 @@ namespace BookManagement.Repository.Data
         {
             base.OnModelCreating(modelBuilder);
 
-            // ==========================================
             // 1. User
-            // ==========================================
             modelBuilder.Entity<User>(builder =>
             {
+                builder.ToTable("Users");
                 builder.HasKey(u => u.Id);
                 builder.Property(u => u.Username).IsRequired().HasMaxLength(50);
                 builder.Property(u => u.Email).IsRequired().HasMaxLength(100);
@@ -71,39 +74,25 @@ namespace BookManagement.Repository.Data
 
                 builder.Property(u => u.Role)
                     .HasConversion<string>()
-                    .HasMaxLength(30)
-                    .HasDefaultValue(UserRole.CUSTOMER);
+                    .HasMaxLength(30);
 
                 builder.Property(u => u.Status)
                     .HasConversion<string>()
-                    .HasMaxLength(30)
-                    .HasDefaultValue(UserStatus.ACTIVE);
+                    .HasMaxLength(30);
             });
 
-            // ==========================================
-            // 2. Shop (Quan hệ 1-1 với User)
-            // ==========================================
+            // 2. Shop
             modelBuilder.Entity<Shop>(builder =>
             {
-                builder.HasKey(s => s.Id);
+                builder.ToTable("Shops");
                 builder.Property(s => s.ShopName).IsRequired().HasMaxLength(100);
 
                 builder.Property(s => s.Condition)
                     .HasConversion<string>()
-                    .HasMaxLength(30)
-                    .HasDefaultValue(ShopCondition.OPEN);
-
-                builder.HasIndex(s => s.UserId).IsUnique();
-
-                builder.HasOne(s => s.User)
-                    .WithOne(u => u.Shop)
-                    .HasForeignKey<Shop>(s => s.UserId)
-                    .OnDelete(DeleteBehavior.Restrict);
+                    .HasMaxLength(30);
             });
 
-            // ==========================================
             // 3. Category
-            // ==========================================
             modelBuilder.Entity<Category>(builder =>
             {
                 builder.HasKey(c => c.Id);
@@ -111,9 +100,7 @@ namespace BookManagement.Repository.Data
                 builder.Property(c => c.Status).HasDefaultValue(true);
             });
 
-            // ==========================================
             // 4. Book
-            // ==========================================
             modelBuilder.Entity<Book>(builder =>
             {
                 builder.HasKey(b => b.Id);
@@ -127,8 +114,7 @@ namespace BookManagement.Repository.Data
 
                 builder.Property(b => b.Status)
                     .HasConversion<string>()
-                    .HasMaxLength(30)
-                    .HasDefaultValue(BookStatus.ACTIVE);
+                    .HasMaxLength(30);
 
                 builder.HasOne(b => b.Shop)
                     .WithMany(s => s.Books)
@@ -141,9 +127,23 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ==========================================
-            // 5. Cart (Quan hệ 1-1 với User)
-            // ==========================================
+            // 4.1 BookImage
+            modelBuilder.Entity<BookImage>(builder =>
+            {
+                builder.ToTable("BookImages");
+                builder.HasKey(bi => bi.Id);
+                builder.Property(bi => bi.ImageUrl).IsRequired().HasMaxLength(500);
+                builder.Property(bi => bi.PublicId).HasMaxLength(200);
+                builder.Property(bi => bi.IsCover).HasDefaultValue(false);
+                builder.Property(bi => bi.DisplayOrder).HasDefaultValue(0);
+
+                builder.HasOne(bi => bi.Book)
+                    .WithMany(b => b.Images)
+                    .HasForeignKey(bi => bi.BookId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // 5. Cart
             modelBuilder.Entity<Cart>(builder =>
             {
                 builder.HasKey(c => c.Id);
@@ -155,9 +155,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Cascade);
             });
 
-            // ==========================================
             // 6. CartBookDetail
-            // ==========================================
             modelBuilder.Entity<CartBookDetail>(builder =>
             {
                 builder.HasKey(cbd => cbd.Id);
@@ -174,9 +172,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ==========================================
             // 7. Order
-            // ==========================================
             modelBuilder.Entity<Order>(builder =>
             {
                 builder.HasKey(o => o.Id);
@@ -187,8 +183,7 @@ namespace BookManagement.Repository.Data
 
                 builder.Property(o => o.OrderStatus)
                     .HasConversion<string>()
-                    .HasMaxLength(30)
-                    .HasDefaultValue(OrderStatus.PENDING);
+                    .HasMaxLength(30);
 
                 builder.HasOne(o => o.User)
                     .WithMany(u => u.Orders)
@@ -196,9 +191,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ==========================================
             // 8. OrderDetail
-            // ==========================================
             modelBuilder.Entity<OrderDetail>(builder =>
             {
                 builder.HasKey(od => od.Id);
@@ -206,8 +199,7 @@ namespace BookManagement.Repository.Data
 
                 builder.Property(od => od.ReturnStatus)
                     .HasConversion<string>()
-                    .HasMaxLength(30)
-                    .HasDefaultValue(ReturnStatus.NONE);
+                    .HasMaxLength(30);
 
                 builder.HasOne(od => od.Order)
                     .WithMany(o => o.OrderDetails)
@@ -220,9 +212,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ==========================================
             // 9. Delivery
-            // ==========================================
             modelBuilder.Entity<Delivery>(builder =>
             {
                 builder.HasKey(d => d.Id);
@@ -232,8 +222,7 @@ namespace BookManagement.Repository.Data
 
                 builder.Property(d => d.Status)
                     .HasConversion<string>()
-                    .HasMaxLength(30)
-                    .HasDefaultValue(DeliveryStatus.PENDING);
+                    .HasMaxLength(30);
 
                 builder.HasOne(d => d.Order)
                     .WithMany(o => o.Deliveries)
@@ -241,9 +230,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Cascade);
             });
 
-            // ==========================================
-            // 10. ReturnRequest (Quan hệ 1-1 với OrderDetail)
-            // ==========================================
+            // 10. ReturnRequest
             modelBuilder.Entity<ReturnRequest>(builder =>
             {
                 builder.HasKey(rr => rr.Id);
@@ -256,8 +243,7 @@ namespace BookManagement.Repository.Data
 
                 builder.Property(rr => rr.Status)
                     .HasConversion<string>()
-                    .HasMaxLength(30)
-                    .HasDefaultValue(ReturnRequestStatus.PENDING);
+                    .HasMaxLength(30);
 
                 builder.HasIndex(rr => rr.OrderDetailId).IsUnique();
 
@@ -267,18 +253,16 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ==========================================
             // 11. Payment
-            // ==========================================
             modelBuilder.Entity<Payment>(builder =>
             {
                 builder.HasKey(p => p.Id);
                 builder.Property(p => p.Amount).HasPrecision(12, 2);
+                builder.Property(p => p.TransactionCode).HasMaxLength(100);
 
                 builder.Property(p => p.PaymentType)
                     .HasConversion<string>()
-                    .HasMaxLength(30)
-                    .HasDefaultValue(PaymentType.PAYMENT);
+                    .HasMaxLength(30);
 
                 builder.Property(p => p.Method)
                     .HasConversion<string>()
@@ -286,8 +270,11 @@ namespace BookManagement.Repository.Data
 
                 builder.Property(p => p.Status)
                     .HasConversion<string>()
-                    .HasMaxLength(30)
-                    .HasDefaultValue(PaymentStatus.PENDING);
+                    .HasMaxLength(30);
+
+                builder.HasIndex(p => p.TransactionCode)
+                    .IsUnique()
+                    .HasFilter("[TransactionCode] IS NOT NULL");
 
                 builder.HasOne(p => p.Order)
                     .WithMany(o => o.Payments)
@@ -300,9 +287,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ==========================================
             // 12. TransactionHistory
-            // ==========================================
             modelBuilder.Entity<TransactionHistory>(builder =>
             {
                 builder.HasKey(th => th.Id);
@@ -318,15 +303,17 @@ namespace BookManagement.Repository.Data
                     .HasConversion<string>()
                     .HasMaxLength(30);
 
+                builder.HasIndex(th => th.TransactionCode)
+                    .IsUnique()
+                    .HasFilter("[TransactionCode] IS NOT NULL");
+
                 builder.HasOne(th => th.User)
                     .WithMany(u => u.TransactionHistories)
                     .HasForeignKey(th => th.UserId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ==========================================
-            // 13. Feedback (Quan hệ 1-1 với OrderDetail)
-            // ==========================================
+            // 13. Feedback
             modelBuilder.Entity<Feedback>(builder =>
             {
                 builder.HasKey(f => f.Id);
@@ -334,8 +321,7 @@ namespace BookManagement.Repository.Data
 
                 builder.Property(f => f.Type)
                     .HasConversion<string>()
-                    .HasMaxLength(30)
-                    .HasDefaultValue(FeedbackType.BOOK);
+                    .HasMaxLength(30);
 
                 builder.HasIndex(f => f.OrderDetailId).IsUnique();
 
@@ -350,9 +336,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ==========================================
-            // 14. Response (Quan hệ 1-1 với Feedback)
-            // ==========================================
+            // 14. Response
             modelBuilder.Entity<Response>(builder =>
             {
                 builder.HasKey(r => r.Id);
@@ -372,9 +356,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ==========================================
             // 15. Chat
-            // ==========================================
             modelBuilder.Entity<Chat>(builder =>
             {
                 builder.HasKey(c => c.Id);
@@ -385,14 +367,12 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Restrict);
 
                 builder.HasOne(c => c.Shop)
-                    .WithMany(s => s.Chats)
+                    .WithMany()
                     .HasForeignKey(c => c.ShopId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ==========================================
             // 16. Message
-            // ==========================================
             modelBuilder.Entity<Message>(builder =>
             {
                 builder.HasKey(m => m.Id);
@@ -410,9 +390,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
-            // ==========================================
             // 17. Notification
-            // ==========================================
             modelBuilder.Entity<Notification>(builder =>
             {
                 builder.HasKey(n => n.Id);
@@ -421,8 +399,7 @@ namespace BookManagement.Repository.Data
 
                 builder.Property(n => n.Type)
                     .HasConversion<string>()
-                    .HasMaxLength(30)
-                    .HasDefaultValue(NotificationType.SYSTEM);
+                    .HasMaxLength(30);
 
                 builder.HasOne(n => n.User)
                     .WithMany(u => u.Notifications)
@@ -430,9 +407,7 @@ namespace BookManagement.Repository.Data
                     .OnDelete(DeleteBehavior.Cascade);
             });
 
-            // ==========================================
             // 18. UserSession
-            // ==========================================
             modelBuilder.Entity<UserSession>(builder =>
             {
                 builder.HasKey(us => us.Id);
@@ -445,6 +420,70 @@ namespace BookManagement.Repository.Data
                     .WithMany(u => u.UserSessions)
                     .HasForeignKey(us => us.UserId)
                     .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // 19. Wallet
+            modelBuilder.Entity<Wallet>(builder =>
+            {
+                builder.HasKey(w => w.Id);
+                builder.Property(w => w.Balance).HasPrecision(14, 2);
+                builder.Property(w => w.HeldBalance).HasPrecision(14, 2);
+
+                builder.HasIndex(w => w.UserId).IsUnique();
+
+                builder.HasOne(w => w.User)
+                    .WithOne(u => u.Wallet)
+                    .HasForeignKey<Wallet>(w => w.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // 20. Escrow
+            modelBuilder.Entity<Escrow>(builder =>
+            {
+                builder.HasKey(e => e.Id);
+                builder.Property(e => e.Amount).HasPrecision(14, 2);
+                builder.Property(e => e.PlatformFee).HasPrecision(14, 2);
+                builder.Property(e => e.NetShopEarnings).HasPrecision(14, 2);
+
+                builder.Property(e => e.Status)
+                    .HasConversion<string>()
+                    .HasMaxLength(30);
+
+                builder.HasOne(e => e.Order)
+                    .WithMany()
+                    .HasForeignKey(e => e.OrderId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                builder.HasOne(e => e.Shop)
+                    .WithMany(s => s.Escrows)
+                    .HasForeignKey(e => e.ShopId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // 21. Report
+            modelBuilder.Entity<Report>(builder =>
+            {
+                builder.HasKey(r => r.Id);
+                builder.Property(r => r.Reason).IsRequired().HasMaxLength(500);
+                builder.Property(r => r.AdminNote).HasMaxLength(500);
+
+                builder.Property(r => r.ReportType)
+                    .HasConversion<string>()
+                    .HasMaxLength(30);
+
+                builder.Property(r => r.Status)
+                    .HasConversion<string>()
+                    .HasMaxLength(30);
+
+                builder.HasOne(r => r.Reporter)
+                    .WithMany(u => u.ReportsSubmitted)
+                    .HasForeignKey(r => r.ReporterId)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                builder.HasOne(r => r.ResolvedByAdmin)
+                    .WithMany()
+                    .HasForeignKey(r => r.ResolvedByAdminId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
         }
     }

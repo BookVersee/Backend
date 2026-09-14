@@ -12,7 +12,7 @@ namespace BookManagement.Repository.Entities
         public string? Content { get; set; }
         public FeedbackType Type { get; set; } = FeedbackType.BOOK;
         public string? ImageUrl { get; set; }
-        public DateTimeOffset CreatedAt { get; set; }
+        public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
         public DateTimeOffset? UpdatedAt { get; set; }
 
         // Navigation Properties

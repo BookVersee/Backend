@@ -1,4 +1,4 @@
-using BookManagement.Service.Models;
+using BookManagement.Service.Common;
 
 namespace BookManagement.Api.Middlewares;
 

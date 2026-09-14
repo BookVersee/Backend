@@ -8,7 +8,7 @@ namespace BookManagement.Repository.Data
         public AppDbContext CreateDbContext(string[] args)
         {
             var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
-            optionsBuilder.UseSqlServer("Server=localhost;Database=BookManagementDb;Trusted_Connection=True;TrustServerCertificate=True;");
+            optionsBuilder.UseSqlServer("Server=localhost;Database=BookManagementDb;User Id=sa;Password=12345;TrustServerCertificate=True;");
 
             return new AppDbContext(optionsBuilder.Options);
         }

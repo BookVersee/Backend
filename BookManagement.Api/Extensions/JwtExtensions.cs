@@ -1,7 +1,8 @@
 using System.Security.Claims;
 using System.Text;
-using BookManagement.Service.Models;
+using BookManagement.Service.JwtService;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 
 namespace BookManagement.Api.Extensions;
@@ -14,8 +15,10 @@ public static class JwtExtensions
 
     public static void AddJwtServices(this IServiceCollection services, IConfiguration configuration)
     {
+        services.Configure<JwtOptions>(configuration.GetSection("JwtOptions"));
+
         var jwtOptions = new JwtOptions();
-        configuration.GetSection(nameof(JwtOptions)).Bind(jwtOptions);
+        configuration.GetSection("JwtOptions").Bind(jwtOptions);
         var key = Encoding.UTF8.GetBytes(jwtOptions.SecretKey);
 
         services.AddAuthentication(options =>
@@ -37,13 +40,55 @@ public static class JwtExtensions
                     NameClaimType = ClaimTypes.NameIdentifier,
                     RoleClaimType = ClaimTypes.Role
                 };
+
+                options.Events = new JwtBearerEvents
+                {
+                    OnMessageReceived = context =>
+                    {
+                        var accessToken = context.Request.Query["access_token"];
+                        var path = context.HttpContext.Request.Path;
+                        if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                        {
+                            context.Token = accessToken;
+                        }
+                        return Task.CompletedTask;
+                    },
+                    OnTokenValidated = async context =>
+                    {
+                        var dbContext = context.HttpContext.RequestServices.GetRequiredService<BookManagement.Repository.Data.AppDbContext>();
+                        var userIdClaim = context.Principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                            ?? context.Principal?.FindFirst("sub")?.Value;
+
+                        if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
+                        {
+                            context.Fail("Invalid or missing user identity claim.");
+                            return;
+                        }
+
+                        var user = await dbContext.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId);
+                        if (user == null || user.Status != BookManagement.Repository.Entities.Enums.UserStatus.ACTIVE)
+                        {
+                            context.Fail("User account is locked or inactive.");
+                            return;
+                        }
+
+                        var hasActiveSession = await dbContext.UserSessions.AsNoTracking()
+                            .AnyAsync(s => s.UserId == userId && !s.IsRevoked && s.ExpiresAt > DateTime.UtcNow);
+
+                        if (!hasActiveSession)
+                        {
+                            context.Fail("Session has been logged out or revoked.");
+                            return;
+                        }
+                    }
+                };
             });
 
         services.AddAuthorization(options =>
         {
-            options.AddPolicy(AdminPolicy, policy => policy.RequireRole("Admin"));
-            options.AddPolicy(CustomerPolicy, policy => policy.RequireRole("Customer"));
-            options.AddPolicy(StaffPolicy, policy => policy.RequireRole("Staff"));
+            options.AddPolicy(AdminPolicy, policy => policy.RequireRole("ADMIN", "Admin", "SUPER_ADMIN", "SuperAdmin"));
+            options.AddPolicy(CustomerPolicy, policy => policy.RequireRole("CUSTOMER", "Customer", "SHOP", "Shop"));
+            options.AddPolicy(StaffPolicy, policy => policy.RequireRole("STAFF", "Staff"));
         });
     }
 }

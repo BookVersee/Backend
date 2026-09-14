@@ -1,31 +1,117 @@
+using BookManagement.Service.BackgroundServices;
+using BookManagement.Api.Controllers;
 using BookManagement.Api.Extensions;
+using BookManagement.Api.Filters;
+using BookManagement.Api.Hubs;
 using BookManagement.Api.Middlewares;
 using BookManagement.Repository.Data;
+using BookManagement.Repository.Entities.Enums;
+using BookManagement.Service.Admin;
+using BookManagement.Service.Auth;
+using BookManagement.Service.Book;
+using BookManagement.Service.Cart;
+using BookManagement.Service.Category;
+using BookManagement.Service.Chat;
+using BookManagement.Service.Cloudinary;
+using BookManagement.Service.Delivery;
+using BookManagement.Service.Email;
+using BookManagement.Service.Feedback;
+using BookManagement.Service.Idempotency;
+using BookManagement.Service.JwtService;
+using BookManagement.Service.Notification;
+using BookManagement.Service.Order;
+using BookManagement.Service.Payment;
+using BookManagement.Service.Shipping;
+using BookManagement.Service.Shop;
+using BookManagement.Service.User;
+using BookManagement.Service.Wallet;
+using BookManagement.Service.Report;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// 1. Add Controllers with JsonStringEnumConverter
+// 1. Add Controllers with JsonOptions
 builder.Services.AddControllers().AddJsonOptions(options =>
 {
     options.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+    options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+    options.JsonSerializerOptions.DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull;
 });
 
+builder.Services.AddSignalR();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddMemoryCache();
 
-// 2. Add Database Context
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(connectionString, sqlServerOptions =>
+    {
+        sqlServerOptions.EnableRetryOnFailure();
+        sqlServerOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery);
+    }));
 
-// 3. Add Custom Extensions (JWT & Swagger)
+// 2. Add Custom Extensions (JWT & Swagger)
 builder.Services.AddJwtServices(builder.Configuration);
 builder.Services.AddSwaggerServices();
 
-// 4. Register Middlewares
-builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
+// 3. Configuration Options Registrations
+builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection("EmailOptions"));
+builder.Services.Configure<GoogleAuthOptions>(builder.Configuration.GetSection("GoogleAuth"));
+builder.Services.Configure<CloudinarySettings>(builder.Configuration.GetSection("CloudinarySettings"));
 
-// 5. CORS Policy Configuration
+// 4. Domain & Infrastructure Services DI Registrations
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IUserSessionService, UserSessionService>();
+builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IBookService, BookService>();
+builder.Services.AddScoped<ICategoryService, CategoryService>();
+builder.Services.AddScoped<ICartService, CartService>();
+builder.Services.AddScoped<IOrderService, OrderService>();
+builder.Services.AddScoped<IFeedbackService, FeedbackService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IAdminService, AdminService>();
+
+builder.Services.AddScoped<IShopService, ShopService>();
+builder.Services.AddScoped<ShopService>();
+builder.Services.AddScoped<IDeliveryService, DeliveryService>();
+builder.Services.AddScoped<DeliveryService>();
+builder.Services.AddScoped<IShippingService, ShippingService>();
+builder.Services.AddScoped<ShippingService>();
+builder.Services.AddScoped<IPaymentService, PaymentService>();
+builder.Services.AddScoped<PaymentService>();
+builder.Services.AddScoped<IChatService, ChatService>();
+builder.Services.AddScoped<ChatService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<EmailService>();
+builder.Services.AddScoped<ICloudinaryService, CloudinaryService>();
+builder.Services.AddScoped<CloudinaryService>();
+builder.Services.AddSingleton<IIdempotencyService, IdempotencyService>();
+
+builder.Services.AddHttpClient<MomoService>();
+builder.Services.AddHttpClient<GhnService>();
+
+// 6. Real-Time SignalR Notifiers & Middlewares
+builder.Services.AddScoped<IChatRealtimeNotifier, ChatRealtimeNotifier>();
+builder.Services.AddScoped<INotificationRealtimeNotifier, NotificationRealtimeNotifier>();
+builder.Services.AddScoped<IOrderRealtimeNotifier, OrderRealtimeNotifier>();
+builder.Services.AddScoped<IPaymentRealtimeNotifier, PaymentRealtimeNotifier>();
+
+builder.Services.AddScoped<IWalletService, WalletService>();
+builder.Services.AddScoped<IReportService, ReportService>();
+
+builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
+builder.Services.AddHostedService<OrderExpirationBackgroundService>();
+builder.Services.AddHostedService<ReturnAndEscrowBackgroundService>();
+
+var renderPort = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrEmpty(renderPort))
+{
+    builder.WebHost.UseUrls($"http://*:{renderPort}");
+}
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
@@ -33,7 +119,7 @@ builder.Services.AddCors(options =>
         policy.SetIsOriginAllowed(origin =>
             {
                 var host = new Uri(origin).Host;
-                return host == "localhost" || host.EndsWith(".vercel.app");
+                return host == "localhost" || host.EndsWith(".vercel.app") || host.EndsWith(".onrender.com") || host.EndsWith(".render.com");
             })
             .AllowAnyHeader()
             .AllowAnyMethod()
@@ -42,6 +128,276 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+// Auto-create database & tables if not exists on SQL Server
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var connStr = builder.Configuration.GetConnectionString("DefaultConnection");
+        if (!string.IsNullOrEmpty(connStr))
+        {
+            var masterConnBuilder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(connStr)
+            {
+                InitialCatalog = "master"
+            };
+
+            using (var masterConn = new Microsoft.Data.SqlClient.SqlConnection(masterConnBuilder.ConnectionString))
+            {
+                masterConn.Open();
+                using (var cmd = masterConn.CreateCommand())
+                {
+                    cmd.CommandText = @"
+                        IF NOT EXISTS (SELECT name FROM sys.databases WHERE name = N'BookManagementDb')
+                        BEGIN
+                            CREATE DATABASE [BookManagementDb];
+                        END";
+                    cmd.ExecuteNonQuery();
+                }
+            }
+
+            var dbCreator = dbContext.GetService<IRelationalDatabaseCreator>();
+            if (!dbCreator.HasTables())
+            {
+                dbCreator.CreateTables();
+            }
+            else
+            {
+                dbContext.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (
+                        SELECT 1 FROM sys.columns 
+                        WHERE object_id = OBJECT_ID(N'[Shops]') 
+                        AND name = 'ViolationCount'
+                    )
+                    BEGIN
+                        ALTER TABLE [Shops] ADD [ViolationCount] INT NOT NULL DEFAULT 0;
+                    END");
+
+                dbContext.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (
+                        SELECT 1 FROM sys.columns 
+                        WHERE object_id = OBJECT_ID(N'[Shops]') 
+                        AND name = 'LockedUntil'
+                    )
+                    BEGIN
+                        ALTER TABLE [Shops] ADD [LockedUntil] DATETIMEOFFSET NULL;
+                    END");
+
+                dbContext.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (
+                        SELECT 1 FROM sys.columns 
+                        WHERE object_id = OBJECT_ID(N'[Shops]') 
+                        AND name = 'UserId'
+                    )
+                    BEGIN
+                        ALTER TABLE [Shops] ADD [UserId] UNIQUEIDENTIFIER NULL;
+                    END");
+
+                dbContext.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (
+                        SELECT 1 FROM sys.columns 
+                        WHERE object_id = OBJECT_ID(N'[Payments]') 
+                        AND name = 'TransactionCode'
+                    )
+                    BEGIN
+                        ALTER TABLE [Payments] ADD [TransactionCode] NVARCHAR(100) NULL;
+                    END");
+
+                dbContext.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = N'BookImages')
+                    BEGIN
+                        CREATE TABLE [BookImages] (
+                            [Id] UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+                            [BookId] UNIQUEIDENTIFIER NOT NULL,
+                            [ImageUrl] NVARCHAR(500) NOT NULL,
+                            [PublicId] NVARCHAR(200) NULL,
+                            [IsCover] BIT NOT NULL DEFAULT 0,
+                            [DisplayOrder] INT NOT NULL DEFAULT 0,
+                            [IsDeleted] BIT NOT NULL DEFAULT 0,
+                            [CreatedAt] DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
+                            [UpdatedAt] DATETIMEOFFSET NULL,
+                            CONSTRAINT [FK_BookImages_Books_BookId] FOREIGN KEY ([BookId]) REFERENCES [Books] ([Id]) ON DELETE CASCADE
+                        );
+                        CREATE NONCLUSTERED INDEX [IX_BookImages_BookId] ON [BookImages]([BookId]);
+                    END
+                    ELSE
+                    BEGIN
+                        IF NOT EXISTS (
+                            SELECT 1 FROM sys.columns 
+                            WHERE object_id = OBJECT_ID(N'[BookImages]') 
+                            AND name = 'IsDeleted'
+                        )
+                        BEGIN
+                            ALTER TABLE [BookImages] ADD [IsDeleted] BIT NOT NULL DEFAULT 0;
+                        END
+                    END");
+
+                dbContext.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (
+                        SELECT 1 FROM sys.indexes 
+                        WHERE object_id = OBJECT_ID(N'[Payments]') 
+                        AND name = 'IX_Payments_TransactionCode'
+                    )
+                    BEGIN
+                        EXEC('CREATE UNIQUE NONCLUSTERED INDEX [IX_Payments_TransactionCode] ON [Payments]([TransactionCode]) WHERE [TransactionCode] IS NOT NULL;');
+                    END");
+
+                dbContext.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (
+                        SELECT 1 FROM sys.indexes 
+                        WHERE object_id = OBJECT_ID(N'[TransactionHistories]') 
+                        AND name = 'IX_TransactionHistories_TransactionCode'
+                    )
+                    BEGIN
+                        EXEC('CREATE UNIQUE NONCLUSTERED INDEX [IX_TransactionHistories_TransactionCode] ON [TransactionHistories]([TransactionCode]) WHERE [TransactionCode] IS NOT NULL;');
+                    END");
+
+                dbContext.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = N'Wallets')
+                    BEGIN
+                        CREATE TABLE [Wallets] (
+                            [Id] UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+                            [UserId] UNIQUEIDENTIFIER NOT NULL,
+                            [Balance] DECIMAL(14,2) NOT NULL DEFAULT 0,
+                            [HeldBalance] DECIMAL(14,2) NOT NULL DEFAULT 0,
+                            [IsDeleted] BIT NOT NULL DEFAULT 0,
+                            [CreatedAt] DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
+                            [UpdatedAt] DATETIMEOFFSET NULL,
+                            CONSTRAINT [FK_Wallets_Users_UserId] FOREIGN KEY ([UserId]) REFERENCES [Users] ([Id]) ON DELETE CASCADE
+                        );
+                        CREATE UNIQUE NONCLUSTERED INDEX [IX_Wallets_UserId] ON [Wallets]([UserId]);
+                    END");
+
+                dbContext.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = N'Escrows')
+                    BEGIN
+                        CREATE TABLE [Escrows] (
+                            [Id] UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+                            [OrderId] UNIQUEIDENTIFIER NOT NULL,
+                            [ShopId] UNIQUEIDENTIFIER NOT NULL,
+                            [Amount] DECIMAL(14,2) NOT NULL,
+                            [PlatformFee] DECIMAL(14,2) NOT NULL,
+                            [NetShopEarnings] DECIMAL(14,2) NOT NULL,
+                            [ReleaseDate] DATETIMEOFFSET NOT NULL,
+                            [Status] NVARCHAR(30) NOT NULL DEFAULT 'HOLDING',
+                            [IsDeleted] BIT NOT NULL DEFAULT 0,
+                            [CreatedAt] DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
+                            [UpdatedAt] DATETIMEOFFSET NULL,
+                            CONSTRAINT [FK_Escrows_Orders_OrderId] FOREIGN KEY ([OrderId]) REFERENCES [Orders] ([Id]),
+                            CONSTRAINT [FK_Escrows_Shops_ShopId] FOREIGN KEY ([ShopId]) REFERENCES [Shops] ([Id])
+                        );
+                        CREATE NONCLUSTERED INDEX [IX_Escrows_ShopId] ON [Escrows]([ShopId]);
+                        CREATE NONCLUSTERED INDEX [IX_Escrows_OrderId] ON [Escrows]([OrderId]);
+                    END");
+
+                dbContext.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (SELECT 1 FROM sys.tables WHERE name = N'Reports')
+                    BEGIN
+                        CREATE TABLE [Reports] (
+                            [Id] UNIQUEIDENTIFIER NOT NULL PRIMARY KEY,
+                            [ReporterId] UNIQUEIDENTIFIER NOT NULL,
+                            [TargetId] UNIQUEIDENTIFIER NOT NULL,
+                            [ReportType] NVARCHAR(30) NOT NULL,
+                            [Reason] NVARCHAR(500) NOT NULL,
+                            [Status] NVARCHAR(30) NOT NULL DEFAULT 'PENDING',
+                            [AdminNote] NVARCHAR(500) NULL,
+                            [ResolvedByAdminId] UNIQUEIDENTIFIER NULL,
+                            [IsDeleted] BIT NOT NULL DEFAULT 0,
+                            [CreatedAt] DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(),
+                            [UpdatedAt] DATETIMEOFFSET NULL,
+                            CONSTRAINT [FK_Reports_Users_ReporterId] FOREIGN KEY ([ReporterId]) REFERENCES [Users] ([Id]),
+                            CONSTRAINT [FK_Reports_Users_ResolvedByAdminId] FOREIGN KEY ([ResolvedByAdminId]) REFERENCES [Users] ([Id])
+                        );
+                        CREATE NONCLUSTERED INDEX [IX_Reports_ReporterId] ON [Reports]([ReporterId]);
+                    END");
+
+                dbContext.Database.ExecuteSqlRaw(@"
+                    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[ReturnRequests]') AND name = 'AdminId')
+                    BEGIN
+                        ALTER TABLE [ReturnRequests] ADD [AdminId] UNIQUEIDENTIFIER NULL;
+                    END
+                    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[ReturnRequests]') AND name = 'AdminNote')
+                    BEGIN
+                        ALTER TABLE [ReturnRequests] ADD [AdminNote] NVARCHAR(MAX) NULL;
+                    END
+                    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[ReturnRequests]') AND name = 'ShopRespondedAt')
+                    BEGIN
+                        ALTER TABLE [ReturnRequests] ADD [ShopRespondedAt] DATETIMEOFFSET NULL;
+                    END
+                    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[ReturnRequests]') AND name = 'EscalatedAt')
+                    BEGIN
+                        ALTER TABLE [ReturnRequests] ADD [EscalatedAt] DATETIMEOFFSET NULL;
+                    END
+                    IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N'[ReturnRequests]') AND name = 'ResolvedAt')
+                    BEGIN
+                        ALTER TABLE [ReturnRequests] ADD [ResolvedAt] DATETIMEOFFSET NULL;
+                    END");
+
+                // Auto-sync CreatedAt and UpdatedAt dynamically for ALL tables in SQL Server database
+                dbContext.Database.ExecuteSqlRaw(@"
+                    DECLARE @TableName NVARCHAR(255);
+                    DECLARE @Sql NVARCHAR(MAX);
+
+                    DECLARE table_cursor CURSOR FOR 
+                    SELECT name FROM sys.tables WHERE type = 'U' AND name NOT LIKE '__EF%';
+
+                    OPEN table_cursor;
+                    FETCH NEXT FROM table_cursor INTO @TableName;
+
+                    WHILE @@FETCH_STATUS = 0
+                    BEGIN
+                        SET @Sql = 'IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N''' + @TableName + ''') AND name = ''IsDeleted'') ' +
+                                   'BEGIN ALTER TABLE [' + @TableName + '] ADD [IsDeleted] BIT NOT NULL DEFAULT 0; END';
+                        EXEC sp_executesql @Sql;
+
+                        SET @Sql = 'IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N''' + @TableName + ''') AND name = ''CreatedAt'') ' +
+                                   'BEGIN ALTER TABLE [' + @TableName + '] ADD [CreatedAt] DATETIMEOFFSET NOT NULL DEFAULT SYSDATETIMEOFFSET(); END';
+                        EXEC sp_executesql @Sql;
+
+                        SET @Sql = 'IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID(N''' + @TableName + ''') AND name = ''UpdatedAt'') ' +
+                                   'BEGIN ALTER TABLE [' + @TableName + '] ADD [UpdatedAt] DATETIMEOFFSET NULL; END';
+                        EXEC sp_executesql @Sql;
+
+                        FETCH NEXT FROM table_cursor INTO @TableName;
+                    END;
+
+                    CLOSE table_cursor;
+                    DEALLOCATE table_cursor;");
+            }
+
+            // Ensure any user with username starting with 'admin' has ADMIN role in DB
+            dbContext.Database.ExecuteSqlRaw("UPDATE Users SET Role = 'ADMIN' WHERE LOWER(Username) LIKE 'admin%'");
+
+            // Sync User.Role with Shop.Condition for all existing shops in database
+            var closedShopIds = await dbContext.Shops.Where(s => s.Condition == ShopCondition.CLOSED || s.Condition == ShopCondition.LOCKED || s.Condition == ShopCondition.DELETED).Select(s => s.Id).ToListAsync();
+            if (closedShopIds.Any())
+            {
+                var usersToCustomer = await dbContext.Users.Where(u => closedShopIds.Contains(u.Id) && u.Role == UserRole.SHOP).ToListAsync();
+                foreach (var u in usersToCustomer)
+                {
+                    u.Role = UserRole.CUSTOMER;
+                }
+                await dbContext.SaveChangesAsync();
+            }
+
+            var openShopIds = await dbContext.Shops.Where(s => s.Condition == ShopCondition.OPEN).Select(s => s.Id).ToListAsync();
+            if (openShopIds.Any())
+            {
+                var usersToShop = await dbContext.Users.Where(u => openShopIds.Contains(u.Id) && u.Role == UserRole.CUSTOMER).ToListAsync();
+                foreach (var u in usersToShop)
+                {
+                    u.Role = UserRole.SHOP;
+                }
+                await dbContext.SaveChangesAsync();
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[DB Init] {ex.Message}");
+    }
+}
 
 // Configure the HTTP request pipeline.
 app.UseSwaggerAPI();
@@ -54,5 +410,8 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<ChatHub>("/hubs/chat");
+app.MapHub<NotificationHub>("/hubs/notifications");
+app.MapHub<AppHub>("/hubs/app");
 
 app.Run();

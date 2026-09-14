@@ -8,6 +8,7 @@ namespace BookManagement.Repository.Entities.Enums
         SHIPPING,
         DELIVERING,
         DELIVERED,
+        COMPLETED,
         CANCELLED,
         FAILED,
         APPROVED
